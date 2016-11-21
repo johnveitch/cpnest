@@ -12,7 +12,7 @@ class GaussianModel(object):
     @classmethod
     def log_likelihood(cls,x):
         return -0.5*np.sum((cls.data-x.get('mean2'))**2/x.get('sigma2')**2) - len(cls.data)*np.log(x.get('sigma2')) - 0.5*np.log(2.0*np.pi)-1000
-    @classmethod
+    @staticmethod
     def log_prior(cls,p):
         for i in range(p.dimension):
             if not p.parameters[i].inbounds(): return -np.inf
