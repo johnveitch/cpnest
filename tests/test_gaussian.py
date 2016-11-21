@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import cpnest
 
-class gaussianmodel(object):
+class GaussianModel(object):
     def __init__(self):
         pass
     par_names=['mean2','sigma2']
@@ -21,7 +21,7 @@ class gaussianmodel(object):
 
 class GaussianTestCase(unittest.TestCase):
     def setUp(self):
-        self.work=cpnest.setup(gaussianmodel,verbose=0,Nthreads=1)
+        self.work=cpnest.CPNest(GaussianModel,verbose=0,Nthreads=1)
 
     def test_run(self):
         self.work.run()
