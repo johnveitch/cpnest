@@ -72,8 +72,6 @@ class NestedSampler(object):
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
-        self.events = events
-        self.galaxies = galaxies
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
         self.data = data
         self.params = [None] * self.Nlive
