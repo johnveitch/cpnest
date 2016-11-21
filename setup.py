@@ -17,8 +17,9 @@ setup(
         version = '0.0.1',
         description = 'CPNest: Parallel nested sampling',
         long_description=long_description,
-        author = 'W. Del Pozzo, John Veitch',
+        author = 'Walter Del Pozzo, John Veitch',
         author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
+        url='https://github.com/johnveitch/cpnest',
         license='MIT',
         classifiers =[
         # How mature is this project? Common values are
@@ -50,7 +51,7 @@ setup(
         #packages=find_packages(exclude=['contrib','docs','tests*']),
         packages=['cpnest'],
         install_requires=['numpy','scipy'],
-        setup_requires=['setuptools_cython','numpy'],
+        setup_requires=['numpy'],
         # Don't know what this does
         extras_require={
             'dev': ['check-manifest'],
@@ -58,7 +59,8 @@ setup(
             },
         # Dictionary for data files
         # {'sample':['sample_file.dat']}
-        package_data={},
+        package_data={"":['README.rst','LICENSE']},
+        include_package_data=True,
         # To provide executable scripts, use entry points in preference to the
         # "scripts" keyword. Entry points provide cross-platform support and allow
         # pip to create the appropriate form of executable for the target platform.
@@ -68,9 +70,9 @@ setup(
             },
             test_suite='tests',
         ext_modules=[
-                Extension('parameter',sources=['cpnest/parameter.pyx'],libraries=['m'],include_dirs=[numpy.get_include()]),
-                Extension('proposals',sources=['cpnest/proposals.pyx'],libraries=['m'],include_dirs=[numpy.get_include()]),
-                Extension('NestedSampling',sources=['cpnest/NestedSampling.pyx'],libraries=['m'],include_dirs=[numpy.get_include()])
+                Extension('parameter',sources=['cpnest/parameter.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/']),
+                Extension('proposals',sources=['cpnest/proposals.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/']),
+                Extension('NestedSampling',sources=['cpnest/NestedSampling.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/'])
                 ]
         )
 
