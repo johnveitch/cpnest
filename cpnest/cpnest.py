@@ -10,7 +10,6 @@ from multiprocessing import Process, Lock, Queue
 from Sampler import *
 from ctypes import c_int, c_double
 from NestedSampling import *
-from parameter import Event
 from parameter import *
 #import matplotlib.cm as cm
 
@@ -58,10 +57,6 @@ if __name__ == '__main__':
     parser.add_option("--maxmcmc", type="int", dest="maxmcmc", help="maximum number of mcmc steps", default=5000)
     parser.add_option("--nthreads", type="int", dest="nthreads", help="number of sampling threads to spawn", default=None)
     parser.add_option( "--sample-prior", action="store_true", dest="prior", help="draw NLIVE samples from the prior", default=False)
-    parser.add_option("-e", "--events", type="int", dest="events_number", help="number of events to analyse")
-    parser.add_option("--event-number", type="int", dest="event_number", help="event number to analyse", default=None)
-    parser.add_option("--max-hosts", type="int", dest="max_hosts", help="maximum number of hosts to analyse", default=None)
-    parser.add_option("--max-distance", type="float", dest="max_distance", help="maximum distance to consider", default=None)
     
     (options, args) = parser.parse_args()
 
@@ -78,91 +73,19 @@ if __name__ == '__main__':
     authkey = "12345"
     ip = "0.0.0.0"
     
-    Nevents = options.events_number
     np.random.seed(options.seed)
-    all_files = os.listdir(options.input)
-    events_list = [f for f in all_files if 'EVENT' in f or 'event' in f]
-    snr_threshold = 8.0
-    
-    if options.event_number is None:
-        
-        events = []
-        
-        for ev in events_list:
-            event_file = open(options.input+"/"+ev+"/ID.dat","r")
-            event_id,dl,sigma,snr,domega,stuff1,stuff2,stuff3,stuff4,stuff5,stuff6,m1,m2 = event_file.readline().split(None)
-            ID = np.int(event_id)
-            dl = np.float64(dl)
-            sigma = np.float64(sigma)*dl
-            if sigma <0.01: sigma = 1.0
-            snr = np.float64(snr)
-            m1 = np.float64(m1)
-            m2 = np.float64(m2)
-            domega = np.float64(domega)
-            event_file.close()
-            try:
-                distance,dummy,redshifts,masses = np.loadtxt(options.input+"/"+ev+"/ERRORBOX.dat",unpack=True)
-                redshifts = np.atleast_1d(redshifts)
-                masses = np.atleast_1d(masses)
-                events.append(Event(ID,dl,sigma,snr,domega,m1,m2,redshifts))
-                sys.stderr.write("Selecting event %s at a distance %s (error %s), snr %s, hosts %d\n"%(event_id,dl,sigma,snr,len(redshifts)))
-            except:
-                sys.stderr.write("Event %s at a distance %s (error %s), snr %s has no hosts, skipping\n"%(event_id,dl,snr,sigma))
-
-        if options.max_distance is not None:
-            distance_limited_events = [e for e in events if e.dl < options.max_distance]
-        else:
-            distance_limited_events = [e for e in events]
-
-        if options.max_hosts is not None:
-             analysis_events = [e for e in distance_limited_events if len(e.redshifts) < options.max_hosts]
-        else:
-            analysis_events = [e for e in distance_limited_events]
-
+    if options.input is not None:
+        data = np.loadtxt(options.input)
     else:
-        event_file = open(options.input+"/"+events_list[options.event_number]+"/ID.dat","r")
-        event_id,dl,sigma,snr,domega,stuff1,stuff2,stuff3,stuff4,stuff5,stuff6,m1,m2 = event_file.readline().split(None)
-        ID = np.int(event_id)
-        dl = np.float64(dl)
-        sigma = np.float64(sigma)*dl
-        if sigma <0.01: sigma = 1.0
-        snr = np.float64(snr)
-        m1 = np.float64(m1)
-        m2 = np.float64(m2)
-        domega = np.float64(domega)
-        event_file.close()
-        try:
-            distance,dummy,redshifts,masses = np.loadtxt(options.input+"/"+events_list[options.event_number]+"/ERRORBOX.dat",unpack=True)
-            redshifts = np.atleast_1d(redshifts)
-            masses = np.atleast_1d(masses)
-            analysis_events = [Event(ID,dl,sigma,snr,domega,m1,m2,redshifts)]
-            sys.stderr.write("Selecting event %s at a distance %s (error %s), snr %s, hosts %d\n"%(event_id,dl,sigma,snr,len(redshifts)))
-        except:
-            sys.stderr.write("Event %s at a distance %s (error %s), snr %s has no hosts, skipping\n"%(event_id,dl,snr,sigma))
-            exit()
-
-    sys.stderr.write("Selected %d events\n"%len(analysis_events))
-
-    T = 5.0
-    rate = 1e9*compute_rate(analysis_events,T)
-    sys.stderr.write("Inferred rate of %.2f Gpc^-3 yr^-1\n"%(rate))
-
-#    bounds = [[0.7,0.75],[0.2,0.4],[1.0,1000]]
-    bounds = [[0.4,1.0],[0.0,1.0]]
-    names = ['h','om']
-
-    for e in analysis_events:
-        zmin = np.min(e.redshifts)
-        zmax = np.max(e.redshifts)
-        bounds.append([zmin-0.0015,zmax+0.0015])
-        names.append('z%d'%e.ID)
+        data = [x for x in np.random.normal(0.5,0.5,size=1000)]
+    bounds = [[0.0,1.0],[0.0,1.0]]
+    names = ['mean','sigma']
 
     out_folder = options.output
 
     os.system('mkdir -p %s'%(out_folder))
-    if options.prior: analysis_events = None
-    NS = NestedSampler(analysis_events,names,bounds,Nlive=options.Nlive,maxmcmc=options.maxmcmc,output=out_folder,verbose=verbose_ns,seed=options.seed,prior=options.prior)
-    Evolver = Sampler(analysis_events,options.maxmcmc,names,bounds, verbose = verbose_sam)
+    NS = NestedSampler(data,names,bounds,Nlive=options.Nlive,maxmcmc=options.maxmcmc,output=out_folder,verbose=verbose_ns,seed=options.seed,prior=options.prior)
+    Evolver = Sampler(data,options.maxmcmc,names,bounds, verbose = verbose_sam)
 
     NUMBER_OF_PRODUCER_PROCESSES = options.nthreads
     NUMBER_OF_CONSUMER_PROCESSES = 1
