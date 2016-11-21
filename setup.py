@@ -1,8 +1,10 @@
 #Always prefer setuptools over distutils
 from setuptools import setup, find_packages
+from setuptools import Extension
 # To use a consistent encoding
 from codecs import open
 from os import path
+import numpy
 
 here = path.abspath(path.dirname(__file__))
 
@@ -45,8 +47,10 @@ setup(
         ],
 
         keywords='nested sampling bayesian inference',
-        packages=find_packages(exclude=['contrib','docs','tests*']),
+        #packages=find_packages(exclude=['contrib','docs','tests*']),
+        packages=['cpnest'],
         install_requires=['numpy','scipy'],
+        setup_requires=['setuptools_cython','numpy'],
         # Don't know what this does
         extras_require={
             'dev': ['check-manifest'],
@@ -62,6 +66,11 @@ setup(
         #    'console_scripts':['sample=sample:main',
         #        ],
             },
-            test_suite='tests'
+            test_suite='tests',
+        ext_modules=[
+                Extension('parameter',sources=['cpnest/parameter.pyx'],libraries=['m'],include_dirs=[numpy.get_include()]),
+                Extension('proposals',sources=['cpnest/proposals.pyx'],libraries=['m'],include_dirs=[numpy.get_include()]),
+                Extension('NestedSampling',sources=['cpnest/NestedSampling.pyx'],libraries=['m'],include_dirs=[numpy.get_include()])
+                ]
         )
 
