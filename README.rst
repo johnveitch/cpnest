@@ -1,4 +1,4 @@
-MPNest: Parallel nested sampling in python
+CPNest: Parallel nested sampling in python
 
 Copyright 2015-2016 Walter Del Pozzo, John Veitch
 
