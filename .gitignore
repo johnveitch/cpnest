@@ -31,3 +31,14 @@
 # Debug files
 *.dSYM/
 *.su
+
+# Cython output files
+cpnest/*.c
+
+# Compiled python
+*.pyc
+
+build
+dist
+.eggs
+*.egg-info
