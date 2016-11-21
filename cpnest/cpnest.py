@@ -4,6 +4,9 @@
 import multiprocessing as mp
 
 class CPNest(object):
+    """
+    Class to control CPNest sampler
+    """
     def __init__(self,userclass,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=1):
         from .sampler import Sampler
         from .NestedSampling import NestedSampler
