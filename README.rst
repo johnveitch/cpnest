@@ -1,9 +1,9 @@
 MPNest: Parallel nested sampling in python
 
-(C) 2015 John Veitch, Walter Del Pozzo
+Copyright 2015-2016 Walter Del Pozzo, John Veitch
 
-john.veitch@ligo.org
 walter.delpozzo@ligo.org
+john.veitch@ligo.org
 
 This package provides a nested sampling algorithm for performing Bayesian Inference.
 
