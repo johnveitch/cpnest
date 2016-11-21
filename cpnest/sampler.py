@@ -32,7 +32,7 @@ class Sampler(object):
         self.dimension = self.param.dimension
         for n in xrange(self.poolsize):
             while True:
-                if self.verbose: sys.stderr.write("process %s --> generating pool of %d points for evolution --> %.3f %% complete\r"%(os.getpid(),self.poolsize,100.0*float(n+1)/float(self.poolsize)))
+                if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 self.evolution_points[n] = parameter.LivePoint(names,bounds)
                 self.evolution_points[n].logP = logPrior(self.evolution_points[n])
                 if not(np.isinf(self.evolution_points[n].logP)): break
@@ -64,7 +64,7 @@ class Sampler(object):
                 self.autocorrelation()
                 self.kwargs.update(self.evolution_points)
             self.counter += 1
-        sys.stderr.write("Sampler process %s, exiting\n"%os.getpid())
+        sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
         return 0
 
     def metropolis_hastings(self,inParam,logLmin,nsteps):
@@ -110,14 +110,14 @@ class Sampler(object):
                 ACL = np.min(np.where((ACF > -2./np.sqrt(N)) & (ACF < 2./np.sqrt(N)))[0])
                 if not(np.isnan(ACL)):
                     ACLs.append(ACL)
-                    if self.verbose: sys.stderr.write("process %s --> cache size: %d autocorrelation length %s = %.1f mean = %g standard deviation = %g\n"%(os.getpid(),len(self.cache),n,ACLs[-1],np.mean(cov_array[:,i]),np.std(cov_array[:,i])))
+                    if self.verbose: sys.stderr.write("process {0!s} --> cache size: {1:d} autocorrelation length {2!s} = {3:.1f} mean = {4:g} standard deviation = {5:g}\n".format(os.getpid(), len(self.cache), n, ACLs[-1], np.mean(cov_array[:,i]), np.std(cov_array[:,i])))
             self.Nmcmc =int((np.max(ACLs)))
             if self.Nmcmc < 2: self.Nmcmc = 2
             if self.Nmcmc > self.maxmcmc:
-                sys.stderr.write("Warning ACL --> %d!\n"%self.Nmcmc)
+                sys.stderr.write("Warning ACL --> {0:d}!\n".format(self.Nmcmc))
                 self.Nmcmc = self.maxmcmc
         except:
-            sys.stderr.write("Warning ACL failed! setting %d!\n"%self.maxmcmc)
+            sys.stderr.write("Warning ACL failed! setting {0:d}!\n".format(self.maxmcmc))
             self.Nmcmc = self.maxmcmc
         if len(self.cache)==5*self.maxmcmc:
             self.cache = deque(maxlen=5*self.maxmcmc)
