@@ -13,13 +13,10 @@ from . import proposals
 
 class Sampler(object):
     def __init__(self,usermodel,maxmcmc,verbose=True):
+        self.user = usermodel
         self.data = usermodel.data
         names = usermodel.par_names
         bounds = usermodel.bounds
-        logPrior = usermodel.log_prior
-        self.logPrior = logPrior
-        logLikelihood = usermodel.log_likelihood
-        self.logLikelihood=logLikelihood
         self.cache = deque(maxlen=5*maxmcmc)
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
@@ -34,7 +31,7 @@ class Sampler(object):
             while True:
                 if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 self.evolution_points[n] = parameter.LivePoint(names,bounds)
-                self.evolution_points[n].logP = logPrior(self.evolution_points[n])
+                self.evolution_points[n].logP = self.user.log_prior(self.evolution_points[n])
                 if not(np.isinf(self.evolution_points[n].logP)): break
         if self.verbose: sys.stderr.write("\n")
         self.kwargs = proposals.ProposalArguments(self.dimension)
@@ -76,11 +73,11 @@ class Sampler(object):
         jumps = 0
         parameter.copy_live_point(self.param,inParam)
         while (jumps < nsteps or accepted==0):
-            logP0 = self.logPrior(self.param)
+            logP0 = self.user.log_prior(self.param)
             self.param,log_acceptance = self.proposals[jumps%100].get_sample(self.param,self.evolution_points,self.kwargs)
-            self.param.logP = self.logPrior(self.param)
+            self.param.logP = self.user.log_prior(self.param)
             if self.param.logP-logP0 > log_acceptance:
-                self.param.logL = self.logLikelihood(self.param)
+                self.param.logL = self.user.log_likelihood(self.param)
                 if self.param.logL > logLmin:
                     parameter.copy_live_point(inParam,self.param)
                     accepted+=1
