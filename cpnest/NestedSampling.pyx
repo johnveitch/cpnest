@@ -4,16 +4,19 @@ cimport numpy as np
 from libc.math cimport log,exp
 import sys
 import os
-import cPickle as pickle
+import pickle
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
-import Queue as QQueue
 from multiprocessing.sharedctypes import Value
 from . import parameter
 from ctypes import c_int, c_double
 import types
-import copy_reg
+
+try:
+    import copyreg
+except ImportError:
+    import copy_reg as copyreg
 
 DTYPE = np.float64
 
@@ -25,7 +28,7 @@ def _pickle_method(m):
     else:
         return getattr, (m.im_self, m.im_func.func_name)
 
-copy_reg.pickle(types.MethodType, _pickle_method)
+copyreg.pickle(types.MethodType, _pickle_method)
 
 cdef inline double log_add(double x, double y): return x+log(1+exp(y-x)) if x >= y else y+log(1+exp(x-y))
 
@@ -123,7 +126,7 @@ class NestedSampler(object):
         """
         os.system("mkdir -p %s"%output)
         outputfile = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
-        return open(os.path.join(output,outputfile),"w"),open(os.path.join(output,outputfile+"_evidence.txt"), "wb" ),os.path.join(output,outputfile+"_resume")
+        return open(os.path.join(output,outputfile),"w"),open(os.path.join(output,outputfile+"_evidence.txt"), "w" ),os.path.join(output,outputfile+"_resume")
 
     def setup_random_seed(self,seed):
         """

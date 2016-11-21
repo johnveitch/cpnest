@@ -27,7 +27,7 @@ class Sampler(object):
         self.inParam = parameter.LivePoint(names,bounds)
         self.param = parameter.LivePoint(names,bounds)
         self.dimension = self.param.dimension
-        for n in xrange(self.poolsize):
+        for n in range(self.poolsize):
             while True:
                 if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 self.evolution_points[n] = parameter.LivePoint(names,bounds)

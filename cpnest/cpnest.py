@@ -29,10 +29,10 @@ class CPNest(object):
 
 
     def run(self):
-        for i in xrange(0,self.NUMBER_OF_PRODUCER_PROCESSES):
+        for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
             p = mp.Process(target=self.Evolver.produce_sample, args=(self.ns_lock, self.queue, self.NS.jobID, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
-        for i in xrange(0,self.NUMBER_OF_CONSUMER_PROCESSES):
+        for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
             p = mp.Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
             self.process_pool.append(p)
         for each in self.process_pool:
