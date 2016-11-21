@@ -1,4 +1,6 @@
+import unittest
 import numpy as np
+import cpnest
 
 class gaussianmodel(object):
     def __init__(self):
@@ -17,11 +19,18 @@ class gaussianmodel(object):
         return 0
 
 
+class GaussianTestCase(unittest.TestCase):
+    def setUp(self):
+        self.work=cpnest.setup(gaussianmodel,verbose=0,Nthreads=1)
+
+    def test_run(self):
+        self.work.run()
+
+
+
+def test_all():
+    unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    import cpnest
-
-    work=cpnest.setup(gaussianmodel,verbose=1,Nthreads=8)
-    work.run()
-
+    unittest.main(verbosity=2)
 
