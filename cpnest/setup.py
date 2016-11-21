@@ -1,17 +1,14 @@
 #! /usr/bin/env python
 # coding: utf-8
 
-import sys
 import os
-import optparse as op
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
-from Sampler import *
-from ctypes import c_int, c_double
-from NestedSampling import *
-from parameter import *
-#import matplotlib.cm as cm
+import cpnest
+from cpnest import Sampler,NestedSampling
+from cpnest.Sampler import Sampler
+from cpnest.NestedSampling import NestedSampler
 
 class setup(object):
     def __init__(self,userclass,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=1):
@@ -45,6 +42,7 @@ class setup(object):
 
 
 if __name__ == '__main__':
+    import optparse as op
     parser = op.OptionParser()
     parser.add_option("-N", type="int", dest="Nlive", help="Number of Live points",default=1000)
     parser.add_option("-o", "--output", type="string", dest="output", help="Output folder", default=None)

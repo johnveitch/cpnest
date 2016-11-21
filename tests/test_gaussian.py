@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 import cpnest
+import cpnest.setup
 
 class gaussianmodel(object):
     def __init__(self):
