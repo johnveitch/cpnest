@@ -2,7 +2,7 @@ from __future__ import division
 import numpy as np
 cimport numpy as np
 from libc.math cimport log,exp,sqrt,fabs
-cimport parameter
+from . cimport parameter
 from parameter cimport LivePoint
 
 DTYPE = np.float64

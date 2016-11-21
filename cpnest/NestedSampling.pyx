@@ -10,7 +10,7 @@ import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
 import Queue as QQueue
 from multiprocessing.sharedctypes import Value
-import parameter
+from . import parameter
 from ctypes import c_int, c_double
 import types
 import copy_reg

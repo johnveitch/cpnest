@@ -1,21 +1,15 @@
 import sys
 import os
-from scipy import integrate
-from random import shuffle
 import optparse as op
-import cPickle as pickle
 import numpy as np
 from numpy.linalg import eig
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
-import proposals
-import signal
-import time
 from multiprocessing.managers import SyncManager
-from ctypes import c_int
-import parameter
-import proposals
+
+from . import parameter
+from . import proposals
 
 class Sampler(object):
     def __init__(self,usermodel,maxmcmc,verbose=True):
