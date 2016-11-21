@@ -13,39 +13,36 @@ from NestedSampling import *
 from parameter import *
 #import matplotlib.cm as cm
 
-def compute_rate(dl_list,T):
-    Dmax = np.median([e.dmax for e in dl_list])
-    (idx,) = np.where([e.dl for e in dl_list] < Dmax)
-    Vmax = (4.*np.pi*Dmax**3)/3.0
-    return len(idx)/(Vmax*T)
+class setup(object):
+    def __init__(self,userclass,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=1):
+        self.user=userclass
+        if seed is None: self.seed=1234
+        else:
+            self.seed=seed
+        self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior=False)
+        self.Evolver = Sampler(self.user,maxmcmc,verbose=0)
+        self.NUMBER_OF_PRODUCER_PROCESSES = Nthreads
+        self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
-def FindHeightForLevel(inArr, adLevels):
-    # flatten the array
-    oldshape = shape(inArr)
-    adInput= reshape(inArr,oldshape[0]*oldshape[1])
-    # GET ARRAY SPECIFICS
-    nLength = np.size(adInput)
-      
-    # CREATE REVERSED SORTED LIST
-    adTemp = -1.0 * adInput
-    adSorted = np.sort(adTemp)
-    adSorted = -1.0 * adSorted
+        self.process_pool = []
+        self.ns_lock = Lock()
+        self.sampler_lock = Lock()
+        self.queue = Queue()
+        self.port=5555
+        self.authkey = "12345"
+        self.ip = "0.0.0.0"
 
-    # CREATE NORMALISED CUMULATIVE DISTRIBUTION
-    adCum = np.zeros(nLength)
-    adCum[0] = adSorted[0]
-    for i in xrange(1,nLength):
-        adCum[i] = np.logaddexp(adCum[i-1], adSorted[i])
-    adCum = adCum - adCum[-1]
 
-    # FIND VALUE CLOSEST TO LEVELS
-    adHeights = []
-    for item in adLevels:
-        idx=(np.abs(adCum-np.log(item))).argmin()
-        adHeights.append(adSorted[idx])
+    def run(self):
+        for i in xrange(0,self.NUMBER_OF_PRODUCER_PROCESSES):
+            p = Process(target=self.Evolver.produce_sample, args=(self.ns_lock, self.queue, self.NS.jobID, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            self.process_pool.append(p)
+        for i in xrange(0,self.NUMBER_OF_CONSUMER_PROCESSES):
+            p = Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
+            self.process_pool.append(p)
+        for each in self.process_pool:
+            each.start()
 
-    adHeights = np.array(adHeights)
-    return adHeights
 
 if __name__ == '__main__':
     parser = op.OptionParser()

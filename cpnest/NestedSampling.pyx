@@ -57,7 +57,7 @@ class NestedSampler(object):
 
     """
 
-    def __init__(self,data,names,bounds,Nlive=1024,maxmcmc=4096,model=None,events=None,galaxies=None,output=None,verbose=True,seed=1,prior=False):
+    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,model=None,events=None,galaxies=None,output=None,verbose=True,seed=1,prior=False):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
@@ -73,7 +73,7 @@ class NestedSampler(object):
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
-        self.data = data
+        self.data = usermodel.data
         self.params = [None] * self.Nlive
         self.logZ = np.finfo(np.float128).min
         self.tolerance = 0.01
@@ -84,12 +84,17 @@ class NestedSampler(object):
         self.iteration = 0
         self.nextID = 0
         self.samples_cache = {}
+        names = usermodel.par_names
+        bounds = usermodel.bounds
+        logPrior = usermodel.log_prior
+        logLikelihood = usermodel.log_likelihood
+
         for n in range(self.Nlive):
             while True:
                 if self.verbose: sys.stderr.write("sprinkling %d live points --> %.3f %% complete\r"%(self.Nlive,100.0*float(n+1)/float(self.Nlive)))
                 self.params[n] = parameter.LivePoint(names,bounds)
-                self.params[n].logP = parameter.logPrior(self.data,self.params[n])
-                self.params[n].logL = parameter.logLikelihood(self.data,self.params[n])
+                self.params[n].logP = logPrior(self.params[n])
+                self.params[n].logL = logLikelihood(self.params[n])
                 if not(np.isinf(self.params[n].logP)) and not(np.isinf(self.params[n].logL)): break
         sys.stderr.write("\n")
         self.dimension = self.params[0].dimension

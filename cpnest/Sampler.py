@@ -18,8 +18,14 @@ import parameter
 import proposals
 
 class Sampler(object):
-    def __init__(self,data,maxmcmc,names,bounds,verbose=True):
-        self.data = data
+    def __init__(self,usermodel,maxmcmc,verbose=True):
+        self.data = usermodel.data
+        names = usermodel.par_names
+        bounds = usermodel.bounds
+        logPrior = usermodel.log_prior
+        self.logPrior = logPrior
+        logLikelihood = usermodel.log_likelihood
+        self.logLikelihood=logLikelihood
         self.cache = deque(maxlen=5*maxmcmc)
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
@@ -34,7 +40,7 @@ class Sampler(object):
             while True:
                 if self.verbose: sys.stderr.write("process %s --> generating pool of %d points for evolution --> %.3f %% complete\r"%(os.getpid(),self.poolsize,100.0*float(n+1)/float(self.poolsize)))
                 self.evolution_points[n] = parameter.LivePoint(names,bounds)
-                self.evolution_points[n].logP = parameter.logPrior(self.data,self.evolution_points[n])
+                self.evolution_points[n].logP = logPrior(self.evolution_points[n])
                 if not(np.isinf(self.evolution_points[n].logP)): break
         if self.verbose: sys.stderr.write("\n")
         self.kwargs = proposals.ProposalArguments(self.dimension)
@@ -77,11 +83,11 @@ class Sampler(object):
         jumps = 0
         parameter.copy_live_point(self.param,inParam)
         while (jumps < nsteps or accepted==0):
-            logP0 = parameter.logPrior(self.data,self.param)
+            logP0 = self.logPrior(self.param)
             self.param,log_acceptance = self.proposals[jumps%100].get_sample(self.param,self.evolution_points,self.kwargs)
-            self.param.logP = parameter.logPrior(self.data,self.param)
+            self.param.logP = self.logPrior(self.param)
             if self.param.logP-logP0 > log_acceptance:
-                self.param.logL = parameter.logLikelihood(self.data,self.param)
+                self.param.logL = self.logLikelihood(self.param)
                 if self.param.logL > logLmin:
                     parameter.copy_live_point(inParam,self.param)
                     accepted+=1
@@ -123,15 +129,4 @@ class Sampler(object):
         if len(self.cache)==5*self.maxmcmc:
             self.cache = deque(maxlen=5*self.maxmcmc)
 
-if __name__=='__main__':
-    bounds = [[0,1],[0,1]]
-    names = ['slope','intercept']
-    data = np.random.normal(0.0,1.0,size=1000)
-    sampler = Sampler(data,100,names,bounds)
-    slope = []
-    for _ in xrange(1000):
-        out = sampler.MetropolisHastings(sampler.inParam,-np.inf,10)
-        slope.append(out[2].get('slope'))
-    import matplotlib.pyplot as plt
-    plt.plot(slope,'.')
-    plt.show()
+
