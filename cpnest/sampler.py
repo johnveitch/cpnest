@@ -44,9 +44,9 @@ class Sampler(object):
 
         while(1):
             IDcounter.get_lock().acquire()
-            jobID = IDcounter.get_obj()
-            id = jobID.value
-            jobID.value+=1
+            job_id = IDcounter.get_obj()
+            id = job_id.value
+            job_id.value+=1
             IDcounter.get_lock().release()
             if logLmin.value==999:
                 break
@@ -72,14 +72,15 @@ class Sampler(object):
         rejected = 1
         jumps = 0
         parameter.copy_live_point(self.param,inParam)
+        logp_old = self.user.log_prior(self.param)
         while (jumps < nsteps or accepted==0):
-            logP0 = self.user.log_prior(self.param)
             self.param,log_acceptance = self.proposals[jumps%100].get_sample(self.param,self.evolution_points,self.kwargs)
             self.param.logP = self.user.log_prior(self.param)
-            if self.param.logP-logP0 > log_acceptance:
+            if self.param.logP-logp_old > log_acceptance:
                 self.param.logL = self.user.log_likelihood(self.param)
                 if self.param.logL > logLmin:
                     parameter.copy_live_point(inParam,self.param)
+                    logp_old = self.param.logP
                     accepted+=1
                 else:
                     parameter.copy_live_point(self.param,inParam)
