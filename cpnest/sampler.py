@@ -53,7 +53,7 @@ class Sampler(object):
             IDcounter.get_lock().release()
             if logLmin.value==999:
                 break
-            acceptance,jumps,outParam = self.MetropolisHastings(self.inParam,logLmin.value,self.Nmcmc)
+            acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
             parameter.copy_live_point(self.evolution_points[np.random.randint(self.poolsize)],outParam)
 
             queue.put((id,acceptance,jumps,np.array([outParam.get(n) for n in outParam.names]),outParam.logP,outParam.logL))
@@ -68,7 +68,7 @@ class Sampler(object):
         sys.stderr.write("Sampler process %s, exiting\n"%os.getpid())
         return 0
 
-    def MetropolisHastings(self,inParam,logLmin,nsteps):
+    def metropolis_hastings(self,inParam,logLmin,nsteps):
         """
         mcmc loop to generate the new live point taking nmcmc steps
         """
