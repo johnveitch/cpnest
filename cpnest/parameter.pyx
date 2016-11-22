@@ -56,33 +56,6 @@ cpdef void copy_live_point(LivePoint out_live, LivePoint in_live):
     out_live.logL = np.copy(in_live.logL)
     out_live.logP = np.copy(in_live.logP)
 
-cpdef double logPrior(list data, LivePoint x):
-    cdef unsigned int i
-    cdef double logP = 0.0
-    for i in range(x.dimension):
-        if not(x.parameters[i].inbounds()):
-            logP = -np.inf
-            return logP
-    return logP
-
-@cython.cdivision(True)
-@cython.boundscheck(False)
-cpdef double logLikelihood(list data, LivePoint x):
-    """
-    Likelihood function
-    """
-    if data is None:
-        return 0.0
-    cdef unsigned int i,j
-    cdef unsigned int N = len(data)
-    cdef double logL=0.0
-    cdef double mean = x.get('mean')
-    cdef double sigma = x.get('sigma')
-    cdef double residuals
-    for i in range(N):
-        residuals = (data[i]-mean)/sigma
-        logL += -0.5*residuals*residuals
-    return logL
 
 # optimisation test functions, see https://en.wikipedia.org/wiki/Test_functions_for_optimization
 
