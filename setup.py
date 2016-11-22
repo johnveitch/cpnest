@@ -71,8 +71,7 @@ setup(
             test_suite='tests',
         ext_modules=[
                 Extension('cpnest.parameter',sources=['cpnest/parameter.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/']),
-                Extension('cpnest.proposals',sources=['cpnest/proposals.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/']),
-                Extension('cpnest.NestedSampling',sources=['cpnest/NestedSampling.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/'])
+                Extension('cpnest.proposals',sources=['cpnest/proposals.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/'])
                 ]
         )
 

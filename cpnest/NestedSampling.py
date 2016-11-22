@@ -1,7 +1,6 @@
 from __future__ import division
 import numpy as np
-cimport numpy as np
-from libc.math cimport log,exp
+from numpy import logaddexp
 import sys
 import os
 import pickle
@@ -18,9 +17,6 @@ try:
 except ImportError:
     import copy_reg as copyreg
 
-DTYPE = np.float64
-
-ctypedef np.float64_t DTYPE_t
 
 def _pickle_method(m):
     if m.im_self is None:
@@ -30,7 +26,7 @@ def _pickle_method(m):
 
 copyreg.pickle(types.MethodType, _pickle_method)
 
-cdef inline double log_add(double x, double y): return x+log(1+exp(y-x)) if x >= y else y+log(1+exp(x-y))
+cdef inline double logaddexp(double x, double y): return x+log(1+exp(y-x)) if x >= y else y+log(1+exp(x-y))
 
 class NestedSampler(object):
     """
@@ -164,10 +160,10 @@ class NestedSampler(object):
             logLmin = self.get_worst_live_point()
 
             logWt = logLmin+self.logwidth;
-            logZnew = log_add(self.logZ, logWt)
+            logZnew = logaddexp(self.logZ, logWt)
             self.information = exp(logWt - logZnew) * self.params[self.worst].logL + exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
             self.logZ = logZnew
-            self.condition = log_add(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
+            self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
             line = ""
             for n in self.params[self.worst].names:
                 line+='%.30e\t'%self.params[self.worst].get(n)
@@ -221,10 +217,10 @@ class NestedSampler(object):
         logLmin = self.get_worst_live_point()
 
         logWt = logLmin+self.logwidth;
-        logZnew = log_add(self.logZ, logWt)
+        logZnew = logaddexp(self.logZ, logWt)
         self.information = exp(logWt - logZnew) * self.params[self.worst].logL + exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
         self.logZ = logZnew
-        self.condition = log_add(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
+        self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
         line = ""
         for n in self.params[self.worst].names:
             line+='%.30e\t'%self.params[self.worst].get(n)
