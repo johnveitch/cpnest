@@ -159,7 +159,7 @@ class NestedSampler(object):
 
             logWt = logLmin+self.logwidth;
             logZnew = logaddexp(self.logZ, logWt)
-            self.information = exp(logWt - logZnew) * self.params[self.worst].logL + exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
+            self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
             self.logZ = logZnew
             self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
             line = ""
@@ -184,7 +184,7 @@ class NestedSampler(object):
         """
         main nested sampling loop
         """
-        self.logwidth = log(1.0 - exp(-1.0 / float(self.Nlive)))
+        self.logwidth = np.log(1.0 - np.exp(-1.0 / float(self.Nlive)))
         for i in range(self.Nlive):
             while True:
                 while not(self.nextID in self.samples_cache):
@@ -216,7 +216,7 @@ class NestedSampler(object):
 
         logWt = logLmin+self.logwidth;
         logZnew = logaddexp(self.logZ, logWt)
-        self.information = exp(logWt - logZnew) * self.params[self.worst].logL + exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
+        self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
         self.logZ = logZnew
         self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
         line = ""
