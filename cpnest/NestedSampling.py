@@ -28,7 +28,7 @@ copyreg.pickle(types.MethodType, _pickle_method)
 
 class NestedSampler(object):
     """
-    
+    Nested Sampler class.
     Initialisation arguments:
     
     Nlive: 
@@ -49,17 +49,16 @@ class NestedSampler(object):
     seed:
         seed for the initialisation of the pseudorandom chain
     
-    prior:
-        produce N samples from the prior
-
+    prior_sampling:
+        produce Nlive samples from the prior
     """
 
-    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,model=None,events=None,galaxies=None,output=None,verbose=True,seed=1,prior=False):
+    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,output=None,verbose=True,seed=1,prior_sampling=False):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
 
-        self.prior_sampling = prior
+        self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose = verbose
         self.active_index = 0
@@ -139,7 +138,9 @@ class NestedSampler(object):
                 return j
 
     def consume_sample(self, producer_lock, queue, port, authkey):
-
+        """
+        consumes a sample from the shared queue and updates the evidence
+        """
         while not(self.nextID in self.samples_cache):
             ID,acceptance,jumps,values,logP,logL = queue.get()
             self.samples_cache[ID] = acceptance,jumps,values,logP,logL
@@ -169,11 +170,15 @@ class NestedSampler(object):
             self.output.write(line)
             self.active_index=self._select_live()
             parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
-            if self.verbose: sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.5f} cache: {9:d}\n".format(self.iteration, jumps, acceptance, self.information, logLmin, self.params[self.worst].logL, self.condition, self.logZ, self.logLmax, len(self.samples_cache)))
+            if self.verbose:
+                sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.5f} cache: {9:d}\n".format(self.iteration, jumps, acceptance, self.information, logLmin, self.params[self.worst].logL, self.condition, self.logZ, self.logLmax, len(self.samples_cache)))
             self.logwidth-=1.0/float(self.Nlive)
             self.iteration+=1
 
     def get_worst_live_point(self):
+        """
+        selects the lowest likelihood live point
+        """
         logL_array = np.array([p.logL for p in self.params])
         self.worst = logL_array.argmin()
         self.logLmin.value = np.min(logL_array)

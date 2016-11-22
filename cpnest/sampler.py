@@ -1,8 +1,6 @@
 import sys
 import os
-import optparse as op
 import numpy as np
-from numpy.linalg import eig
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
@@ -12,7 +10,27 @@ from . import parameter
 from . import proposals
 
 class Sampler(object):
-    def __init__(self,usermodel,maxmcmc,verbose=True):
+    """
+    Sampler class.
+    Initialisation arguments:
+    
+    usermodel:
+    user defined model to sample
+    
+    maxmcmc:
+    maximum number of mcmc steps to be used in the sampler
+    default: 4096
+    
+    verbose:
+    display debug information on screen
+    default: False
+    
+    poolsize:
+    number of objects for the affine invariant sampling
+    default: 100
+    
+    """
+    def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100):
         self.user = usermodel
         self.data = usermodel.data
         names = usermodel.par_names
@@ -21,7 +39,7 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.proposals = proposals.setup_proposals_cycle()
-        self.poolsize = 100
+        self.poolsize = poolsize
         self.evolution_points = [None]*self.poolsize
         self.verbose=verbose
         self.inParam = parameter.LivePoint(names,bounds)
@@ -38,6 +56,9 @@ class Sampler(object):
         self.kwargs.update(self.evolution_points)
 
     def produce_sample(self, consumer_lock, queue, IDcounter, logLmin, seed, ip, port, authkey):
+        """
+        main loop that generates samples and puts them in the queue for the nested sampler object
+        """
         self.seed = seed
         np.random.seed(seed=self.seed)
         self.counter=0
@@ -66,7 +87,7 @@ class Sampler(object):
 
     def metropolis_hastings(self,inParam,logLmin,nsteps):
         """
-        mcmc loop to generate the new live point taking nmcmc steps
+        metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
         accepted = 0
         rejected = 1
@@ -120,4 +141,5 @@ class Sampler(object):
         if len(self.cache)==5*self.maxmcmc:
             self.cache = deque(maxlen=5*self.maxmcmc)
 
-
+if __name__=="__main__":
+    pass
