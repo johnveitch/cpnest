@@ -25,8 +25,9 @@ cdef class ProposalArguments(object):
         cdef unsigned int n = len(pool)
         cdef np.ndarray[np.double_t, ndim=2, mode = 'c'] cov_array = np.zeros((self.dimension,n))
         for i in range(self.dimension):
+            name=pool[0].names[i]
             for j in range(n):
-                cov_array[i,j] = pool[j].parameters[i].value
+                cov_array[i,j] = pool[j]['name']
         covariance = np.cov(cov_array)
         self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
@@ -36,7 +37,7 @@ cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArg
     cdef double jumpsize,log_acceptance_probability
     for k in range(arguments.dimension):
         jumpsize = sqrt(fabs(arguments.eigen_values[i]))*np.random.normal(0,1)
-        inParam.parameters[k].value+=jumpsize*arguments.eigen_vectors[k,i]
+        inParam[inParam.names[k]]+=jumpsize*arguments.eigen_vectors[k,i]
     log_acceptance_probability = log(np.random.uniform(0.,1.))
     return inParam,log_acceptance_probability
 

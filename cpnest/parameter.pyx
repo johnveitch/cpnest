@@ -6,13 +6,14 @@ cimport cython
 
 cdef inline double log_add(double x, double y): return x+log(1.0+exp(y-x)) if x >= y else y+log(1.0+exp(x-y))
 
+
+
 cdef class parameter:
 
     def __cinit__(self, str name, list bound):
         self.name = name
         self.bounds[0] = bound[0]
         self.bounds[1] = bound[1]
-        self.value = np.random.uniform(self.bounds[0],self.bounds[1])
 
     def __str__(self):
         return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
@@ -21,6 +22,7 @@ cdef class parameter:
         if self.value > self.bounds[1] or self.value < self.bounds[0]:
             return False
         return True
+
 
 cdef class LivePoint:
 
@@ -34,6 +36,26 @@ cdef class LivePoint:
         for i in range(self.dimension):
             self.parameters.append(parameter(names[i],bounds[i]))
 
+    def __cmp__(self,other):
+        assert isinstance(other,LivePoint)
+        for i in range(self.dimension):
+            if not self.names[i] in other.names or self[self.names[i]]!=other[self.names[i]]:
+                return 1
+        return 0
+
+    def __add__(self,other):
+        assert self.dimension == other.dimension
+        result=LivePoint(self.names,self.bounds)
+        for n in self.names:
+            result[n]=self[n]+other[n]
+        return result
+
+    def __len__(self):
+        return self.dimension
+    def __getitem__(self,str name):
+        return self.get(name)
+    def __setitem__(self,str name, double value):
+        self.set(name,value)
     cpdef double get(self, str name):
         cdef unsigned int i
         for i in range(self.dimension):
