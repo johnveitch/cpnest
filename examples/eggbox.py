@@ -11,8 +11,8 @@ class EggboxModel(object):
     par_names=['x','y']
     bounds=[[0,10.0*np.pi],[0,10.0*np.pi]]
     data = None
-    @classmethod
-    def log_likelihood(cls,x):
+    @staticmethod
+    def log_likelihood(x):
         return log_eggbox(x['x'],x['y'])
 
     @staticmethod

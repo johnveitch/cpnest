@@ -11,8 +11,8 @@ class AckleyModel(object):
     par_names=['x','y']
     bounds=[[-5,5],[-5,5]]
     data = None
-    @classmethod
-    def log_likelihood(cls,x):
+    @staticmethod
+    def log_likelihood(x):
         return ackley(x['x'],x['y'])
 
     @staticmethod
