@@ -35,11 +35,12 @@ cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArg
     cdef unsigned int i = np.random.randint(arguments.dimension)
     cdef unsigned int k
     cdef double jumpsize,log_acceptance_probability
+    cdef LivePoint outParam = inParam
     for k in range(arguments.dimension):
         jumpsize = sqrt(fabs(arguments.eigen_values[i]))*np.random.normal(0,1)
-        inParam[inParam.names[k]]+=jumpsize*arguments.eigen_vectors[k,i]
+        outParam[outParam.names[k]]+=jumpsize*arguments.eigen_vectors[k,i]
     log_acceptance_probability = log(np.random.uniform(0.,1.))
-    return inParam,log_acceptance_probability
+    return outParam,log_acceptance_probability
 
 cdef tuple _EnsembleWalk(LivePoint inParam, list Ensemble, ProposalArguments arguments):
 
