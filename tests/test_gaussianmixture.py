@@ -10,7 +10,7 @@ class GaussianMixtureModel(object):
     def __init__(self):
         pass
     par_names=['mean1','sigma1','mean2','sigma2','weight']
-    bounds=[[-10,10],[0.01,1],[-10,10],[0.01,1],[0.0,1.0]]
+    bounds=[[-3,3],[0.01,1],[-3,3],[0.01,1],[0.0,1.0]]
     data = []
     for _ in range(1000):
         if np.random.uniform(0.0,1.0) < 0.3:

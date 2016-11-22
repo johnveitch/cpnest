@@ -28,7 +28,7 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=8,Nlive=1000,maxmcmc=1024)
+        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=1,Nlive=100,maxmcmc=100)
 
     def test_run(self):
         self.work.run()

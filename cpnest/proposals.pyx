@@ -28,7 +28,7 @@ cdef class ProposalArguments(object):
             name=pool[0].names[i]
             for j in range(n):
                 cov_array[i,j] = pool[j][name]
-        covariance = np.cov(cov_array)
+        cdef np.ndarray[np.double_t, ndim=2, mode = 'c'] covariance = np.cov(cov_array)
         self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
 cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArguments arguments):
@@ -74,7 +74,7 @@ cdef tuple _EnsembleStretch(LivePoint inParam, list Ensemble, ProposalArguments 
     cdef double u = np.random.uniform(0.0,1.0)
     cdef double x = (2.0*u-1)*log(scale)
     cdef double Z = exp(x)
-    outParam = Ensemble[a] + (inParam - Ensemble[a])*Z
+    cdef LivePoint outParam = Ensemble[a] + (inParam - Ensemble[a])*Z
 
     if (Z<1.0/scale)or(Z>scale):
         log_acceptance_probability = -np.inf
@@ -88,8 +88,11 @@ cdef tuple _DifferentialEvolution(LivePoint inParam, list Ensemble, ProposalArgu
     cdef double gamma = 2.38/sqrt(2.0*dimension)
     cdef np.ndarray[np.int64_t, ndim=1] indeces = np.random.choice(range(len(Ensemble)),2)
     cdef double mutation_variance = 1e-4
+    
+    cdef LivePoint outParam = inParam+(Ensemble[indeces[0]]-Ensemble[indeces[1]])*gamma
     for i in range(dimension):
-            inParam.parameters[i].value = inParam.parameters[i].value+gamma*(Ensemble[indeces[0]].parameters[i].value-Ensemble[indeces[1]].parameters[i].value)+mutation_variance*np.random.normal(0,1)
+        outParam.parameters[i].value += mutation_variance*np.random.normal(0,1)
+
     cdef double log_acceptance_probability = log(np.random.uniform(0.,1.))
     return inParam,log_acceptance_probability
 
