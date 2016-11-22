@@ -74,13 +74,14 @@ cdef tuple _EnsembleStretch(LivePoint inParam, list Ensemble, ProposalArguments 
     cdef double u = np.random.uniform(0.0,1.0)
     cdef x = (2.0*u-1)*log(scale)
     cdef Z = exp(x)
-    for i in range(dimension):
-        inParam.parameters[i].value = Ensemble[a].parameters[i].value+Z*(inParam.parameters[i].value-Ensemble[a].parameters[i].value)
+    
+    outParam = Ensemble[a] + (inParam - Ensemble[a])*Z
+
     if (Z<1.0/scale)or(Z>scale):
         log_acceptance_probability = -np.inf
     else:
         log_acceptance_probability = log(np.random.uniform(0.,1.))-(dimension)*log(Z)
-    return inParam,log_acceptance_probability
+    return outParam,log_acceptance_probability
 
 cdef tuple _DifferentialEvolution(LivePoint inParam, list Ensemble, ProposalArguments arguments):
     cdef unsigned int i
