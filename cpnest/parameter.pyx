@@ -97,6 +97,13 @@ cdef class LivePoint:
             result[n]=self[n]/other
         return result
 
+    def __itruediv__(self,other):
+        if not isinstance(other,float):
+            raise(NotImplementedError("Cannot divide types {0} and {1}".format(str(type(self)),str(type(other))) ))
+        for n in self.names:
+            self[n]=self[n]/other
+        return self
+
     def __len__(self):
         return self.dimension
     
