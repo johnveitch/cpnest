@@ -15,6 +15,7 @@ class GaussianModel(object):
     @classmethod
     def log_likelihood(cls,x):
         return -0.5*np.sum((cls.data-x['mean'])**2/x['sigma']**2) - len(cls.data)*np.log(x['sigma']) - 0.5*np.log(2.0*np.pi)-1000
+
     @staticmethod
     def log_prior(p):
         for i in range(p.dimension):
@@ -27,7 +28,7 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel,verbose=0,Nthreads=1)
+        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=8)
 
     def test_run(self):
         self.work.run()
