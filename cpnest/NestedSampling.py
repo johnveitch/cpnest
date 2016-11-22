@@ -164,7 +164,7 @@ class NestedSampler(object):
             self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
             line = ""
             for n in self.params[self.worst].names:
-                line+='{0:.30e}\t'.format(self.params[self.worst].get(n))
+                line+='{0:.30e}\t'.format(self.params[self.worst][n])
             line+='{0:30e}\n'.format(self.params[self.worst].logL)
             self.output.write(line)
             self.active_index=self._select_live()
@@ -203,7 +203,7 @@ class NestedSampler(object):
             for i in range(self.Nlive):
                 line = ""
                 for n in self.params[i].names:
-                    line+='{0:.30e}\t'.format(self.params[i].get(n))
+                    line+='{0:.30e}\t'.format(self.params[i][n])
                 line+='{0:30e}\n'.format(self.params[i].logL)
                 self.output.write(line)
             self.output.close()
@@ -221,7 +221,7 @@ class NestedSampler(object):
         self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
         line = ""
         for n in self.params[self.worst].names:
-            line+='{0:.30e}\t'.format(self.params[self.worst].get(n))
+            line+='{0:.30e}\t'.format(self.params[self.worst][n])
         line+='{0:30e}\n'.format(self.params[self.worst].logL)
         self.output.write(line)
         self.active_index =self._select_live()
@@ -246,7 +246,7 @@ class NestedSampler(object):
         for i in idx:
             line = ""
             for n in self.params[i].names:
-                line+='{0:.30e}\t'.format(self.params[i].get(n))
+                line+='{0:.30e}\t'.format(self.params[i][n])
             line+='{0:30e}\n'.format(self.params[i].logL)
             self.output.write(line)
             i+=1

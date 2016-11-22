@@ -20,6 +20,4 @@ cdef class LivePoint:
     cdef public list parameters
     cdef public list names
     cdef public list bounds
-    cpdef double get(self, str name)
-    cpdef void set(self, str name, double value)
 

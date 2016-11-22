@@ -27,7 +27,7 @@ cdef class ProposalArguments(object):
         for i in range(self.dimension):
             name=pool[0].names[i]
             for j in range(n):
-                cov_array[i,j] = pool[j]['name']
+                cov_array[i,j] = pool[j][name]
         covariance = np.cov(cov_array)
         self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 

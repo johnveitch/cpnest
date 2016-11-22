@@ -53,7 +53,7 @@ class Sampler(object):
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
             parameter.copy_live_point(self.evolution_points[np.random.randint(self.poolsize)],outParam)
 
-            queue.put((id,acceptance,jumps,np.array([outParam.get(n) for n in outParam.names]),outParam.logP,outParam.logL))
+            queue.put((id,acceptance,jumps,np.array([outParam[n] for n in outParam.names]),outParam.logP,outParam.logL))
             if self.counter == 0 and len(self.cache)==5*self.maxmcmc:
                 self.autocorrelation()
                 self.kwargs.update(self.evolution_points)

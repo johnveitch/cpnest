@@ -80,17 +80,13 @@ cdef class LivePoint:
 
     def __len__(self):
         return self.dimension
-    def __getitem__(self,str name):
-        return self.get(name)
-    def __setitem__(self,str name, double value):
-        self.set(name,value)
-    cpdef double get(self, str name):
+    def __getitem__(self, name):
         cdef unsigned int i
         for i in range(self.dimension):
             if self.parameters[i].name == name:
                 return self.parameters[i].value
 
-    cpdef void set(self, str name, double value):
+    def __setitem__(self, name, value):
         cdef unsigned int i
         for i in range(self.dimension):
             if self.parameters[i].name == name:
