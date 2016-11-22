@@ -44,21 +44,17 @@ cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArg
 cdef tuple _EnsembleWalk(LivePoint inParam, list Ensemble, ProposalArguments arguments):
 
     cdef unsigned int i,j
-    cdef unsigned int dimension = arguments.dimension
     cdef unsigned int Nsubset = 3
     cdef np.ndarray[np.int64_t, ndim=1] indeces = np.random.choice(range(len(Ensemble)),Nsubset)
-
-    cdef list subset = []
-    for i in indeces:
-        subset.append(Ensemble[i])
-
-    center_of_mass=reduce(LivePoint.__add__,subset)/float(Nsubset)
-
+    cdef list subset = [Ensemble[i] for i in indeces]
+    cdef LivePoint center_of_mass=reduce(LivePoint.__add__,subset)/float(Nsubset)
+    cdef LivePoint outParam = inParam
+    
     for j in range(Nsubset):
-      inParam += (center_of_mass - subset[j])*np.random.normal(0,1)
+      outParam += (center_of_mass - subset[j])*np.random.normal(0,1)
 
     cdef double log_acceptance_probability = log(np.random.uniform(0.,1.))
-    return inParam,log_acceptance_probability
+    return outParam,log_acceptance_probability
 
 
 cdef tuple _EnsembleStretch(LivePoint inParam, list Ensemble, ProposalArguments arguments):
@@ -88,13 +84,14 @@ cdef tuple _DifferentialEvolution(LivePoint inParam, list Ensemble, ProposalArgu
     cdef double gamma = 2.38/sqrt(2.0*dimension)
     cdef np.ndarray[np.int64_t, ndim=1] indeces = np.random.choice(range(len(Ensemble)),2)
     cdef double mutation_variance = 1e-4
-    
+
     cdef LivePoint outParam = inParam+(Ensemble[indeces[0]]-Ensemble[indeces[1]])*gamma
+    
     for i in range(dimension):
         outParam.parameters[i].value += mutation_variance*np.random.normal(0,1)
 
     cdef double log_acceptance_probability = log(np.random.uniform(0.,1.))
-    return inParam,log_acceptance_probability
+    return outParam,log_acceptance_probability
 
 
 proposals = {}
