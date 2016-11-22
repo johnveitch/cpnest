@@ -23,7 +23,7 @@ class GaussianMixtureModel(object):
         w = x('weight')
         logL = 0.0
         for d in data:
-            logL += 
+            logL += np.log(w*np.exp(-0.5*np.sum((cls.data-x('mean1'))**2/x('sigma1')**2))/np.sqrt(len(cls.data)*np.log(x('sigma')) - 0.5*np.log(2.0*np.pi)
         
         
         
