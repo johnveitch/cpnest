@@ -14,7 +14,7 @@ class CPNest(object):
         if seed is None: self.seed=1234
         else:
             self.seed=seed
-        self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior=False)
+        self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
         self.Evolver = Sampler(self.user,maxmcmc,verbose=0)
         self.NUMBER_OF_PRODUCER_PROCESSES = Nthreads
         self.NUMBER_OF_CONSUMER_PROCESSES = 1
