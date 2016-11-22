@@ -46,9 +46,7 @@ cdef tuple _EnsembleWalk(LivePoint inParam, list Ensemble, ProposalArguments arg
     cdef unsigned int i,j
     cdef unsigned int dimension = arguments.dimension
     cdef unsigned int Nsubset = 3
-    cdef double tmp
     cdef np.ndarray[np.int64_t, ndim=1] indeces = np.random.choice(range(len(Ensemble)),Nsubset)
-    cdef np.ndarray[DTYPE_t, ndim=1] center_of_mass = np.zeros(dimension, dtype=DTYPE)
 
     cdef list subset = []
     for i in indeces:
@@ -56,11 +54,8 @@ cdef tuple _EnsembleWalk(LivePoint inParam, list Ensemble, ProposalArguments arg
 
     center_of_mass=reduce(LivePoint.__add__,subset)/float(Nsubset)
 
-    for i in range(dimension):
-        tmp = 0.0
-        for j in range(Nsubset):
-            tmp+=np.random.normal(0,1)*(center_of_mass[i]-subset[j].parameters[i].value)
-        inParam.parameters[i].value += tmp
+    for j in range(Nsubset):
+      inParam += (center_of_mass - subset[j])*np.random.normal(0,1)
 
     cdef double log_acceptance_probability = log(np.random.uniform(0.,1.))
     return inParam,log_acceptance_probability

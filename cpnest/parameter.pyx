@@ -38,6 +38,9 @@ cdef class LivePoint:
         for i in range(self.dimension):
             self.parameters.append(parameter(names[i],bounds[i]))
 
+    def __str__(self):
+        return str({n:self[n] for n in self.names})
+
     def __cmp__(self,other):
         assert isinstance(other,LivePoint)
         for i in range(self.dimension):
@@ -52,12 +55,27 @@ cdef class LivePoint:
             result[n]=self[n]+other[n]
         return result
 
+    def __sub__(self,other):
+        assert self.dimension == other.dimension
+        result = LivePoint(self.names,self.bounds)
+        for n in self.names:
+            result[n]=self[n]-other[n]
+        return result
+
     def __mul__(self,other):
         if not isinstance(other,float):
-            raise(NotImplementedError("Cannot multiple types {0} and {1}".format(str(type(self)),str(type(other)) )))
+            raise(NotImplementedError("Cannot multiply types {0} and {1}".format(str(type(self)),str(type(other))) ))
         result=LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=other*self[n]
+        return result
+
+    def __truediv__(self,other):
+        if not isinstance(other,float):
+            raise(NotImplementedError("Cannot divide types {0} and {1}".format(str(type(self)),str(type(other))) ))
+        result = LivePoint(self.names,self.bounds)
+        for n in self.names:
+            result[n]=self[n]/other
         return result
 
     def __len__(self):
