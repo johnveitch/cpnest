@@ -72,9 +72,8 @@ cdef tuple _EnsembleStretch(LivePoint inParam, list Ensemble, ProposalArguments 
     cdef int a = np.random.randint(N)
     cdef double log_acceptance_probability
     cdef double u = np.random.uniform(0.0,1.0)
-    cdef x = (2.0*u-1)*log(scale)
-    cdef Z = exp(x)
-    
+    cdef double x = (2.0*u-1)*log(scale)
+    cdef double Z = exp(x)
     outParam = Ensemble[a] + (inParam - Ensemble[a])*Z
 
     if (Z<1.0/scale)or(Z>scale):
