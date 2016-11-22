@@ -24,7 +24,7 @@ class GaussianMixtureModel(object):
         logL = 0.0
         for d in cls.data:
             logL += np.log(w*normal(d,x['mean1'],x['sigma1'])+(1.0-w)*normal(d,x['mean2'],x['sigma2']))
-        return logL
+        return logL-10000.0
 
     @staticmethod
     def log_prior(p):
