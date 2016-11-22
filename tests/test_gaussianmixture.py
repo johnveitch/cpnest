@@ -23,17 +23,17 @@ class GaussianMixtureModel(object):
         w = x('weight')
         logL = 0.0
         for d in data:
-            logL += np.log(w*np.exp(-0.5*np.sum((cls.data-x('mean1'))**2/x('sigma1')**2))/np.sqrt(len(cls.data)*np.log(x('sigma')) - 0.5*np.log(2.0*np.pi)
-        
-        
-        
-        return -0.5*np.sum((cls.data-x('mean1'))**2/x('sigma1')**2) - len(cls.data)*np.log(x('sigma')) - 0.5*np.log(2.0*np.pi)-1000
+            logL += np.log(w*normal(d,x['mean1'],x['sigma1'])+(1.0-w)*normal(d,x['mean2'],x['sigma2']))
 
     @staticmethod
     def log_prior(p):
         for i in range(p.dimension):
             if not p.parameters[i].inbounds(): return -np.inf
         return -np.log(p('sigma1'))-np.log(p('sigma2'))
+    @staticmethod
+    def normal(x,m,s):
+        d = (x-m)/s
+        return np.exp(-0.5*d**2)/np.sqrt(2.0*np.pi*s*s)
 
 
 class GaussianTestCase(unittest.TestCase):
