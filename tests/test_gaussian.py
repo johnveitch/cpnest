@@ -14,12 +14,12 @@ class GaussianModel(object):
 
     @classmethod
     def log_likelihood(cls,x):
-        return -0.5*np.sum((cls.data-x('mean'))**2/x('sigma')**2) - len(cls.data)*np.log(x('sigma')) - 0.5*np.log(2.0*np.pi)-1000
+        return -0.5*np.sum((cls.data-x['mean'])**2/x['sigma']**2) - len(cls.data)*np.log(x['sigma']) - 0.5*np.log(2.0*np.pi)-1000
     @staticmethod
     def log_prior(p):
         for i in range(p.dimension):
             if not p.parameters[i].inbounds(): return -np.inf
-        return -np.log(p('sigma'))
+        return -np.log(p['sigma'])
 
 
 class GaussianTestCase(unittest.TestCase):
