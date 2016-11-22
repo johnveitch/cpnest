@@ -34,6 +34,9 @@ cdef class LivePoint:
         for i in range(self.dimension):
             self.parameters.append(parameter(names[i],bounds[i]))
 
+    def __call__(self, str name):
+        return self.get(name)
+
     cpdef double get(self, str name):
         cdef unsigned int i
         for i in range(self.dimension):
