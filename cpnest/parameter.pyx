@@ -14,7 +14,7 @@ cdef class parameter:
         self.name = name
         self.bounds[0] = bound[0]
         self.bounds[1] = bound[1]
-        self.value=np.random.uniform(self.bounds[0],self.bounds[1])
+        self.value=np.random.uniform(bound[0],bound[1])
 
     def __str__(self):
         return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
@@ -55,12 +55,24 @@ cdef class LivePoint:
             result[n]=self[n]+other[n]
         return result
 
+    def __iadd__(self,other):
+        assert self.dimension == other.dimension
+        for n in self.names:
+            self[n]=self[n]+other[n]
+        return self
+    
     def __sub__(self,other):
         assert self.dimension == other.dimension
         result = LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=self[n]-other[n]
         return result
+
+    def __isub__(self,other):
+        assert self.dimension == other.dimension
+        for n in self.names:
+            self[n]=self[n]-other[n]
+        return self
 
     def __mul__(self,other):
         if not isinstance(other,float):
@@ -69,6 +81,13 @@ cdef class LivePoint:
         for n in self.names:
             result[n]=other*self[n]
         return result
+
+    def __imul__(self,other):
+        if not isinstance(other,float):
+            raise(NotImplementedError("Cannot multiply types {0} and {1}".format(str(type(self)),str(type(other))) ))
+        for n in self.names:
+            self[n]=other*self[n]
+        return self
 
     def __truediv__(self,other):
         if not isinstance(other,float):
@@ -80,13 +99,14 @@ cdef class LivePoint:
 
     def __len__(self):
         return self.dimension
-    def __getitem__(self, name):
+    
+    def __getitem__(self, str name):
         cdef unsigned int i
         for i in range(self.dimension):
             if self.parameters[i].name == name:
                 return self.parameters[i].value
 
-    def __setitem__(self, name, value):
+    def __setitem__(self, str name, double value):
         cdef unsigned int i
         for i in range(self.dimension):
             if self.parameters[i].name == name:
