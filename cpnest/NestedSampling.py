@@ -26,8 +26,6 @@ def _pickle_method(m):
 
 copyreg.pickle(types.MethodType, _pickle_method)
 
-cdef inline double logaddexp(double x, double y): return x+log(1+exp(y-x)) if x >= y else y+log(1+exp(x-y))
-
 class NestedSampler(object):
     """
     
