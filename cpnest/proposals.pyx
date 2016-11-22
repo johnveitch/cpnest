@@ -54,11 +54,7 @@ cdef tuple _EnsembleWalk(LivePoint inParam, list Ensemble, ProposalArguments arg
     for i in indeces:
         subset.append(Ensemble[i])
 
-    for i in range(dimension):
-        tmp = 0.0
-        for j in range(Nsubset):
-            tmp+=subset[j].parameters[i].value
-        center_of_mass[i] = tmp/Nsubset
+    center_of_mass=reduce(LivePoint.__add__,subset)/float(Nsubset)
 
     for i in range(dimension):
         tmp = 0.0

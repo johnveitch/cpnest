@@ -14,6 +14,7 @@ cdef class parameter:
         self.name = name
         self.bounds[0] = bound[0]
         self.bounds[1] = bound[1]
+        self.value=np.random.uniform(self.bounds[0],self.bounds[1])
 
     def __str__(self):
         return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
@@ -30,6 +31,7 @@ cdef class LivePoint:
         self.logL = -np.inf
         self.logP = -np.inf
         self.names = names
+        self.bounds=bounds
         self.dimension = len(names)
         self.parameters = []
         cdef unsigned int i
@@ -48,6 +50,14 @@ cdef class LivePoint:
         result=LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=self[n]+other[n]
+        return result
+
+    def __mul__(self,other):
+        if not isinstance(other,float):
+            raise(NotImplementedError("Cannot multiple types {0} and {1}".format(str(type(self)),str(type(other)) )))
+        result=LivePoint(self.names,self.bounds)
+        for n in self.names:
+            result[n]=other*self[n]
         return result
 
     def __len__(self):
