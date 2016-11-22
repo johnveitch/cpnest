@@ -7,12 +7,6 @@ DTYPE = np.float64
 
 ctypedef np.float64_t DTYPE_t
 
-cdef class parameter:
-    cdef public str name
-    cdef public double value
-    cdef public double bounds[2]
-    cpdef inbounds(self)
-
 cdef class LivePoint:
     cdef public double logL
     cdef public double logP

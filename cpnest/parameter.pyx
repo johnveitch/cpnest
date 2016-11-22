@@ -14,7 +14,6 @@ cdef class parameter:
         self.name = name
         self.bounds[0] = bound[0]
         self.bounds[1] = bound[1]
-        self.value=np.random.uniform(bound[0],bound[1])
 
     def __str__(self):
         return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
