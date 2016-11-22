@@ -14,7 +14,7 @@ with open(path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
 
 setup(
         name = 'cpnest',
-        version = '0.0.1',
+        version = '0.1.0',
         description = 'CPNest: Parallel nested sampling',
         long_description=long_description,
         author = 'Walter Del Pozzo, John Veitch',
@@ -50,7 +50,7 @@ setup(
         keywords='nested sampling bayesian inference',
         packages=find_packages(exclude=['contrib','docs','tests*']),
         #packages=['cpnest'],
-        install_requires=['numpy','scipy'],
+        install_requires=['numpy','scipy','cython'],
         setup_requires=['numpy'],
         # Don't know what this does
         extras_require={
