@@ -88,7 +88,7 @@ class NestedSampler(object):
 
         for n in range(self.Nlive):
             while True:
-                if self.verbose: sys.stderr.write("sprinkling %d live points --> %.3f %% complete\r"%(self.Nlive,100.0*float(n+1)/float(self.Nlive)))
+                if self.verbose: sys.stderr.write("sprinkling {0:d} live points --> {1:.3f} % complete\r".format(self.Nlive, 100.0*float(n+1)/float(self.Nlive)))
                 self.params[n] = parameter.LivePoint(names,bounds)
                 self.params[n].logP = logPrior(self.params[n])
                 self.params[n].logL = logLikelihood(self.params[n])
@@ -105,7 +105,7 @@ class NestedSampler(object):
 #            sys.stderr.write("Checkpoint not found, starting anew\n")
 #            self.new_run=True
 
-        if self.verbose: sys.stderr.write("Dimension --> %d\n"%self.dimension)
+        if self.verbose: sys.stderr.write("Dimension --> {0:d}\n".format(self.dimension))
         header = open(os.path.join(output,'header.txt'),'w')
         for n in self.active_live.names:
             header.write(n+'\t')
@@ -118,7 +118,7 @@ class NestedSampler(object):
         """
         Set up the output folder
         """
-        os.system("mkdir -p %s"%output)
+        os.system("mkdir -p {0!s}".format(output))
         outputfile = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         return open(os.path.join(output,outputfile),"w"),open(os.path.join(output,outputfile+"_evidence.txt"), "w" ),os.path.join(output,outputfile+"_resume")
 
@@ -164,12 +164,12 @@ class NestedSampler(object):
             self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
             line = ""
             for n in self.params[self.worst].names:
-                line+='%.30e\t'%self.params[self.worst].get(n)
-            line+='%30e\n'%self.params[self.worst].logL
+                line+='{0:.30e}\t'.format(self.params[self.worst].get(n))
+            line+='{0:30e}\n'.format(self.params[self.worst].logL)
             self.output.write(line)
             self.active_index=self._select_live()
             parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
-            if self.verbose: sys.stderr.write("%d: n:%4d acc:%.3f H: %.2f logL %.5f --> %.5f dZ: %.3f logZ: %.3f logLmax: %.5f cache: %d\n"%(self.iteration,jumps,acceptance,self.information,logLmin,self.params[self.worst].logL,self.condition,self.logZ,self.logLmax,len(self.samples_cache)))
+            if self.verbose: sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.5f} cache: {9:d}\n".format(self.iteration, jumps, acceptance, self.information, logLmin, self.params[self.worst].logL, self.condition, self.logZ, self.logLmax, len(self.samples_cache)))
             self.logwidth-=1.0/float(self.Nlive)
             self.iteration+=1
 
@@ -197,19 +197,19 @@ class NestedSampler(object):
                 self.params[i].logP = np.copy(logP)
                 self.params[i].logL = np.copy(logL)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
-            if self.verbose: sys.stderr.write("sampling the prior --> %.3f %% complete\r"%(100.0*float(i+1)/float(self.Nlive)))
+            if self.verbose: sys.stderr.write("sampling the prior --> {0:.3f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
         if self.verbose: sys.stderr.write("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
                 line = ""
                 for n in self.params[i].names:
-                    line+='%.30e\t'%self.params[i].get(n)
-                line+='%30e\n'%self.params[i].logL
+                    line+='{0:.30e}\t'.format(self.params[i].get(n))
+                line+='{0:30e}\n'.format(self.params[i].logL)
                 self.output.write(line)
             self.output.close()
             self.evidence_out.close()
             self.logLmin.value = 999
-            sys.stderr.write("Nested Sampling process %s, exiting\n"%os.getpid())
+            sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
             return 0
         
         logLmin = self.get_worst_live_point()
@@ -221,8 +221,8 @@ class NestedSampler(object):
         self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
         line = ""
         for n in self.params[self.worst].names:
-            line+='%.30e\t'%self.params[self.worst].get(n)
-        line+='%30e\n'%self.params[self.worst].logL
+            line+='{0:.30e}\t'.format(self.params[self.worst].get(n))
+        line+='{0:30e}\n'.format(self.params[self.worst].logL)
         self.output.write(line)
         self.active_index =self._select_live()
         parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
@@ -246,15 +246,15 @@ class NestedSampler(object):
         for i in idx:
             line = ""
             for n in self.params[i].names:
-                line+='%.30e\t'%self.params[i].get(n)
-            line+='%30e\n'%self.params[i].logL
+                line+='{0:.30e}\t'.format(self.params[i].get(n))
+            line+='{0:30e}\n'.format(self.params[i].logL)
             self.output.write(line)
             i+=1
         self.output.close()
-        self.evidence_out.write('%.5f %.5f\n'%(self.logZ,self.logLmax))
+        self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.logZ, self.logLmax))
         self.evidence_out.close()
         k = 0
-        sys.stderr.write("Nested Sampling process %s, exiting\n"%os.getpid())
+        sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
         return 0
 
 #    def saveState(self):
