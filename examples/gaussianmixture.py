@@ -1,7 +1,6 @@
 import unittest
 import numpy as np
 import cpnest
-from scipy.misc import logsumexp
 
 class GaussianMixtureModel(object):
     """
@@ -16,15 +15,13 @@ class GaussianMixtureModel(object):
         if np.random.uniform(0.0,1.0) < 0.3:
             data.append(np.random.normal(0.5,0.5))
         else:
-            data.append(np.random.normal(-1.5,0.01))
+            data.append(np.random.normal(-1.5,0.03))
 
     @classmethod
     def log_likelihood(cls,x):
         w = x['weight']
-        logL = 0.0
-        for d in cls.data:
-            logL += np.log(w*normal(d,x['mean1'],x['sigma1'])+(1.0-w)*normal(d,x['mean2'],x['sigma2']))
-        return logL-10000.0
+        logL = np.sum([np.logaddexp(np.log(w)-0.5*(d-x['mean1']/x['sigma1'])**2,np.log(1.0-w)-0.5*(d-x['mean2']/x['sigma2'])**2) for d in cls.data])
+        return logL-50000.0
 
     @staticmethod
     def log_prior(p):
@@ -37,12 +34,12 @@ def normal(x,m,s):
     return np.exp(-0.5*d**2)/np.sqrt(2.0*np.pi*s*s)
 
 
-class GaussianTestCase(unittest.TestCase):
+class GaussianMixtureTestCase(unittest.TestCase):
     """
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianMixtureModel,verbose=1,Nthreads=8,Nlive=100,maxmcmc=100)
+        self.work=cpnest.CPNest(GaussianMixtureModel,verbose=1,Nthreads=8,Nlive=1024,maxmcmc=1024)
 
     def test_run(self):
         self.work.run()
