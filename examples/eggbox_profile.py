@@ -33,7 +33,7 @@ class EggboxTestCase(unittest.TestCase):
         self.work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=1,Nlive=1000,maxmcmc=1000)
 
     def test_run(self):
-        self.work.run()
+        self.work.profile()
 
 def test_all():
     unittest.main(verbosity=2)
