@@ -2,6 +2,15 @@ import unittest
 import numpy as np
 import cpnest
 
+"""
+Once run this example, use
+
+pyprof2calltree -i <profile report file> -k
+
+for detail call tree information
+"""
+
+
 class EggboxModel(object):
     """
     Eggbox problem from https://arxiv.org/pdf/0809.3437v1.pdf
