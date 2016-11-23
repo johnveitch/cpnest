@@ -1,7 +1,11 @@
+# encoding: utf-8
+# cython: profile=True
+
 from __future__ import division
 import numpy as np
 cimport numpy as np
 from libc.math cimport log,exp,sqrt,fabs
+
 from . cimport parameter
 from parameter cimport LivePoint
 

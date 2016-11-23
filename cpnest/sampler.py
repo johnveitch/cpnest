@@ -49,6 +49,7 @@ class Sampler(object):
             while True:
                 if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 self.evolution_points[n] = parameter.LivePoint(names,bounds)
+                self.evolution_points[n].initialise()
                 self.evolution_points[n].logP = self.user.log_prior(self.evolution_points[n])
                 if not(np.isinf(self.evolution_points[n].logP)): break
         if self.verbose: sys.stderr.write("\n")

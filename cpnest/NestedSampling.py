@@ -89,6 +89,7 @@ class NestedSampler(object):
             while True:
                 if self.verbose: sys.stderr.write("sprinkling {0:d} live points --> {1:.3f} % complete\r".format(self.Nlive, 100.0*float(n+1)/float(self.Nlive)))
                 self.params[n] = parameter.LivePoint(names,bounds)
+                self.params[n].initialise()
                 self.params[n].logP = logPrior(self.params[n])
                 self.params[n].logL = logLikelihood(self.params[n])
                 if not(np.isinf(self.params[n].logP)) and not(np.isinf(self.params[n].logL)): break

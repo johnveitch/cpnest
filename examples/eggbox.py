@@ -35,8 +35,6 @@ class EggboxTestCase(unittest.TestCase):
     def test_run(self):
         self.work.run()
 
-
-
 def test_all():
     unittest.main(verbosity=2)
 

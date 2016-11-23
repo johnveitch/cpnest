@@ -1,3 +1,6 @@
+# encoding: utf-8
+# cython: profile=True
+
 from __future__ import division
 import numpy as np
 cimport numpy as np
@@ -6,15 +9,13 @@ cimport cython
 
 cdef inline double log_add(double x, double y): return x+log(1.0+exp(y-x)) if x >= y else y+log(1.0+exp(x-y))
 
-
-
 cdef class parameter:
 
-    def __cinit__(self, str name, list bound):
+    def __cinit__(self, str name, list bound, double value = 0.0):
         self.name = name
         self.bounds[0] = bound[0]
         self.bounds[1] = bound[1]
-        self.value=np.random.uniform(bound[0],bound[1])
+        self.value = value
 
     def __str__(self):
         return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
@@ -37,6 +38,10 @@ cdef class LivePoint:
         cdef unsigned int i
         for i in range(self.dimension):
             self.parameters.append(parameter(names[i],bounds[i]))
+
+    def initialise(self):
+        for i,n in enumerate(self.names):
+            self[n] = np.random.uniform(self.bounds[i][0],self.bounds[i][1])
 
     def __str__(self):
         return str({n:self[n] for n in self.names})
