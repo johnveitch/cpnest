@@ -22,6 +22,9 @@ class AckleyModel(object):
         return 0.0
 
 def ackley(x, y):
+    """
+    Ackley problem 
+    """
     r = np.sqrt(0.5*(x*x+y*y))
     first = 20.0*np.exp(r)
     second = np.exp(0.5*(np.cos(2.0*np.pi*x)+np.cos(2.0*np.pi*y)))
