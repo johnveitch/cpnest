@@ -33,7 +33,7 @@ cdef class ProposalArguments(object):
             name=pool[0].names[i]
             for j in range(n):
                 cov_array[i,j] = pool[j][name]
-        cdef np.ndarray[np.double_t, ndim=2, mode = 'c'] covariance = np.cov(cov_array)
+        cdef np.ndarray[DTYPE_t, ndim=2, mode = 'c'] covariance = np.cov(cov_array)
         self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
 cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArguments arguments):
@@ -48,7 +48,6 @@ cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArg
     return outParam,log_acceptance_probability
 
 cdef tuple _EnsembleWalk(LivePoint inParam, list Ensemble, ProposalArguments arguments):
-
     cdef unsigned int i,j
     cdef unsigned int Nsubset = 3
     cdef np.ndarray[np.int64_t, ndim=1] indeces = np.random.choice(range(len(Ensemble)),Nsubset)
@@ -110,6 +109,7 @@ for name,algorithm in zip(proposal_list_name,proposal_list):
 cdef class Proposal(object):
     cdef public object algorithm
     cdef public str name
+    
     def __cinit__(self, str name):
 
         self.name = name
@@ -119,16 +119,9 @@ cdef class Proposal(object):
         return self.algorithm(inParam,Ensemble,Arguments)
 
 cpdef list setup_proposals_cycle():
-
     cdef unsigned int i
-    cdef jump_proposals = []
-    for i in range(100):
-        jump_select = np.random.uniform(0.,1.)
-        if jump_select<0.25: jump_proposals.append(Proposal(proposal_list_name[0]))
-        elif jump_select<0.5: jump_proposals.append(Proposal(proposal_list_name[1]))
-        elif jump_select<0.75: jump_proposals.append(Proposal(proposal_list_name[2]))
-        else: jump_proposals.append(Proposal(proposal_list_name[3]))
-    return jump_proposals
+    cdef np.ndarray jump_proposals_names = np.random.choice(proposal_list_name,size = 100)
+    return [Proposal(str(n)) for n in jump_proposals_names]
 
 cpdef np.ndarray[DTYPE_t, ndim=1] autocorrelation(np.ndarray[DTYPE_t, ndim=1] x):
     x = np.asarray(x)

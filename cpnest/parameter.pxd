@@ -1,12 +1,3 @@
-from __future__ import division
-import numpy as np
-cimport numpy as np
-from libc.math cimport log,exp,sqrt,cos
-
-DTYPE = np.float64
-
-ctypedef np.float64_t DTYPE_t
-
 cdef class parameter:
     cdef public str name
     cdef public double value
