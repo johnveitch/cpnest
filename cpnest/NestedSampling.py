@@ -69,7 +69,6 @@ class NestedSampler(object):
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
-        self.data = usermodel.data
         self.params = [None] * self.Nlive
         self.logZ = np.finfo(np.float128).min
         self.tolerance = 0.01

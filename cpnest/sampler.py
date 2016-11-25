@@ -4,7 +4,6 @@ import numpy as np
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
-from multiprocessing.managers import SyncManager
 
 from . import parameter
 from . import proposals
@@ -32,7 +31,6 @@ class Sampler(object):
     """
     def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100):
         self.user = usermodel
-        self.data = usermodel.data
         names = usermodel.par_names
         bounds = usermodel.bounds
         self.cache = deque(maxlen=5*maxmcmc)
