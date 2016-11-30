@@ -44,6 +44,11 @@ cdef class LivePoint:
         for i,n in enumerate(self.names):
             self[n] = np.random.uniform(self.bounds[i][0],self.bounds[i][1])
 
+    def inbounds(self):
+        for p in self.parameters:
+            if not p.inbounds(): return False
+        return True
+
     def __str__(self):
         return str({n:self[n] for n in self.names})
 
