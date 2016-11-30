@@ -79,6 +79,7 @@ class NestedSampler(object):
         self.iteration = 0
         self.nextID = 0
         self.samples_cache = {}
+        self.nested_samples=[]
         names = usermodel.par_names
         bounds = usermodel.bounds
         logPrior = usermodel.log_prior
@@ -119,7 +120,6 @@ class NestedSampler(object):
         """
         os.system("mkdir -p {0!s}".format(output))
         outputfile = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
-        self.nested_samples=[]
         self.outputfile=open(os.path.join(output,outputfile),"w")
         return self.outputfile,open(os.path.join(output,outputfile+"_evidence.txt"), "w" ),os.path.join(output,outputfile+"_resume")
 
