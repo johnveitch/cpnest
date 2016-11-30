@@ -39,6 +39,9 @@ class CPNest(object):
             self.process_pool.append(p)
         for each in self.process_pool:
             each.start()
+        for each in self.process_pool:
+            each.join()
+
 
     def worker_sampler(self,*args):
         cProfile.runctx('self.Evolver.produce_sample(*args)', globals(), locals(), 'prof_sampler.prof')
