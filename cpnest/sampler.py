@@ -68,7 +68,7 @@ class Sampler(object):
             id = job_id.value
             job_id.value+=1
             IDcounter.get_lock().release()
-            if logLmin.value==999:
+            if logLmin.value==np.inf:
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
             parameter.copy_live_point(self.evolution_points[np.random.randint(self.poolsize)],outParam)

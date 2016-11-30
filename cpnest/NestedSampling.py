@@ -219,7 +219,7 @@ class NestedSampler(object):
                 self.output_sample(self.params[i])
             self.output.close()
             self.evidence_out.close()
-            self.logLmin.value = 999
+            self.logLmin.value = np.inf
             sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
             return 0
         
@@ -240,10 +240,10 @@ class NestedSampler(object):
         sys.stderr.write("\n")
 
         # final adjustments
-        self.logLmin.value = 999
+        self.logLmin.value = np.inf
         while len(self.samples_cache) > 0:
             self.consume_sample(producer_lock, queue, port, authkey)
-            self.logLmin.value = 999
+            self.logLmin.value = np.inf
 
         i = 0
         logL_array = [p.logL for p in self.params]
