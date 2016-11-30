@@ -119,7 +119,21 @@ class NestedSampler(object):
         """
         os.system("mkdir -p {0!s}".format(output))
         outputfile = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
-        return open(os.path.join(output,outputfile),"w"),open(os.path.join(output,outputfile+"_evidence.txt"), "w" ),os.path.join(output,outputfile+"_resume")
+        self.nested_samples=[]
+        self.outputfile=open(os.path.join(output,outputfile),"w")
+        return self.outputfile,open(os.path.join(output,outputfile+"_evidence.txt"), "w" ),os.path.join(output,outputfile+"_resume")
+
+    def output_sample(self,sample):
+        self.outputfile.write(self.strsample(sample))
+        self.nested_samples.append(sample)
+
+    @staticmethod
+    def strsample(sample):
+        line=''
+        for n in sample.names:
+                line+='{0:.30e}\t'.format(sample[n])
+        line+='{0:30e}\n'.format(sample.logL)
+        return line
 
     def setup_random_seed(self,seed):
         """
@@ -163,11 +177,7 @@ class NestedSampler(object):
             self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
             self.logZ = logZnew
             self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
-            line = ""
-            for n in self.params[self.worst].names:
-                line+='{0:.30e}\t'.format(self.params[self.worst][n])
-            line+='{0:30e}\n'.format(self.params[self.worst].logL)
-            self.output.write(line)
+            self.output_sample(self.params[self.worst])
             self.active_index=self._select_live()
             parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
             if self.verbose:
@@ -206,11 +216,7 @@ class NestedSampler(object):
         if self.verbose: sys.stderr.write("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
-                line = ""
-                for n in self.params[i].names:
-                    line+='{0:.30e}\t'.format(self.params[i][n])
-                line+='{0:30e}\n'.format(self.params[i].logL)
-                self.output.write(line)
+                self.output_sample(self.params[i])
             self.output.close()
             self.evidence_out.close()
             self.logLmin.value = 999
@@ -224,11 +230,7 @@ class NestedSampler(object):
         self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
         self.logZ = logZnew
         self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
-        line = ""
-        for n in self.params[self.worst].names:
-            line+='{0:.30e}\t'.format(self.params[self.worst][n])
-        line+='{0:30e}\n'.format(self.params[self.worst].logL)
-        self.output.write(line)
+        self.output_sample(self.params[self.worst])
         self.active_index =self._select_live()
         parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
 
@@ -249,11 +251,7 @@ class NestedSampler(object):
         idx = logL_array.argsort()
         logL_array = logL_array[idx]
         for i in idx:
-            line = ""
-            for n in self.params[i].names:
-                line+='{0:.30e}\t'.format(self.params[i][n])
-            line+='{0:30e}\n'.format(self.params[i].logL)
-            self.output.write(line)
+            self.output_sample(self.params[i])
             i+=1
         self.output.close()
         self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.logZ, self.logLmax))
