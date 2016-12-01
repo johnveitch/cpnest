@@ -68,7 +68,7 @@ class NestedSampler(object):
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
-        self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
+        self.data = usermodel.data
         self.params = [None] * self.Nlive
         self.logZ = np.finfo(np.float128).min
         self.tolerance = 0.01
@@ -106,6 +106,7 @@ class NestedSampler(object):
 #            self.new_run=True
 
         if self.verbose: sys.stderr.write("Dimension --> {0:d}\n".format(self.dimension))
+        self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
         header = open(os.path.join(output,'header.txt'),'w')
         for n in self.active_live.names:
             header.write(n+'\t')
@@ -119,9 +120,11 @@ class NestedSampler(object):
         Set up the output folder
         """
         os.system("mkdir -p {0!s}".format(output))
-        outputfile = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
-        self.outputfile=open(os.path.join(output,outputfile),"w")
-        return self.outputfile,open(os.path.join(output,outputfile+"_evidence.txt"), "w" ),os.path.join(output,outputfile+"_resume")
+        self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
+        self.outputfile=open(os.path.join(output,self.outfilename),"w")
+        self.outputfile.write('\t'.join(self.active_live.names) + '\tlogL\n')
+        print self.active_live.names
+        return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
 
     def output_sample(self,sample):
         self.outputfile.write(self.strsample(sample))

@@ -13,6 +13,8 @@ class CPNest(object):
         from .sampler import Sampler
         from .NestedSampling import NestedSampler
         self.user=userclass
+        self.verbose=verbose
+        self.output=output
         if seed is None: self.seed=1234
         else:
             self.seed=seed
@@ -31,6 +33,9 @@ class CPNest(object):
 
 
     def run(self):
+        import numpy as np
+        import os
+        from .nest2pos import draw_posterior_many
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
             p = mp.Process(target=self.Evolver.produce_sample, args=(self.ns_lock, self.queue, self.NS.jobID, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
@@ -41,6 +46,12 @@ class CPNest(object):
             each.start()
         for each in self.process_pool:
             each.join()
+
+        self.nested_samples = np.genfromtxt(self.NS.outfilename,names=True)
+        self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        with open(os.path.join(self.output,'posterior.dat'),'w') as f:
+            self.posterior_samples.tofile(f)
+        
 
 
     def worker_sampler(self,*args):
