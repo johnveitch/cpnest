@@ -49,8 +49,8 @@ class CPNest(object):
 
         self.nested_samples = np.genfromtxt(self.NS.outfilename,names=True)
         self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
-        with open(os.path.join(self.output,'posterior.dat'),'w') as f:
-            self.posterior_samples.tofile(f)
+        np.savetxt(os.path.join(self.output,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
+        
         
 
 
