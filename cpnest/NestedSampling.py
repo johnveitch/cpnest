@@ -68,7 +68,6 @@ class NestedSampler(object):
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
-        self.data = usermodel.data
         self.params = [None] * self.Nlive
         self.logZ = np.finfo(np.float128).min
         self.tolerance = 0.01
@@ -261,7 +260,7 @@ class NestedSampler(object):
         self.evidence_out.close()
         k = 0
         sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
-        return 0
+        return self.logZ
 
 #    def saveState(self):
 #        try:
