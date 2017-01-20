@@ -39,7 +39,7 @@ class EggboxTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=1,Nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=8,Nlive=5000,maxmcmc=5000)
 
     def test_run(self):
         self.work.profile()

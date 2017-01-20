@@ -35,8 +35,6 @@ class GaussianTestCase(unittest.TestCase):
         tolerance = 0.5
         self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0}'.format(self.work.NS.logZ ))
 
-
-
 def test_all():
     unittest.main(verbosity=2)
 

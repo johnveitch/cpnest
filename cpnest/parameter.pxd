@@ -1,8 +1,10 @@
+from cpython cimport bool
+
 cdef class parameter:
     cdef public str name
     cdef public double value
     cdef public double bounds[2]
-    cpdef inbounds(self)
+    cpdef bool inbounds(self)
 
 cdef class LivePoint:
     cdef public double logL

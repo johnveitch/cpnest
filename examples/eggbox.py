@@ -39,6 +39,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-        work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=1,Nlive=1000,maxmcmc=1000)
+        work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=12,Nlive=10000,maxmcmc=5000)
         work.run()
 

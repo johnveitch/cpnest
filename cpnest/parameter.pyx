@@ -1,12 +1,13 @@
 # encoding: utf-8
-# cython: profile=True
-# cython: linetrace=True
+# cython: profile=False
+# cython: linetrace=False
 
 from __future__ import division
 import numpy as np
 cimport numpy as np
 from libc.math cimport log,exp,sqrt,cos,fabs,sin
 cimport cython
+from cpython cimport bool
 
 cdef inline double log_add(double x, double y): return x+log(1.0+exp(y-x)) if x >= y else y+log(1.0+exp(x-y))
 
@@ -21,7 +22,7 @@ cdef class parameter:
     def __str__(self):
         return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
 
-    cpdef inbounds(self):
+    cpdef bool inbounds(self):
         if self.value > self.bounds[1] or self.value < self.bounds[0]:
             return False
         return True
