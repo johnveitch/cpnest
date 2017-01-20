@@ -29,12 +29,18 @@ cdef class ProposalArguments(object):
         cdef unsigned int i,j,p
         cdef unsigned int n = len(pool)
         cdef np.ndarray[np.double_t, ndim=2, mode = 'c'] cov_array = np.zeros((self.dimension,n))
-        for i in range(self.dimension):
+        cdef np.ndarray[DTYPE_t, ndim=2, mode = 'c'] covariance
+        cdef str name
+        if self.dimension == 1:
             name=pool[0].names[i]
-            for j in range(n):
-                cov_array[i,j] = pool[j][name]
-        cdef np.ndarray[DTYPE_t, ndim=2, mode = 'c'] covariance = np.cov(cov_array)
-        self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
+            self.eigen_values = np.atleast_1d(np.var([pool[j][name] for j in range(n)]))
+            self.eigen_vectors = np.eye(1)
+        else:	 
+            for i in range(self.dimension):
+                name=pool[0].names[i]
+                for j in range(n): cov_array[i,j] = pool[j][name]
+            covariance = np.cov(cov_array)
+            self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
 cdef tuple _EnsembleEigenDirection(LivePoint inParam, list Ensemble, ProposalArguments arguments):
     cdef unsigned int i = np.random.randint(arguments.dimension)
@@ -124,11 +130,9 @@ cpdef list setup_proposals_cycle():
     return [Proposal(str(n)) for n in jump_proposals_names]
 
 cpdef np.ndarray[DTYPE_t, ndim=1] autocorrelation(np.ndarray[DTYPE_t, ndim=1] x):
-    x = np.asarray(x)
+    #x = np.asarray(x)
     cdef unsigned int N = len(x)
-    x = x-x.mean()
-    s = np.fft.fft(x, N*2-1)
+    x -= x.mean()
+    cdef np.ndarray s = np.fft.fft(x, N*2-1)
     cdef np.ndarray[DTYPE_t, ndim=1] result = np.real(np.fft.ifft(s * np.conjugate(s), N*2-1))
-    result = result[:N]
-    result /= result[0]
-    return result
+    return result[:N]/result[0]
