@@ -85,7 +85,7 @@ class Sampler(object):
             if self.counter == 0 and len(self.cache)==5*self.maxmcmc:
                 self.autocorrelation()
                 self.kwargs.update(list(self.evolution_points))
-            elif (self.counter%(self.poolsize/2))==0:
+            elif (self.counter%(self.poolsize/2))==0 or acceptance<0.01:
                 self.autocorrelation()
                 self.kwargs.update(list(self.evolution_points))
             self.counter += 1
