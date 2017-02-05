@@ -1,7 +1,7 @@
 # CPNest
 ### Parallel nested sampling in python
 ---
-Copyright 2015-2017 Walter Del Pozzo, John Veitch
+© 2015-2017 Walter Del Pozzo, John Veitch
 
 walter.delpozzo@ligo.org,
 john.veitch@ligo.org
