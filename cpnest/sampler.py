@@ -38,7 +38,6 @@ class Sampler(object):
         self.Nmcmc = maxmcmc
         self.proposals = proposals.setup_proposals_cycle()
         self.poolsize = poolsize
-        #self.evolution_points = [None]*self.poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
         self.inParam = parameter.LivePoint(names,bounds)
@@ -80,7 +79,6 @@ class Sampler(object):
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
             self.evolution_points.append(outParam.copy())
-            #queue.put((id,acceptance,jumps,np.array([outParam[n] for n in outParam.names]),outParam.logP,outParam.logL))
             queue.put((id,acceptance,jumps,outParam))
             if self.counter == 0 and len(self.cache)==5*self.maxmcmc:
                 self.autocorrelation()

@@ -17,17 +17,15 @@ def rebuild_livepoint(names, bounds):
   return lp
 
 cdef class LivePoint:
-
     def __cinit__(LivePoint self, list names, list bounds, d=None):
         self.logL = -inf
         self.logP = -inf
         self.names = names
         self.bounds=bounds
         self.dimension = len(names)
-        #self.parameters = []
         cdef unsigned int i
         if d is not None:
-          self.setvals(d)
+          self.values = array.array('d',d)
         else:
           self.values = array.array('d',[0]*self.dimension)
 
@@ -39,7 +37,7 @@ cdef class LivePoint:
     def __setstate__(self,state):
       self.logL=state[0]
       self.logP=state[1]
-      self.values=state[2]
+      self.values=array.array('d',state[2])
       #print 'restored '+str(self)
     
     def initialise(LivePoint self):
@@ -124,19 +122,9 @@ cdef class LivePoint:
                 return
         raise KeyError
 
-    def setvals(LivePoint self, values):
-      """
-      Set the values from an input iterable
-      """
-      if len(values)!=self.dimension:
-        raise Exception('Cannot set {0} dimensions with input of {1} dimensions'.format(self.dimension,len(values)))
-      self.values=array.array('d',values)
-        
     cpdef copy(LivePoint self):
       result = LivePoint(self.names,self.bounds)
-      result.values = array.array('d',self.values)
-      result.logP=self.logP
-      result.logL=self.logL
+      result.__setstate__(self.__getstate__())
       return result
                 
 
