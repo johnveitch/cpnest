@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-import cpnest
+import cpnest.model
 
 class GaussianModel(cpnest.model.Model):
     """

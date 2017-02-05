@@ -9,8 +9,8 @@ class Model(object):
   and implement log_likelihood, names and bounds
   """
   __metaclass__ = ABCMeta
-  names=None # Names of parameters, e.g. ['p1','p2']
-  bounds=None # Bounds of prior as list of tuples, e.g. [(min1,max1), (min2,max2), ...]
+  names=[] # Names of parameters, e.g. ['p1','p2']
+  bounds=[] # Bounds of prior as list of tuples, e.g. [(min1,max1), (min2,max2), ...]
   def in_bounds(self,param):
     """
     Checks whether param lies within the bounds
