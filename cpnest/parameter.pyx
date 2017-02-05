@@ -131,6 +131,14 @@ cdef class LivePoint:
             if self.parameters[i].name == name:
                 self.parameters[i].value = value
 
+    def copy(self):
+      result = LivePoint(self.names,self.bounds)
+      for n in self.names:
+        result[n]=self[n]
+      result.logP=self.logP
+      result.logL=self.logL
+      return result
+                
 cpdef void copy_live_point(LivePoint out_live, LivePoint in_live):
     """
     helper function to copy live points

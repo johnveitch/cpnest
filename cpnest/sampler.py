@@ -33,26 +33,34 @@ class Sampler(object):
         self.user = usermodel
         names = usermodel.par_names
         bounds = usermodel.bounds
-        self.cache = deque(maxlen=5*maxmcmc)
+        self.cache = deque(maxlen=maxmcmc)
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.proposals = proposals.setup_proposals_cycle()
         self.poolsize = poolsize
-        self.evolution_points = [None]*self.poolsize
+        #self.evolution_points = [None]*self.poolsize
+        self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
         self.inParam = parameter.LivePoint(names,bounds)
         self.param = parameter.LivePoint(names,bounds)
         self.dimension = self.param.dimension
         for n in range(self.poolsize):
-            while True:
-                if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
-                self.evolution_points[n] = parameter.LivePoint(names,bounds)
-                self.evolution_points[n].initialise()
-                self.evolution_points[n].logP = self.user.log_prior(self.evolution_points[n])
-                if not(np.isinf(self.evolution_points[n].logP)): break
+          while True:
+            if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
+            p = parameter.LivePoint(names,bounds)
+            p.initialise()
+            p.logP = self.user.log_prior(p)
+            if np.isfinite(p.logP): break
+          p.logL=self.user.log_likelihood(p)
+          self.evolution_points.append(p)
         if self.verbose: sys.stderr.write("\n")
         self.kwargs = proposals.ProposalArguments(self.dimension)
-        self.kwargs.update(self.evolution_points)
+        self.kwargs.update(list(self.evolution_points))
+        for _ in range(self.poolsize):
+          s = self.evolution_points.popleft()
+          acceptance,jumps,s = self.metropolis_hastings(s,-np.inf,self.Nmcmc)
+          self.evolution_points.append(s)
+        self.kwargs.update(list(self.evolution_points))
 
     def produce_sample(self, consumer_lock, queue, IDcounter, logLmin, seed, ip, port, authkey):
         """
@@ -71,15 +79,15 @@ class Sampler(object):
             if logLmin.value==np.inf:
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
-            parameter.copy_live_point(self.evolution_points[np.random.randint(self.poolsize)],outParam)
-
+            #parameter.copy_live_point(self.evolution_points[np.random.randint(self.poolsize)],outParam)
+            self.evolution_points.append(outParam.copy())
             queue.put((id,acceptance,jumps,np.array([outParam[n] for n in outParam.names]),outParam.logP,outParam.logL))
             if self.counter == 0 and len(self.cache)==5*self.maxmcmc:
                 self.autocorrelation()
-                self.kwargs.update(self.evolution_points)
-            elif (self.counter%(self.poolsize/4))==0:
+                self.kwargs.update(list(self.evolution_points))
+            elif (self.counter%(self.poolsize/2))==0:
                 self.autocorrelation()
-                self.kwargs.update(self.evolution_points)
+                self.kwargs.update(list(self.evolution_points))
             self.counter += 1
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
         return 0
@@ -91,29 +99,28 @@ class Sampler(object):
         accepted = 0
         rejected = 1
         jumps = 0
-        parameter.copy_live_point(self.param,inParam)
-        logp_old = self.user.log_prior(self.param)
+        oldparam=inParam.copy()
+        #parameter.copy_live_point(self.param,inParam)
+        logp_old = self.user.log_prior(oldparam)
         while (jumps < nsteps or accepted==0):
-            self.param,log_acceptance = self.proposals[jumps%100].get_sample(self.param,self.evolution_points,self.kwargs)
-            self.param.logP = self.user.log_prior(self.param)
-            if self.param.logP-logp_old > log_acceptance:
-                self.param.logL = self.user.log_likelihood(self.param)
-                if self.param.logL > logLmin:
-                    parameter.copy_live_point(inParam,self.param)
-                    logp_old = self.param.logP
-                    accepted+=1
+            newparam,log_acceptance = self.proposals[jumps%100].get_sample(oldparam.copy(),list(self.evolution_points),self.kwargs)
+            newparam.logP = self.user.log_prior(newparam)
+            if newparam.logP-logp_old > log_acceptance:
+                newparam.logL = self.user.log_likelihood(newparam)
+                if newparam.logL > logLmin:
+                  oldparam=newparam.copy()
+                  logp_old = newparam.logP
+                  accepted+=1
                 else:
-                    parameter.copy_live_point(self.param,inParam)
-                    rejected+=1
+                  rejected+=1
             else:
-                parameter.copy_live_point(self.param,inParam)
                 rejected+=1
-                self.cache.append(np.array(([x.value for x in inParam.parameters])))
+
+            self.cache.append(np.array(([x.value for x in oldparam.parameters])))
             jumps+=1
             if jumps==10*self.maxmcmc:
-                return (0.0,jumps,inParam)
-#            exit()
-        return (float(accepted)/float(rejected+accepted),jumps,inParam)
+              print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
+        return (float(accepted)/float(rejected+accepted),jumps,oldparam)
 
     def autocorrelation(self):
         """

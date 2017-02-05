@@ -3,6 +3,7 @@
 # cython: linetrace=True
 
 from __future__ import division
+from functools import reduce
 import numpy as np
 cimport numpy as np
 from libc.math cimport log,exp,sqrt,fabs

@@ -39,13 +39,14 @@ class CPNest(object):
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
             p = mp.Process(target=self.Evolver.produce_sample, args=(self.ns_lock, self.queue, self.NS.jobID, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
-        for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
-            p = mp.Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
-            self.process_pool.append(p)
+        #for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
+        #    np = mp.Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
+        #    self.process_pool.append(np)
         for each in self.process_pool:
             each.start()
+        self.NS.nested_sampling_loop(self.sampler_lock,self.queue,self.port,self.authkey)
         for each in self.process_pool:
-            each.join()
+            each.join(5)
 
         self.nested_samples = np.genfromtxt(self.NS.outfilename,names=True)
         self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
