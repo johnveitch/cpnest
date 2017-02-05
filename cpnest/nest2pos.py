@@ -81,7 +81,7 @@ def draw_posterior_many(datas, Nlives, verbose=False):
       mask = uniform(size=len(post))<frac
       bigpos.append(post[mask])
     result = vstack(bigpos)
-    if verbose: print('Samples produced: {0!s}'.format((str(result.shape))))
+    if verbose: print('Samples produced: {0:d}'.format(result.shape[1]))
     return result
     
 def draw_N_posterior(data,log_wts, N, verbose=False):

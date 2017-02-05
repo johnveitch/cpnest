@@ -154,8 +154,6 @@ class NestedSampler(object):
         sys.stdout.flush()
         for n in range(self.Nlive):
             while True:
-                if self.verbose:
-                  print("sprinkling {0:d} live points --> {1:2.0f} % complete".format(self.Nlive, 100.0*float(n+1)/float(self.Nlive)),end="\r")
                 self.params[n] = parameter.LivePoint(names,bounds)
                 self.params[n].initialise()
                 self.params[n].logP = logPrior(self.params[n])
@@ -230,7 +228,10 @@ class NestedSampler(object):
             self.condition = logaddexp(self.state.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.state.logZ)
             self.output_sample(self.params[self.worst])
             if self.verbose:
-                print("{0:d}: n:{1:4d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.5f} cache: {9:d}".format(self.iteration, jumps, acceptance, self.state.info, logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax, len(self.samples_cache)))
+                print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f} cache: {9:d}"\
+                  .format(self.iteration, jumps, acceptance, self.state.info,\
+                  logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax,\
+                  len(self.samples_cache)))
             self.iteration+=1
             
             # replace worst point with new one
@@ -265,23 +266,22 @@ class NestedSampler(object):
                 self.params[i].logP = np.copy(logP)
                 self.params[i].logL = np.copy(logL)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
-            if self.verbose: sys.stderr.write("sampling the prior --> {0:.3f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
-        if self.verbose: sys.stderr.write("\n")
+            if self.verbose:
+              print("sampling the prior --> {0:.3f} % complete".format((100.0*float(i+1)/float(self.Nlive))),end="\r")
+        if self.verbose: print("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
                 self.output_sample(self.params[i])
             self.output.close()
             self.evidence_out.close()
             self.logLmin.value = np.inf
-            sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
+            print("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
         
         logLmin = self.get_worst_live_point()
 
         while self.condition > self.tolerance:
             self.consume_sample(producer_lock, queue, port, authkey)
-
-        sys.stderr.write("\n")
 
 	# Signal worker threads to exit
         self.logLmin.value = np.inf
@@ -300,7 +300,6 @@ class NestedSampler(object):
         self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
         self.evidence_out.close()
         print('Final evidence: {0:0.2f}\nInformation: {1:.2f}'.format(self.state.logZ,self.state.info))
-        sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
         
         # Some diagnostics
         if(self.verbose>1):
