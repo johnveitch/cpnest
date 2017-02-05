@@ -9,12 +9,12 @@ class GaussianModel(object):
     def __init__(self):
         pass
     par_names=['mean','sigma']
-    bounds=[[-10,10],[0.01,1]]
-    data = np.array([x for x in np.random.normal(0.5,0.5,size=1000)])
+    bounds=[[-5,5],[0.05,1]]
+    data = np.array([x for x in np.random.normal(0.5,0.5,size=10)])
 
     @classmethod
     def log_likelihood(cls,x):
-        return -0.5*np.sum((cls.data-x['mean'])**2/x['sigma']**2) - len(cls.data)*np.log(x['sigma']) - 0.5*np.log(2.0*np.pi)-1000
+        return -0.5*np.sum((cls.data-x['mean'])**2/x['sigma']**2) - len(cls.data)*np.log(x['sigma']) - 0.5*np.log(2.0*np.pi)
 
     @staticmethod
     def log_prior(p):
@@ -28,7 +28,7 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=1,Nlive=100,maxmcmc=100)
+        self.work=cpnest.CPNest(GaussianModel,verbose=2,Nthreads=8,Nlive=100,maxmcmc=100)
 
     def test_run(self):
         self.work.run()

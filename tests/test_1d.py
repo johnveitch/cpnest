@@ -33,7 +33,8 @@ class GaussianTestCase(unittest.TestCase):
 
     def test_run(self):
         self.work.run()
-        tolerance = np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        # 2 sigma tolerance
+        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
         print('Tolerance: {0:0.3f}'.format(tolerance))
         self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,GaussianModel.analytic_log_Z ))
 
