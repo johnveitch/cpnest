@@ -3,14 +3,9 @@
 # cython: linetrace=False
 
 from __future__ import division
-cimport numpy as np
 from numpy import inf
 from numpy.random import uniform
-from libc.math cimport log,exp,sqrt,cos,fabs,sin
-cimport cython
-from cpython cimport bool
 from cpython cimport array
-import array
 
 def rebuild_livepoint(names, bounds):
   lp=LivePoint(names,bounds)
@@ -38,7 +33,6 @@ cdef class LivePoint:
       self.logL=state[0]
       self.logP=state[1]
       self.values=array.array('d',state[2])
-      #print 'restored '+str(self)
     
     def initialise(LivePoint self):
         for i,n in enumerate(self.names):
