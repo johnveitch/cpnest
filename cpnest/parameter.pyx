@@ -4,19 +4,17 @@
 
 from __future__ import division
 from numpy import inf
-from numpy.random import uniform
 from cpython cimport array
 
-def rebuild_livepoint(names, bounds):
-  lp=LivePoint(names,bounds)
+def rebuild_livepoint(names):
+  lp=LivePoint(names)
   return lp
 
 cdef class LivePoint:
-    def __cinit__(LivePoint self, list names, list bounds, d=None):
+    def __cinit__(LivePoint self, list names, d=None):
         self.logL = -inf
         self.logP = -inf
         self.names = names
-        self.bounds=bounds
         self.dimension = len(names)
         cdef unsigned int i
         if d is not None:
@@ -25,7 +23,7 @@ cdef class LivePoint:
           self.values = array.array('d',[0]*self.dimension)
 
     def __reduce__(self):
-        return (rebuild_livepoint, (self.names,self.bounds),self.__getstate__()) 
+        return (rebuild_livepoint, (self.names,),self.__getstate__()) 
     
     def __getstate__(self):
       return (self.logL,self.logP,self.values)
@@ -33,13 +31,6 @@ cdef class LivePoint:
       self.logL=state[0]
       self.logP=state[1]
       self.values=array.array('d',state[2])
-    
-    def initialise(LivePoint self):
-        for i,n in enumerate(self.names):
-            self[n] = uniform(self.bounds[i][0],self.bounds[i][1])
-
-    def inbounds(LivePoint self):
-      return all(self.bounds[i][0] < self.values[i] < self.bounds[i][1] for i in range(self.dimension))
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})
@@ -52,7 +43,7 @@ cdef class LivePoint:
 
     def __add__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
-        result=LivePoint(self.names,self.bounds)
+        result=LivePoint(self.names)
         for n in self.names:
             result[n]=self[n]+other[n]
         return result
@@ -65,7 +56,7 @@ cdef class LivePoint:
     
     def __sub__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
-        result = LivePoint(self.names,self.bounds)
+        result = LivePoint(self.names)
         for n in self.names:
             result[n]=self[n]-other[n]
         return result
@@ -77,7 +68,7 @@ cdef class LivePoint:
         return self
 
     def __mul__(LivePoint self,float other):
-        result=LivePoint(self.names,self.bounds)
+        result=LivePoint(self.names)
         for n in self.names:
             result[n]=other*self[n]
         return result
@@ -88,7 +79,7 @@ cdef class LivePoint:
         return self
 
     def __truediv__(LivePoint self,float other):
-        result = LivePoint(self.names,self.bounds)
+        result = LivePoint(self.names)
         for n in self.names:
             result[n]=self[n]/other
         return result
@@ -117,7 +108,7 @@ cdef class LivePoint:
         raise KeyError
 
     cpdef copy(LivePoint self):
-      result = LivePoint(self.names,self.bounds)
+      result = LivePoint(self.names)
       result.__setstate__(self.__getstate__())
       return result
                 

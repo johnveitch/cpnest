@@ -1,14 +1,13 @@
 import unittest
 import numpy as np
-import cpnest
+import cpnest.model
 
-class GaussianMixtureModel(object):
+class GaussianMixtureModel(cpnest.model.Model):
     """
     A simple gaussian model with parameters mean and sigma
+    Shows example of using your own data
     """
-    def __init__(self):
-        pass
-    par_names=['mean1','sigma1','mean2','sigma2','weight']
+    names=['mean1','sigma1','mean2','sigma2','weight']
     bounds=[[-3,3],[0.01,1],[-3,3],[0.01,1],[0.0,1.0]]
     data = []
     for _ in range(1000):
@@ -23,9 +22,8 @@ class GaussianMixtureModel(object):
         logL = np.sum([np.logaddexp(np.log(w)-0.5*(d-x['mean1']/x['sigma1'])**2,np.log(1.0-w)-0.5*(d-x['mean2']/x['sigma2'])**2) for d in cls.data])
         return logL-50000.0
 
-    @staticmethod
-    def log_prior(p):
-        if not p.inbounds(): return -np.inf
+    def log_prior(self,p):
+        if not self.in_bounds(p): return -np.inf
         return -np.log(p['sigma1'])-np.log(p['sigma2'])
 
 def normal(x,m,s):
@@ -38,7 +36,7 @@ class GaussianMixtureTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianMixtureModel,verbose=1,Nthreads=8,Nlive=1024,maxmcmc=1024)
+        self.work=cpnest.CPNest(GaussianMixtureModel(),verbose=1,Nthreads=8,Nlive=1024,maxmcmc=1024)
 
     def test_run(self):
         self.work.run()

@@ -31,7 +31,7 @@ class Sampler(object):
     """
     def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100):
         self.user = usermodel
-        names = usermodel.par_names
+        names = usermodel.names
         bounds = usermodel.bounds
         self.cache = deque(maxlen=maxmcmc)
         self.maxmcmc = maxmcmc
@@ -40,14 +40,13 @@ class Sampler(object):
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
-        self.inParam = parameter.LivePoint(names,bounds)
-        self.param = parameter.LivePoint(names,bounds)
+        self.inParam = parameter.LivePoint(names)
+        self.param = parameter.LivePoint(names)
         self.dimension = self.param.dimension
         for n in range(self.poolsize):
           while True:
             if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
-            p = parameter.LivePoint(names,bounds)
-            p.initialise()
+            p = usermodel.new_point()
             p.logP = self.user.log_prior(p)
             if np.isfinite(p.logP): break
           p.logL=self.user.log_likelihood(p)

@@ -147,17 +147,14 @@ class NestedSampler(object):
         self.nested_samples=[]
         self.logZ=None
         self.state = _NSintegralState(self.Nlive)
-        names = usermodel.par_names
+        names = usermodel.names
         bounds = usermodel.bounds
-        logPrior = usermodel.log_prior
-        logLikelihood = usermodel.log_likelihood
         sys.stdout.flush()
         for n in range(self.Nlive):
             while True:
-                self.params[n] = parameter.LivePoint(names,bounds)
-                self.params[n].initialise()
-                self.params[n].logP = logPrior(self.params[n])
-                self.params[n].logL = logLikelihood(self.params[n])
+                self.params[n] = usermodel.new_point()
+                self.params[n].logP = usermodel.log_prior(self.params[n])
+                self.params[n].logL = usermodel.log_likelihood(self.params[n])
                 if not(np.isinf(self.params[n].logP)) and not(np.isinf(self.params[n].logL)): break
         if self.verbose: print("\n")
         self.dimension = self.params[0].dimension
