@@ -19,9 +19,8 @@ class GaussianModel(object):
 
     @staticmethod
     def log_prior(p):
-        for i in range(p.dimension):
-            if not p.parameters[i].inbounds(): return -np.inf
-        return 0.0
+      if not p.inbounds(): return -np.inf
+      return 0.0
 
 
 class GaussianTestCase(unittest.TestCase):

@@ -3,179 +3,140 @@
 # cython: linetrace=False
 
 from __future__ import division
-import numpy as np
 cimport numpy as np
+from numpy import inf
+from numpy.random import uniform
 from libc.math cimport log,exp,sqrt,cos,fabs,sin
 cimport cython
 from cpython cimport bool
+from cpython cimport array
+import array
 
-cdef inline double log_add(double x, double y): return x+log(1.0+exp(y-x)) if x >= y else y+log(1.0+exp(x-y))
-
-cdef class parameter:
-
-    def __cinit__(self, str name, list bound, double value = 0.0):
-        self.name = name
-        self.bounds[0] = bound[0]
-        self.bounds[1] = bound[1]
-        self.value = value
-
-    def __str__(self):
-        return 'parameter %s : %s in %s - %s' % (self.name,repr(self.value),repr(self.bounds[0]),repr(self.bounds[1]))
-
-    cpdef bool inbounds(self):
-        if self.value > self.bounds[1] or self.value < self.bounds[0]:
-            return False
-        return True
-
+def rebuild_livepoint(names, bounds):
+  lp=LivePoint(names,bounds)
+  return lp
 
 cdef class LivePoint:
 
-    def __cinit__(self, list names, list bounds):
-        self.logL = -np.inf
-        self.logP = -np.inf
+    def __cinit__(LivePoint self, list names, list bounds, d=None):
+        self.logL = -inf
+        self.logP = -inf
         self.names = names
         self.bounds=bounds
         self.dimension = len(names)
-        self.parameters = []
+        #self.parameters = []
         cdef unsigned int i
-        for i in range(self.dimension):
-            self.parameters.append(parameter(names[i],bounds[i]))
+        if d is not None:
+          self.setvals(d)
+        else:
+          self.values = array.array('d',[0]*self.dimension)
 
-    def initialise(self):
+    def __reduce__(self):
+        return (rebuild_livepoint, (self.names,self.bounds),self.__getstate__()) 
+    
+    def __getstate__(self):
+      return (self.logL,self.logP,self.values)
+    def __setstate__(self,state):
+      self.logL=state[0]
+      self.logP=state[1]
+      self.values=state[2]
+      #print 'restored '+str(self)
+    
+    def initialise(LivePoint self):
         for i,n in enumerate(self.names):
-            self[n] = np.random.uniform(self.bounds[i][0],self.bounds[i][1])
+            self[n] = uniform(self.bounds[i][0],self.bounds[i][1])
 
-    def inbounds(self):
-        for p in self.parameters:
-            if not p.inbounds(): return False
-        return True
+    def inbounds(LivePoint self):
+      return all(self.bounds[i][0] < self.values[i] < self.bounds[i][1] for i in range(self.dimension))
 
-    def __str__(self):
+    def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})
 
-    def __cmp__(self,other):
-        assert isinstance(other,LivePoint)
+    def __cmp__(LivePoint self,LivePoint other):
         for i in range(self.dimension):
             if not self.names[i] in other.names or self[self.names[i]]!=other[self.names[i]]:
                 return 1
         return 0
 
-    def __add__(self,other):
+    def __add__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
         result=LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=self[n]+other[n]
         return result
 
-    def __iadd__(self,other):
+    def __iadd__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
         for n in self.names:
             self[n]=self[n]+other[n]
         return self
     
-    def __sub__(self,other):
+    def __sub__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
         result = LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=self[n]-other[n]
         return result
 
-    def __isub__(self,other):
+    def __isub__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
         for n in self.names:
             self[n]=self[n]-other[n]
         return self
 
-    def __mul__(self,other):
-        if not isinstance(other,float):
-            raise(NotImplementedError("Cannot multiply types {0} and {1}".format(str(type(self)),str(type(other))) ))
+    def __mul__(LivePoint self,float other):
         result=LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=other*self[n]
         return result
 
-    def __imul__(self,other):
-        if not isinstance(other,float):
-            raise(NotImplementedError("Cannot multiply types {0} and {1}".format(str(type(self)),str(type(other))) ))
+    def __imul__(LivePoint self,float other):
         for n in self.names:
             self[n]=other*self[n]
         return self
 
-    def __truediv__(self,other):
-        if not isinstance(other,float):
-            raise(NotImplementedError("Cannot divide types {0} and {1}".format(str(type(self)),str(type(other))) ))
+    def __truediv__(LivePoint self,float other):
         result = LivePoint(self.names,self.bounds)
         for n in self.names:
             result[n]=self[n]/other
         return result
 
-    def __itruediv__(self,other):
-        if not isinstance(other,float):
-            raise(NotImplementedError("Cannot divide types {0} and {1}".format(str(type(self)),str(type(other))) ))
+    def __itruediv__(LivePoint self,float other):
         for n in self.names:
             self[n]=self[n]/other
         return self
 
-    def __len__(self):
+    def __len__(LivePoint self):
         return self.dimension
     
-    def __getitem__(self, str name):
+    def __getitem__(LivePoint self, str name):
         cdef unsigned int i
         for i in range(self.dimension):
-            if self.parameters[i].name == name:
-                return self.parameters[i].value
+            if self.names[i] == name:
+                return self.values[i]
+        raise KeyError
 
-    def __setitem__(self, str name, double value):
+    def __setitem__(LivePoint self, str name, double value):
         cdef unsigned int i
         for i in range(self.dimension):
-            if self.parameters[i].name == name:
-                self.parameters[i].value = value
+            if self.names[i] == name:
+                self.values[i] = value
+                return
+        raise KeyError
 
-    def copy(self):
+    def setvals(LivePoint self, values):
+      """
+      Set the values from an input iterable
+      """
+      if len(values)!=self.dimension:
+        raise Exception('Cannot set {0} dimensions with input of {1} dimensions'.format(self.dimension,len(values)))
+      self.values=array.array('d',values)
+        
+    cpdef copy(LivePoint self):
       result = LivePoint(self.names,self.bounds)
-      for n in self.names:
-        result[n]=self[n]
+      result.values = array.array('d',self.values)
       result.logP=self.logP
       result.logL=self.logL
       return result
                 
-cpdef void copy_live_point(LivePoint out_live, LivePoint in_live):
-    """
-    helper function to copy live points
-    """
-    cdef unsigned int i
-    for i in range(in_live.dimension):
-        out_live.parameters[i].value = np.copy(in_live.parameters[i].value)
-    out_live.logL = np.copy(in_live.logL)
-    out_live.logP = np.copy(in_live.logP)
 
-
-# optimisation test functions, see https://en.wikipedia.org/wiki/Test_functions_for_optimization
-
-cdef double log_eggbox(double x, double y):
-    cdef double tmp = 2.0+cos(x/2.)*cos(y/2.)
-    return -5.0*log(tmp)
-
-cdef double ackley(double x, double y):
-    cdef double r = sqrt(0.5*(x*x+y*y))
-    cdef double first = 20.0*exp(r)
-    cdef double second = exp(0.5*(cos(2.0*np.pi*x)+cos(2.0*np.pi*y)))
-    return -(first+second-exp(1)-20)
-
-cdef double camel(double x, double y):
-    cdef double x2 = x*x
-    cdef double x4 = x2*x2
-    cdef double x6 = x4*x2
-    return -(2.0*x2-1.05*x4+x6/6.0+x*y+y*y)
-
-cdef double bukin(double x, double y):
-    return -(100.0*sqrt(fabs(y-0.01*x*x))+0.01*fabs(x+10.0))
-
-cdef double cross_in_tray(double x, double y):
-    return -(0.0001*(fabs(sin(x)*sin(y)*exp(fabs(100.0-sqrt(x*x+y*y)/np.pi)))+1)**0.1)
-
-cdef double rosenbrock(double x, double y):
-    return -(100.0*(y-x*x)*(y-x*x)+(x-1)*(x-1))
-
-cdef double rastrigin(double x, double y):
-    return -(20.0+(x*x-10.0*cos(2.0*np.pi*x))+(y*y-10.0*cos(2.0*np.pi*y)))

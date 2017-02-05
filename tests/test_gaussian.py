@@ -18,8 +18,7 @@ class GaussianModel(object):
 
     @staticmethod
     def log_prior(p):
-        for i in range(p.dimension):
-            if not p.parameters[i].inbounds(): return -np.inf
+        if not p.inbounds(): return -np.inf
         return -np.log(p['sigma'])
 
 

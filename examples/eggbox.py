@@ -17,8 +17,7 @@ class EggboxModel(object):
 
     @staticmethod
     def log_prior(p):
-        for i in range(p.dimension):
-            if not p.parameters[i].inbounds(): return -np.inf
+        if not p.inbounds(): return -np.inf
         return 0.0
 
 def log_eggbox(x, y):
@@ -39,6 +38,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-        work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=12,Nlive=10000,maxmcmc=5000)
+        work=cpnest.CPNest(EggboxModel,verbose=1,Nthreads=8,Nlive=10000,maxmcmc=5000)
         work.run()
 

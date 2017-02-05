@@ -215,14 +215,14 @@ class NestedSampler(object):
         consumes a sample from the shared queue and updates the evidence
         """
         while not(self.nextID in self.samples_cache):
-            ID,acceptance,jumps,values,logP,logL = queue.get()
-            self.samples_cache[ID] = acceptance,jumps,values,logP,logL
+            ID,acceptance,jumps,sample = queue.get()
+            self.samples_cache[ID] = acceptance,jumps,sample
 
-        acceptance,jumps,values,logP,logL = self.samples_cache.pop(self.nextID)
+        acceptance,jumps,proposed = self.samples_cache.pop(self.nextID)
         self.rejected+=1
         self.nextID += 1
 
-        if logL>self.logLmin.value:
+        if proposed.logL>self.logLmin.value:
             logLmin = self.get_worst_live_point()
             self.state.increment(self.params[self.worst].logL)
             self.condition = logaddexp(self.state.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.state.logZ)
@@ -235,10 +235,7 @@ class NestedSampler(object):
             self.iteration+=1
             
             # replace worst point with new one
-            for j in range(self.params[self.worst].dimension):
-              self.params[self.worst].parameters[j].value = np.copy(values[j])
-              self.params[self.worst].logL=logL
-              self.params[self.worst].logP=logP
+            self.params[self.worst]=proposed
 
     def get_worst_live_point(self):
         """
@@ -257,14 +254,10 @@ class NestedSampler(object):
         for i in range(self.Nlive):
             while True:
                 while not(self.nextID in self.samples_cache):
-                    ID,acceptance,jumps,values,logP,logL = queue.get()
-                    self.samples_cache[ID] = acceptance,jumps,values,logP,logL
-                acceptance,jumps,values,logP,logL = self.samples_cache.pop(self.nextID)
+                    ID,acceptance,jumps,param = queue.get()
+                    self.samples_cache[ID] = acceptance,jumps,param
+                acceptance,jumps,self.params[i] = self.samples_cache.pop(self.nextID)
                 self.nextID +=1
-                for j in range(self.params[i].dimension):
-                    self.params[i].parameters[j].value = np.copy(values[j])
-                self.params[i].logP = np.copy(logP)
-                self.params[i].logL = np.copy(logL)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
             if self.verbose:
               print("sampling the prior --> {0:.3f} % complete".format((100.0*float(i+1)/float(self.Nlive))),end="\r")

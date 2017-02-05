@@ -79,9 +79,9 @@ class Sampler(object):
             if logLmin.value==np.inf:
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
-            #parameter.copy_live_point(self.evolution_points[np.random.randint(self.poolsize)],outParam)
             self.evolution_points.append(outParam.copy())
-            queue.put((id,acceptance,jumps,np.array([outParam[n] for n in outParam.names]),outParam.logP,outParam.logL))
+            #queue.put((id,acceptance,jumps,np.array([outParam[n] for n in outParam.names]),outParam.logP,outParam.logL))
+            queue.put((id,acceptance,jumps,outParam))
             if self.counter == 0 and len(self.cache)==5*self.maxmcmc:
                 self.autocorrelation()
                 self.kwargs.update(list(self.evolution_points))
@@ -100,7 +100,6 @@ class Sampler(object):
         rejected = 1
         jumps = 0
         oldparam=inParam.copy()
-        #parameter.copy_live_point(self.param,inParam)
         logp_old = self.user.log_prior(oldparam)
         while (jumps < nsteps or accepted==0):
             newparam,log_acceptance = self.proposals[jumps%100].get_sample(oldparam.copy(),list(self.evolution_points),self.kwargs)
@@ -116,7 +115,7 @@ class Sampler(object):
             else:
                 rejected+=1
 
-            self.cache.append(np.array(([x.value for x in oldparam.parameters])))
+            self.cache.append(np.array(oldparam.values))
             jumps+=1
             if jumps==10*self.maxmcmc:
               print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
