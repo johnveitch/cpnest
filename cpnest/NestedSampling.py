@@ -11,7 +11,6 @@ from multiprocessing.sharedctypes import Value
 from . import parameter
 from ctypes import c_int, c_double
 import types
-import nest2pos as n2p
 
 try:
     import copyreg
@@ -92,7 +91,7 @@ class NestedSampler(object):
                 self.params[n].initialise()
                 self.params[n].logP = logPrior(self.params[n])
                 self.params[n].logL = logLikelihood(self.params[n])
-                if not(np.isinf(self.params[n].logP)): break
+                if not(np.isinf(self.params[n].logP)) and not(np.isinf(self.params[n].logL)): break
         sys.stderr.write("\n")
         self.dimension = self.params[0].dimension
 
@@ -214,7 +213,7 @@ class NestedSampler(object):
                     self.params[i].parameters[j].value = np.copy(values[j])
                 self.params[i].logP = np.copy(logP)
                 self.params[i].logL = np.copy(logL)
-                if self.params[i].logP!=-np.inf: break
+                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
             if self.verbose: sys.stderr.write("sampling the prior --> {0:.3f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
         if self.verbose: sys.stderr.write("\n")
         if self.prior_sampling:
@@ -230,7 +229,7 @@ class NestedSampler(object):
 
         logWt = logLmin+self.logwidth;
         logZnew = logaddexp(self.logZ, logWt)
-        self.information = np.exp(logWt - logZnew) * logLmin + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
+        self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
         self.logZ = logZnew
         self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
         self.output_sample(self.params[self.worst])
