@@ -1,26 +1,21 @@
 import unittest
 import numpy as np
-import cpnest
+from scipy import integrate
+import cpnest.model
 
-class GaussianModel(object):
+class GaussianModel(cpnest.model.Model):
     """
     A simple gaussian model with parameters mean and sigma
     """
     def __init__(self):
         pass
-    par_names=['x']
-    bounds=[[-100,100]]
-    analytic_log_Z=0.0
+    names=['x']
+    bounds=[[-10,10]]
+    analytic_log_Z=0.0 - np.log(bounds[0][1] - bounds[0][0])
 
     @classmethod
     def log_likelihood(cls,p):
-        return -0.5*(p['x']**2) - np.log(2.0*np.pi)
-
-    @staticmethod
-    def log_prior(p):
-        for i in range(p.dimension):
-            if not p.parameters[i].inbounds(): return -np.inf
-        return 0.0
+        return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
 
 
 class GaussianTestCase(unittest.TestCase):
@@ -28,12 +23,14 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=1,Nlive=100,maxmcmc=100)
+        self.work=cpnest.CPNest(GaussianModel(),verbose=2,Nthreads=1,Nlive=50,maxmcmc=1000)
 
     def test_run(self):
         self.work.run()
-        tolerance = 0.5
-        self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0}'.format(self.work.NS.logZ ))
+        # 2 sigma tolerance
+        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        print('Tolerance: {0:0.3f}'.format(tolerance))
+        self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,GaussianModel.analytic_log_Z ))
 
 
 

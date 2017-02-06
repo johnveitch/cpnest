@@ -1,6 +1,7 @@
-from __future__ import division
+from __future__ import division,print_function
 import numpy as np
-from numpy import logaddexp
+from numpy import logaddexp,exp
+from numpy import inf
 import sys
 import os
 import pickle
@@ -11,6 +12,8 @@ from multiprocessing.sharedctypes import Value
 from . import parameter
 from ctypes import c_int, c_double
 import types
+from . import nest2pos
+from .nest2pos import logsubexp
 
 try:
     import copyreg
@@ -25,6 +28,68 @@ def _pickle_method(m):
         return getattr, (m.im_self, m.im_func.func_name)
 
 copyreg.pickle(types.MethodType, _pickle_method)
+
+class _NSintegralState(object):
+  """
+  Stores the state of the nested sampling integrator
+  """
+  def __init__(self,nlive):
+    self.nlive=nlive
+    self.reset()
+  def reset(self):
+    self.iteration=0
+    self.logZ=-inf
+    self.oldZ=-inf
+    self.logw=0
+    self.info=0
+    # Start with a dummy sample enclosing the whole prior
+    self.logLs=[-inf] # Likelihoods sampled
+    self.log_vols=[0.0] # Volumes enclosed by contours
+  def increment(self,logL,nlive=None):
+    """
+    Increment the state of the evidence integrator
+    Simply uses rectangle rule for initial estimate
+    """
+    if(logL<=self.logLs[-1]):
+      print('WARNING: NS integrator received non-monotonic logL. {0:.3f} -> {1:.3f}'.format(self.logLs[-1],logL))
+    if nlive is None:
+      nlive = self.nlive
+    oldZ = self.logZ
+    logt=-1.0/nlive
+    Wt = self.logw + logL + logsubexp(0,logt)
+    self.logZ = logaddexp(self.logZ,Wt)
+    # Update information estimate
+    if np.isfinite(oldZ) and np.isfinite(self.logZ):
+      self.info = exp(Wt - self.logZ)*logL + exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
+    
+    # Update history
+    self.logw += logt
+    self.iteration += 1
+    self.logLs.append(logL)
+    self.log_vols.append(self.logw)
+  def finalise(self):
+    """
+    Compute the final evidence with more accurate integrator
+    Call at end of sampling run to refine estimate
+    """
+    from scipy import integrate
+    # Trapezoidal rule
+    self.logZ=nest2pos.log_integrate_log_trap(np.array(self.logLs),np.array(self.log_vols))
+    return self.logZ
+  def plot(self,filename):
+    import matplotlib as mpl
+    mpl.use('Agg')
+    from matplotlib import pyplot as plt
+    fig=plt.figure()
+    plt.plot(self.log_vols,self.logLs)
+    plt.title('{0} iterations. logZ={1:.2f} H={2:.2f} bits'.format(self.iteration,self.logZ,self.info*np.log2(np.e)))
+    plt.grid(which='both')
+    plt.xlabel('log prior_volume')
+    plt.ylabel('log likelihood')
+    plt.xlim([self.log_vols[-1],self.log_vols[0]])
+    plt.savefig(filename)
+    print('Saved nested sampling plot as {0}'.format(filename))
+    
 
 class NestedSampler(object):
     """
@@ -42,73 +107,50 @@ class NestedSampler(object):
     output: 
         folder where the output will be stored
     
-    verbose: 
-        display information on screen
-        default: True
+    verbose: Verbosity level
+	0: Nothing
+        1: display information on screen
+        2: (1) + diagnostic plots
         
     seed:
         seed for the initialisation of the pseudorandom chain
     
     prior_sampling:
         produce Nlive samples from the prior
+        
+    stopping:
+	Stop when remaining samples wouldn't change logZ estimate by this much
+        
     """
 
-    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,output=None,verbose=True,seed=1,prior_sampling=False):
+    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,output=None,verbose=1,seed=1,prior_sampling=False,stopping=0.1):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
-
+        self.model=usermodel
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose = verbose
-        self.active_index = 0
         self.accepted = 0
         self.rejected = 1
-        self.dimension = 0
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
         self.params = [None] * self.Nlive
-        self.logZ = np.finfo(np.float128).min
-        self.tolerance = 0.01
+        self.tolerance = stopping
         self.condition = np.inf
-        self.information = 0.0
         self.worst = 0
         self.logLmax = -np.inf
         self.iteration = 0
         self.nextID = 0
         self.samples_cache = {}
         self.nested_samples=[]
-        names = usermodel.par_names
-        bounds = usermodel.bounds
-        logPrior = usermodel.log_prior
-        logLikelihood = usermodel.log_likelihood
-
-        for n in range(self.Nlive):
-            while True:
-                if self.verbose: sys.stderr.write("sprinkling {0:d} live points --> {1:.3f} % complete\r".format(self.Nlive, 100.0*float(n+1)/float(self.Nlive)))
-                self.params[n] = parameter.LivePoint(names,bounds)
-                self.params[n].initialise()
-                self.params[n].logP = logPrior(self.params[n])
-                self.params[n].logL = logLikelihood(self.params[n])
-                if not(np.isinf(self.params[n].logP)) and not(np.isinf(self.params[n].logL)): break
-        sys.stderr.write("\n")
-        self.dimension = self.params[0].dimension
-
-        self.active_live = parameter.LivePoint(names,bounds)
-
-#        if self.loadState()==0:
-#            sys.stderr.write("Loaded state %s, resuming run\n"%self.checkpoint)
-#            self.new_run=False
-#        else:
-#            sys.stderr.write("Checkpoint not found, starting anew\n")
-#            self.new_run=True
-
-        if self.verbose: sys.stderr.write("Dimension --> {0:d}\n".format(self.dimension))
+        self.logZ=None
+        self.state = _NSintegralState(self.Nlive)
+        sys.stdout.flush()
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
         header = open(os.path.join(output,'header.txt'),'w')
-        for n in self.active_live.names:
-            header.write(n+'\t')
+        header.write('\t'.join(self.model.names))
         header.write('logL\n')
         header.close()
         self.jobID = Value(c_int,0,lock=Lock())
@@ -121,8 +163,7 @@ class NestedSampler(object):
         os.system("mkdir -p {0!s}".format(output))
         self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         self.outputfile=open(os.path.join(output,self.outfilename),"w")
-        self.outputfile.write('\t'.join(self.active_live.names) + '\tlogL\n')
-        print self.active_live.names
+        self.outputfile.write('\t'.join(self.model.names) + '\tlogL\n')
         return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
 
     def output_sample(self,sample):
@@ -157,35 +198,30 @@ class NestedSampler(object):
         """
         consumes a sample from the shared queue and updates the evidence
         """
-        while not(self.nextID in self.samples_cache):
-            ID,acceptance,jumps,values,logP,logL = queue.get()
-            self.samples_cache[ID] = acceptance,jumps,values,logP,logL
-
-        acceptance,jumps,values,logP,logL = self.samples_cache.pop(self.nextID)
-        self.rejected+=1
-        self.nextID += 1
-
-        for j in range(self.params[self.worst].dimension):
-            self.params[self.worst].parameters[j].value = np.copy(values[j])
+        # Increment the state of the evidence integration
+        logLmin=self.get_worst_live_point()
+        self.state.increment(self.params[self.worst].logL)
+        self.condition = logaddexp(self.state.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.state.logZ)
+        self.output_sample(self.params[self.worst])
+        if self.verbose:
+          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f} cache: {9:d}"\
+            .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
+              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax,\
+              len(self.samples_cache)))
+        self.iteration+=1
         
-        self.params[self.worst].logP = np.copy(logP)
-        self.params[self.worst].logL = np.copy(logL)
-        if self.params[self.worst].logL>self.logLmin.value:
+        # Replace the point we just consumed with the next acceptable one
+        while(True):
+          while not(self.nextID in self.samples_cache):
+            ID,acceptance,jumps,sample = queue.get()
+            self.samples_cache[ID] = acceptance,jumps,sample
+          self.acceptance,self.jumps,proposed = self.samples_cache.pop(self.nextID)
+          self.nextID += 1
+          if proposed.logL>self.logLmin.value:
+            # replace worst point with new one
+            self.params[self.worst]=proposed
+            break
 
-            logLmin = self.get_worst_live_point()
-
-            logWt = logLmin+self.logwidth;
-            logZnew = logaddexp(self.logZ, logWt)
-            self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
-            self.logZ = logZnew
-            self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
-            self.output_sample(self.params[self.worst])
-            self.active_index=self._select_live()
-            parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
-            if self.verbose:
-                sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.5f} cache: {9:d}\n".format(self.iteration, jumps, acceptance, self.information, logLmin, self.params[self.worst].logL, self.condition, self.logZ, self.logLmax, len(self.samples_cache)))
-            self.logwidth-=1.0/float(self.Nlive)
-            self.iteration+=1
 
     def get_worst_live_point(self):
         """
@@ -193,7 +229,7 @@ class NestedSampler(object):
         """
         logL_array = np.array([p.logL for p in self.params])
         self.worst = logL_array.argmin()
-        self.logLmin.value = np.min(logL_array)
+        self.logLmin.value = logL_array[self.worst]
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
@@ -201,100 +237,59 @@ class NestedSampler(object):
         """
         main nested sampling loop
         """
-        self.logwidth = np.log(1.0 - np.exp(-1.0 / float(self.Nlive)))
         for i in range(self.Nlive):
             while True:
                 while not(self.nextID in self.samples_cache):
-                    ID,acceptance,jumps,values,logP,logL = queue.get()
-                    self.samples_cache[ID] = acceptance,jumps,values,logP,logL
-                acceptance,jumps,values,logP,logL = self.samples_cache.pop(self.nextID)
+                    ID,acceptance,jumps,param = queue.get()
+                    self.samples_cache[ID] = acceptance,jumps,param
+                self.acceptance,self.jumps,self.params[i] = self.samples_cache.pop(self.nextID)
                 self.nextID +=1
-                for j in range(self.params[i].dimension):
-                    self.params[i].parameters[j].value = np.copy(values[j])
-                self.params[i].logP = np.copy(logP)
-                self.params[i].logL = np.copy(logL)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
-            if self.verbose: sys.stderr.write("sampling the prior --> {0:.3f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
-        if self.verbose: sys.stderr.write("\n")
+            if self.verbose:
+              print("sampling the prior --> {0:.3f} % complete".format((100.0*float(i+1)/float(self.Nlive))),end="\r")
+        if self.verbose: print("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
                 self.output_sample(self.params[i])
             self.output.close()
             self.evidence_out.close()
             self.logLmin.value = np.inf
-            sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
+            print("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
         
         logLmin = self.get_worst_live_point()
 
-        logWt = logLmin+self.logwidth;
-        logZnew = logaddexp(self.logZ, logWt)
-        self.information = np.exp(logWt - logZnew) * self.params[self.worst].logL + np.exp(self.logZ - logZnew) * (self.information + self.logZ) - logZnew
-        self.logZ = logZnew
-        self.condition = logaddexp(self.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.logZ)
-        self.output_sample(self.params[self.worst])
-        self.active_index =self._select_live()
-        parameter.copy_live_point(self.params[self.worst],self.params[self.active_index])
-
         while self.condition > self.tolerance:
             self.consume_sample(producer_lock, queue, port, authkey)
 
-        sys.stderr.write("\n")
+	# Signal worker threads to exit
+        self.logLmin.value = np.inf
+
+        # Flush the queue so subsequent join can succeed
+        while not queue.empty():
+            _ = queue.get()
 
         # final adjustments
-        self.logLmin.value = np.inf
-        while len(self.samples_cache) > 0:
-            self.consume_sample(producer_lock, queue, port, authkey)
-            self.logLmin.value = np.inf
+        for i,idx in enumerate(np.argsort([p.logL for p in self.params])):
+          self.state.increment(self.params[idx].logL, nlive=self.Nlive - i)
+          self.output_sample(self.params[idx])
+ 
+        # Refine evidence estimate
+        self.state.finalise()
+        self.logZ=self.state.logZ
 
-        i = 0
-        logL_array = [p.logL for p in self.params]
-        logL_array = np.array(logL_array)
-        idx = logL_array.argsort()
-        logL_array = logL_array[idx]
-        for i in idx:
-            self.output_sample(self.params[i])
-            i+=1
         self.output.close()
-        self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.logZ, self.logLmax))
+        self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
         self.evidence_out.close()
-        k = 0
-        sys.stderr.write("Nested Sampling process {0!s}, exiting\n".format(os.getpid()))
-        return self.logZ
+        print('Final evidence: {0:0.2f}\nInformation: {1:.2f}'.format(self.state.logZ,self.state.info))
+        
+        # Some diagnostics
+        if(self.verbose>1):
+          self.state.plot(self.outfilename+'.png')
+        
+        return self.state.logZ
 
-#    def saveState(self):
-#        try:
-#            livepoints_stack = np.zeros(self.Nlive,dtype={'names':self.params[0].par_names,'formats':self.params[0].par_types})
-#            for i in xrange(self.Nlive):
-#                for n in self.params[0].par_names:
-#                    livepoints_stack[i][n] = self.params[i]._internalvalues[n]
-#            resume_out = open(self.checkpoint,"wb")
-#            pickle.dump((livepoints_stack,np.random.get_state(),self.iteration,self.cache),resume_out)
-#            sys.stderr.write("Checkpointed %d live points.\n"%self.Nlive)
-#            resume_out.close()
-#            return 0
-#        except:
-#            sys.stderr.write("Checkpointing failed!\n")
-#            return 1
-#
-#    def loadState(self):
-#        try:
-#            resume_in = open(self.checkpoint,"rb")
-#            livepoints_stack,RandomState,self.iteration,self.cache = pickle.load(resume_in)
-#            resume_in.close()
-#            for i in xrange(self.Nlive):
-#                for n in self.params[0].par_names:
-#                    self.params[i]._internalvalues[n] = livepoints_stack[i][n]
-#                self.params[i].logPrior()
-#                self.params[i].logLikelihood()
-#            np.random.set_state(RandomState)
-#            self.kwargs=proposals._setup_kwargs(self.params,self.Nlive,self.dimension)
-#            self.kwargs=proposals._update_kwargs(**self.kwargs)
-#            sys.stderr.write("Resumed %d live points.\n"%self.Nlive)
-#            return 0
-#        except:
-#            sys.stderr.write("Resuming failed!\n")
-#            return 1
+
 
 
 def parse_to_list(option, opt, value, parser):

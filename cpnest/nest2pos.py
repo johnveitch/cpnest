@@ -1,9 +1,10 @@
 import numpy as np
 from numpy import logaddexp, vstack
 from numpy.random import uniform
+from functools import reduce
 
 def logsubexp(x,y):
-        assert np.all(x >= y), 'cannot take log of negative number %s - %s'%(str(x),str(y))
+        assert np.all(x >= y), 'cannot take log of negative number {0!s} - {1!s}'.format(str(x), str(y))
 
         return x + np.log1p(-np.exp(y-x))
 
@@ -50,7 +51,7 @@ def draw_posterior(data, log_wts, verbose=False):
     maxWt=max(log_wts)
     normalised_wts=log_wts-maxWt
     selection=[n > np.log(uniform()) for n in normalised_wts]
-    idx=filter(lambda i: selection[i], range(len(selection)))
+    idx=list(filter(lambda i: selection[i], range(len(selection))))
     return data[idx]
     
 def draw_posterior_many(datas, Nlives, verbose=False):
@@ -60,27 +61,27 @@ def draw_posterior_many(datas, Nlives, verbose=False):
     and weight according to the evidence in each input run"""
     # list of log_evidences, log_weights
     log_evs,log_wts=zip(*[compute_weights(data['logL'],Nlive) for data,Nlive in zip(datas, Nlives)])
-    if verbose: print 'Computed log_evidences: %s'%(str(log_evs))
+    if verbose: print('Computed log_evidences: {0!s}'.format((str(log_evs))))
 
     log_total_evidence=reduce(logaddexp, log_evs)
     log_max_evidence=max(log_evs)
     #print 'evidences: %s'%(str(log_evs))
     fracs=[np.exp(log_ev-log_max_evidence) for log_ev in log_evs]
-    if verbose: print 'Relative weights of input files: %s'%(str(fracs))
+    if verbose: print('Relative weights of input files: {0!s}'.format((str(fracs))))
     Ns=[fracs[i]/len(datas[i]) for i in range(len(fracs))]
     Ntot=max(Ns)
     fracs=[n/Ntot for n in Ns]
-    if verbose: print 'Relative weights of input files taking into account their length: %s'%(str(fracs))
+    if verbose: print('Relative weights of input files taking into account their length: {0!s}'.format((str(fracs))))
 
     posts=[draw_posterior(data,logwt) for (data,logwt,logZ) in zip(datas,log_wts,log_evs)]
-    if verbose: print 'Number of input samples: %s'%(str([len(x) for x in log_wts]))
-    if verbose: print 'Expected number of samples from each input file %s'%(str([int(f*len(p)) for f,p in zip(fracs,posts)]))
+    if verbose: print('Number of input samples: {0!s}'.format((str([len(x) for x in log_wts]))))
+    if verbose: print('Expected number of samples from each input file {0!s}'.format((str([int(f*len(p)) for f,p in zip(fracs,posts)]))))
     bigpos=[]
     for post,frac in zip(posts,fracs):
       mask = uniform(size=len(post))<frac
       bigpos.append(post[mask])
     result = vstack(bigpos)
-    if verbose: print 'Samples produced: %s'%(str(result.shape))
+    if verbose: print('Samples produced: {0:d}'.format(result.shape[1]))
     return result
     
 def draw_N_posterior(data,log_wts, N, verbose=False):

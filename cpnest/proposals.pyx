@@ -3,6 +3,7 @@
 # cython: linetrace=True
 
 from __future__ import division
+from functools import reduce
 import numpy as np
 cimport numpy as np
 from libc.math cimport log,exp,sqrt,fabs
@@ -99,7 +100,7 @@ cdef tuple _DifferentialEvolution(LivePoint inParam, list Ensemble, ProposalArgu
     cdef LivePoint outParam = inParam+(Ensemble[indeces[0]]-Ensemble[indeces[1]])*gamma
     
     for i in range(dimension):
-        outParam.parameters[i].value += mutation_variance*np.random.normal(0,1)
+        outParam.values[i] += mutation_variance*np.random.normal(0,1)
 
     cdef double log_acceptance_probability = log(np.random.uniform(0.,1.))
     return outParam,log_acceptance_probability

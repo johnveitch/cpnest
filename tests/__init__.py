@@ -1,5 +1,1 @@
-from . import test_gaussian
-
-def tests():
-    test_gaussian.test_all()
-
+__all__=['test_1d','test_2d','test_gaussian']

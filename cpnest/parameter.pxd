@@ -1,16 +1,10 @@
-from cpython cimport bool
-
-cdef class parameter:
-    cdef public str name
-    cdef public double value
-    cdef public double bounds[2]
-    cpdef bool inbounds(self)
+from cpython cimport array
 
 cdef class LivePoint:
     cdef public double logL
     cdef public double logP
     cdef public unsigned int dimension
-    cdef public list parameters
+    cdef public array.array values
     cdef public list names
     cdef public list bounds
-
+    cpdef copy(LivePoint self)
