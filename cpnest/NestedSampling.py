@@ -211,28 +211,30 @@ class NestedSampler(object):
         """
         consumes a sample from the shared queue and updates the evidence
         """
-        while not(self.nextID in self.samples_cache):
+        # Increment the state of the evidence integration
+        logLmin=self.get_worst_live_point()
+        self.state.increment(self.params[self.worst].logL)
+        self.condition = logaddexp(self.state.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.state.logZ)
+        self.output_sample(self.params[self.worst])
+        if self.verbose:
+          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f} cache: {9:d}"\
+            .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
+              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax,\
+              len(self.samples_cache)))
+        self.iteration+=1
+        
+        # Replace the point we just consumed with the next acceptable one
+        while(True):
+          while not(self.nextID in self.samples_cache):
             ID,acceptance,jumps,sample = queue.get()
             self.samples_cache[ID] = acceptance,jumps,sample
-
-        acceptance,jumps,proposed = self.samples_cache.pop(self.nextID)
-        self.rejected+=1
-        self.nextID += 1
-
-        if proposed.logL>self.logLmin.value:
-            logLmin = self.get_worst_live_point()
-            self.state.increment(self.params[self.worst].logL)
-            self.condition = logaddexp(self.state.logZ,self.logLmax-self.iteration/(float(self.Nlive))-self.state.logZ)
-            self.output_sample(self.params[self.worst])
-            if self.verbose:
-                print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f} cache: {9:d}"\
-                  .format(self.iteration, jumps, acceptance, self.state.info,\
-                  logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax,\
-                  len(self.samples_cache)))
-            self.iteration+=1
-            
+          self.acceptance,self.jumps,proposed = self.samples_cache.pop(self.nextID)
+          self.nextID += 1
+          if proposed.logL>self.logLmin.value:
             # replace worst point with new one
             self.params[self.worst]=proposed
+            break
+
 
     def get_worst_live_point(self):
         """
@@ -240,7 +242,7 @@ class NestedSampler(object):
         """
         logL_array = np.array([p.logL for p in self.params])
         self.worst = logL_array.argmin()
-        self.logLmin.value = np.min(logL_array)
+        self.logLmin.value = logL_array[self.worst]
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
@@ -253,7 +255,7 @@ class NestedSampler(object):
                 while not(self.nextID in self.samples_cache):
                     ID,acceptance,jumps,param = queue.get()
                     self.samples_cache[ID] = acceptance,jumps,param
-                acceptance,jumps,self.params[i] = self.samples_cache.pop(self.nextID)
+                self.acceptance,self.jumps,self.params[i] = self.samples_cache.pop(self.nextID)
                 self.nextID +=1
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
             if self.verbose:
