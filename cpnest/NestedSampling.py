@@ -276,6 +276,9 @@ class NestedSampler(object):
 	# Signal worker threads to exit
         self.logLmin.value = np.inf
 
+        # Flush the queue so subsequent join can succeed
+        while not queue.empty():
+            _ = queue.get()
 
         # final adjustments
         for i,idx in enumerate(np.argsort([p.logL for p in self.params])):

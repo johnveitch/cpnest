@@ -31,39 +31,43 @@ class Sampler(object):
     """
     def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100):
         self.user = usermodel
-        names = usermodel.names
-        bounds = usermodel.bounds
-        self.cache = deque(maxlen=maxmcmc)
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
+        self.cache = deque(maxlen=maxmcmc)
         self.proposals = proposals.setup_proposals_cycle()
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
-        self.inParam = parameter.LivePoint(names)
-        self.param = parameter.LivePoint(names)
+        self.inParam = parameter.LivePoint(self.user.names)
+        self.param = parameter.LivePoint(self.user.names)
         self.dimension = self.param.dimension
+        self.kwargs = proposals.ProposalArguments(self.dimension)
+        self.initialised=False
+        
+    def reset(self):
         for n in range(self.poolsize):
           while True:
             if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
-            p = usermodel.new_point()
+            p = self.user.new_point()
             p.logP = self.user.log_prior(p)
             if np.isfinite(p.logP): break
           p.logL=self.user.log_likelihood(p)
           self.evolution_points.append(p)
         if self.verbose: sys.stderr.write("\n")
-        self.kwargs = proposals.ProposalArguments(self.dimension)
         self.kwargs.update(list(self.evolution_points))
         for _ in range(self.poolsize):
           s = self.evolution_points.popleft()
           acceptance,jumps,s = self.metropolis_hastings(s,-np.inf,self.Nmcmc)
           self.evolution_points.append(s)
         self.kwargs.update(list(self.evolution_points))
+        self.initialised=True
 
     def produce_sample(self, consumer_lock, queue, IDcounter, logLmin, seed, ip, port, authkey):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
+        if not self.initialised:
+          self.reset()
         self.seed = seed
         np.random.seed(seed=self.seed)
         self.counter=0
