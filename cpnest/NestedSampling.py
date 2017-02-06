@@ -127,12 +127,12 @@ class NestedSampler(object):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
+        self.model=usermodel
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose = verbose
         self.accepted = 0
         self.rejected = 1
-        self.dimension = 0
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
@@ -147,23 +147,10 @@ class NestedSampler(object):
         self.nested_samples=[]
         self.logZ=None
         self.state = _NSintegralState(self.Nlive)
-        names = usermodel.names
-        bounds = usermodel.bounds
         sys.stdout.flush()
-        for n in range(self.Nlive):
-            while True:
-                self.params[n] = usermodel.new_point()
-                self.params[n].logP = usermodel.log_prior(self.params[n])
-                self.params[n].logL = usermodel.log_likelihood(self.params[n])
-                if not(np.isinf(self.params[n].logP)) and not(np.isinf(self.params[n].logL)): break
-        if self.verbose: print("\n")
-        self.dimension = self.params[0].dimension
-
-        if self.verbose: print("Dimension --> {0:d}".format(self.dimension))
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
         header = open(os.path.join(output,'header.txt'),'w')
-        for n in self.params[0].names:
-            header.write(n+'\t')
+        header.write('\t'.join(self.model.names))
         header.write('logL\n')
         header.close()
         self.jobID = Value(c_int,0,lock=Lock())
@@ -176,7 +163,7 @@ class NestedSampler(object):
         os.system("mkdir -p {0!s}".format(output))
         self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         self.outputfile=open(os.path.join(output,self.outfilename),"w")
-        self.outputfile.write('\t'.join(self.params[0].names) + '\tlogL\n')
+        self.outputfile.write('\t'.join(self.model.names) + '\tlogL\n')
         return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
 
     def output_sample(self,sample):
