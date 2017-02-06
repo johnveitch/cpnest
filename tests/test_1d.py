@@ -2,6 +2,9 @@ import unittest
 import numpy as np
 import cpnest
 
+Nlive = 1000
+maxmcmc = 1000
+
 class GaussianModel(object):
     """
     A simple gaussian model with parameters mean and sigma
@@ -14,7 +17,7 @@ class GaussianModel(object):
 
     @classmethod
     def log_likelihood(cls,p):
-        return -0.5*(p['x']**2) - np.log(2.0*np.pi)
+        return -0.5*p['x']**2 - np.log(2.0*np.pi)
 
     @staticmethod
     def log_prior(p):
@@ -28,12 +31,13 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=1,Nlive=100,maxmcmc=100)
+        self.work=cpnest.CPNest(GaussianModel,verbose=1,Nthreads=8,Nlive=Nlive,maxmcmc=maxmcmc)
 
     def test_run(self):
         self.work.run()
         tolerance = 0.5
-        self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0}'.format(self.work.NS.logZ ))
+        NSlogZ = np.loadtxt('chain_%d_1234.txt_evidence.txt'%Nlive)[0]
+        self.assertTrue(np.abs(NSlogZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0}'.format(NSlogZ ))
 
 
 
