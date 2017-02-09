@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 from scipy import integrate,stats
+import cpnest
 import cpnest.model
 import matplotlib as mpl
 mpl.use('Agg')
@@ -27,7 +28,7 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel()
-        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=1,Nlive=500,maxmcmc=5000)
+        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=4,Nlive=100,maxmcmc=1000)
         self.work.run()
 
     def test_evidence(self):
@@ -36,13 +37,16 @@ class GaussianTestCase(unittest.TestCase):
         print('Tolerance: {0:0.3f}'.format(tolerance))
         self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,GaussianModel.analytic_log_Z ))
         
-    def test_posterior_ks(self):
         pos=self.work.posterior_samples['x']
         t,pval=stats.kstest(pos,self.model.distr.cdf)
         plt.figure()
         plt.hist(pos.ravel(),normed=True)
         plt.title('KS test = %f'%(pval))
         plt.savefig('posterior.png')
+        plt.figure()
+        plt.plot(pos.ravel(),',')
+        plt.title('chain')
+        plt.savefig('chain.png')
         self.assertTrue(pval>0.01,'KS test failed: KS stat = {0}'.format(pval))
 
 
