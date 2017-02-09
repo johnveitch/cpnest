@@ -28,26 +28,30 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel()
-        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=4,Nlive=100,maxmcmc=1000)
+        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=4,Nlive=500,maxmcmc=2000)
         self.work.run()
 
     def test_evidence(self):
         # 2 sigma tolerance
         tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
         print('Tolerance: {0:0.3f}'.format(tolerance))
-        self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,GaussianModel.analytic_log_Z ))
-        
+        print 'Analytic logZ ',str(self.model.analytic_log_Z)
         pos=self.work.posterior_samples['x']
-        t,pval=stats.kstest(pos,self.model.distr.cdf)
+        #t,pval=stats.kstest(pos,self.model.distr.cdf)
+        stat,pval = stats.normaltest(pos.T)
+        print 'Normal test p-value ',str(pval)
         plt.figure()
         plt.hist(pos.ravel(),normed=True)
-        plt.title('KS test = %f'%(pval))
+        x=np.linspace(self.model.bounds[0][0],self.model.bounds[0][1],100)
+        plt.plot(x,self.model.distr.pdf(x))
+        plt.title('NormalTest pval = %f'%(pval))
         plt.savefig('posterior.png')
         plt.figure()
         plt.plot(pos.ravel(),',')
         plt.title('chain')
         plt.savefig('chain.png')
-        self.assertTrue(pval>0.01,'KS test failed: KS stat = {0}'.format(pval))
+        self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,GaussianModel.analytic_log_Z ))
+        self.assertTrue(pval>0.01,'Normaltest test failed: KS stat = {0}'.format(pval))
 
 
 
