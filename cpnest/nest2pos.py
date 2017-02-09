@@ -30,7 +30,6 @@ def compute_weights(data, Nlive):
     log_wts=np.zeros(data.shape[0])
 
     log_vols_start=np.cumsum(np.ones(len(start_data)+1)*np.log1p(-1./Nlive))-np.log1p(-1./Nlive)
-    #log_vols_end=log_vols_start[-1]+np.concatenate((np.log(np.linspace(1,0,len(end_data))[1:-1]),[np.NINF]))
     log_vols_end=np.zeros(len(end_data))
     log_vols_end[-1]=np.NINF
     log_vols_end[0]=log_vols_start[-1]+np.log1p(-1.0/Nlive)

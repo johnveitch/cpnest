@@ -108,7 +108,6 @@ cdef tuple _DifferentialEvolution(LivePoint inParam, list Ensemble, ProposalArgu
 
 proposals = {}
 proposal_list_name = ['DifferentialEvolution','EnsembleEigenDirections','EnsembleWalk','EnsembleStretch']
-#proposal_list_name = ['EnsembleWalk']#,'EnsembleWalk','EnsembleStretch']
 proposal_list = [_DifferentialEvolution,_EnsembleEigenDirection,_EnsembleWalk,_EnsembleStretch]
 
 for name,algorithm in zip(proposal_list_name,proposal_list):

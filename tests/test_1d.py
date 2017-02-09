@@ -28,14 +28,15 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel()
-        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=4,Nlive=500,maxmcmc=2000)
+        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=4,Nlive=50,maxmcmc=2000)
         self.work.run()
 
     def test_evidence(self):
         # 2 sigma tolerance
         tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
-        print('Tolerance: {0:0.3f}'.format(tolerance))
-        print 'Analytic logZ ',str(self.model.analytic_log_Z)
+        print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
+        print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
+        print('Estimated logZ {0}'.format(self.work.NS.logZ))
         pos=self.work.posterior_samples['x']
         #t,pval=stats.kstest(pos,self.model.distr.cdf)
         stat,pval = stats.normaltest(pos.T)
