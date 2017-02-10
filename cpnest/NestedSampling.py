@@ -14,6 +14,7 @@ from ctypes import c_int, c_double
 import types
 from . import nest2pos
 from .nest2pos import logsubexp
+from operator import attrgetter
 
 try:
     import copyreg
@@ -270,9 +271,10 @@ class NestedSampler(object):
             _ = queue.get()
 
         # final adjustments
-        for i,idx in enumerate(np.argsort([p.logL for p in self.params])):
-          self.state.increment(self.params[idx].logL, nlive=self.Nlive - i)
-          self.output_sample(self.params[idx])
+        self.params.sort(key=attrgetter('logL'))
+        for i,p in enumerate(self.params):
+            self.state.increment(p.logL,nlive=self.Nlive-i)
+            self.output_sample(p)
  
         # Refine evidence estimate
         self.state.finalise()
