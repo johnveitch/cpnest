@@ -1,9 +1,11 @@
 import sys
 import os
 import numpy as np
+from math import log
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
+from random import random
 
 from . import parameter
 from . import proposal
@@ -99,15 +101,15 @@ class Sampler(object):
         accepted = 0
         rejected = 1
         jumps = 0
-        oldparam=inParam.copy()
+        oldparam=inParam
         logp_old = self.user.log_prior(oldparam)
         while (jumps < nsteps or accepted==0):
             newparam = self.proposals.get_sample(oldparam.copy())
             newparam.logP = self.user.log_prior(newparam)
-            if newparam.logP-logp_old + self.proposals.log_J > np.log(np.random.uniform()):
+            if newparam.logP-logp_old + self.proposals.log_J > log(random()):
                 newparam.logL = self.user.log_likelihood(newparam)
                 if newparam.logL > logLmin:
-                  oldparam=newparam.copy()
+                  oldparam=newparam
                   logp_old = newparam.logP
                   accepted+=1
                 else:
