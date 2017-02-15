@@ -105,7 +105,7 @@ class Sampler(object):
         while (jumps < nsteps or accepted==0):
             newparam = self.proposals.get_sample(oldparam.copy())
             newparam.logP = self.user.log_prior(newparam)
-            if newparam.logP-logp_old + self.proposals.log_J < np.log(np.random.uniform()):
+            if newparam.logP-logp_old + self.proposals.log_J > np.log(np.random.uniform()):
                 newparam.logL = self.user.log_likelihood(newparam)
                 if newparam.logL > logLmin:
                   oldparam=newparam.copy()
