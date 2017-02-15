@@ -1,17 +1,10 @@
-
 from __future__ import division
 from functools import reduce
 import numpy as np
-from numpy import log,sqrt,fabs
+from math import log,sqrt,fabs,exp
 from abc import ABCMeta,abstractmethod
-
-def choice(a,size=None,replace=True,p=None):
-    idx = np.random.choice(range(len(a)),size=size,replace=replace,p=p)
-    # Mimic the behaviour of np.random.choice and return the element itself if size==1
-    if type(idx)==np.int64:
-        return a[idx]
-    else:
-        return [a[i] for i in idx]
+import random
+from random import sample,gauss,randrange,uniform
 
 class Proposal(object):
     """
@@ -53,7 +46,7 @@ class ProposalCycle(EnsembleProposal):
             weights[i]=weights[i]/norm
         self.proposals=proposals
         # The cycle is a list of indices for self.proposals
-        self.cycle = choice(self.proposals, size = cyclelength, p=weights, replace=True)
+        self.cycle = np.random.choice(self.proposals, size = cyclelength, p=weights, replace=True)
         self.N=len(self.cycle)
 
     def get_sample(self,old):
@@ -74,21 +67,21 @@ class EnsembleWalk(EnsembleProposal):
     log_J = 0.0 # Symmetric proposal
     def get_sample(self,old):
         Nsubset = 3
-        subset = choice(self.ensemble,size=Nsubset,replace=False)
+        subset = sample(self.ensemble,3)
         center_of_mass = reduce(type(old).__add__,subset)/float(Nsubset)
-        out = old.copy()
-        for j in range(Nsubset):
-            out += (subset[j] - center_of_mass)*np.random.normal(0,1)
+        out = old
+        for x in subset:
+            out += (x - center_of_mass)*gauss(0,1)
         return out
 
 class EnsembleStretch(EnsembleProposal):
     def get_sample(self,old):
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
-        a = choice(self.ensemble,size=1)[0]
+        a = random.choice(self.ensemble)
         # Pick the scale factor
-        x = np.random.uniform(-1,1)*log(scale)
-        Z = np.exp(x)
+        x = uniform(-1,1)*log(scale)
+        Z = exp(x)
         out = a + (old - a)*Z
         # Jacobean
         self.log_J = out.dimension * x
@@ -97,9 +90,9 @@ class EnsembleStretch(EnsembleProposal):
 class DifferentialEvolution(EnsembleProposal):
     log_J = 0.0 # Symmetric jump
     def get_sample(self,old):
-        a,b = choice(self.ensemble,size=2,replace=False)
+        a,b = sample(self.ensemble,2)
         sigma = 1e-4 # scatter around difference vector by this factor
-        out = old + (b-a)*np.random.normal(0,sigma)
+        out = old + (b-a)*gauss(1.0,sigma)
         return out
 
 class EnsembleEigenVector(EnsembleProposal):
@@ -125,10 +118,10 @@ class EnsembleEigenVector(EnsembleProposal):
             self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
     def get_sample(self,old):
-        out = old.copy()
+        out = old
         # pick a random eigenvector
-        i = np.random.randint(old.dimension)
-        jumpsize = sqrt(fabs(self.eigen_values[i]))*np.random.normal(0,1)
+        i = randrange(old.dimension)
+        jumpsize = sqrt(fabs(self.eigen_values[i]))*gauss(0,1)
         for k,n in enumerate(out.names):
             out[n]+=jumpsize*self.eigen_vectors[k,i]
         return out
