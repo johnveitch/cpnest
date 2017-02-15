@@ -6,8 +6,7 @@ import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
 
 from . import parameter
-from . import proposals
-from . import proposal2 as proposal
+from . import proposal
 
 class Sampler(object):
     """
@@ -131,7 +130,7 @@ class Sampler(object):
             cov_array = np.array(self.cache).T
             N =  cov_array.shape[1]
             for i,n in enumerate(self.evolution_points[0].names):
-                ACF = proposals.autocorrelation(cov_array[i,:])
+                ACF = proposal.autocorrelation(cov_array[i,:])
                 ACL = np.min(np.where((ACF > -2./np.sqrt(N)) & (ACF < 2./np.sqrt(N)))[0])
                 if not(np.isnan(ACL)):
                     ACLs.append(ACL)
