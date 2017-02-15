@@ -40,4 +40,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    unittest.main(verbosity=2)
+    work=cpnest.CPNest(EggboxModel(),verbose=1,Nthreads=4,Nlive=5000,maxmcmc=5000)
+    work.profile()
+    #unittest.main(verbosity=2)
