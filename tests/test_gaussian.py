@@ -6,19 +6,18 @@ class GaussianModel(cpnest.model.Model):
     """
     A simple gaussian model with parameters mean and sigma
     """
-    def __init__(self):
-        pass
     names=['mean','sigma']
     bounds=[[-5,5],[0.05,1]]
     data = np.array([x for x in np.random.normal(0.5,0.5,size=10)])
+    analyticZ = np.log(0.05)
 
     @classmethod
     def log_likelihood(cls,x):
-        return -0.5*np.sum((cls.data-x['mean'])**2/x['sigma']**2) - len(cls.data)*np.log(x['sigma']) - 0.5*np.log(2.0*np.pi)
+        return -0.5*x['mean']**2/x['sigma']**2 - np.log(x['sigma']) - 0.5*np.log(2.0*np.pi)
 
     def log_prior(self,p):
         if not self.in_bounds(p): return -np.inf
-        return -np.log(p['sigma'])
+        return -np.log(p['sigma']) - np.log(10) - np.log(0.95)
 
 
 class GaussianTestCase(unittest.TestCase):
@@ -26,10 +25,12 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel(),verbose=2,Nthreads=8,Nlive=100,maxmcmc=100)
+        self.model = GaussianModel()
+        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=8,Nlive=100,maxmcmc=100)
 
     def test_run(self):
         self.work.run()
+        print 'Analytic evidence: {0}'.format(self.model.analyticZ)
 
 
 
