@@ -119,8 +119,8 @@ class EnsembleEigenVector(EnsembleProposal):
             self.eigen_values = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
             self.eigen_vectors = np.eye(1)
         else:	 
-            for i,n in enumerate(self.ensemble[0].names):
-                for j in range(n): cov_array[i,j] = pool[j][n]
+            for i,name in enumerate(self.ensemble[0].names):
+                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
             covariance = np.cov(cov_array)
             self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
