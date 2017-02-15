@@ -7,6 +7,7 @@ from multiprocessing import Process, Lock, Queue
 
 from . import parameter
 from . import proposals
+from . import proposal2 as proposal
 
 class Sampler(object):
     """
@@ -34,14 +35,13 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.cache = deque(maxlen=maxmcmc)
-        self.proposals = proposals.setup_proposals_cycle()
+        self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
         self.inParam = parameter.LivePoint(self.user.names)
         self.param = parameter.LivePoint(self.user.names)
         self.dimension = self.param.dimension
-        self.kwargs = proposals.ProposalArguments(self.dimension)
         self.initialised=False
         
     def reset(self):
@@ -54,12 +54,12 @@ class Sampler(object):
           p.logL=self.user.log_likelihood(p)
           self.evolution_points.append(p)
         if self.verbose: sys.stderr.write("\n")
-        self.kwargs.update(list(self.evolution_points))
+        self.proposals.set_ensemble(self.evolution_points)
         for _ in range(self.poolsize):
           s = self.evolution_points.popleft()
           acceptance,jumps,s = self.metropolis_hastings(s,-np.inf,self.Nmcmc)
           self.evolution_points.append(s)
-        self.kwargs.update(list(self.evolution_points))
+        self.proposals.set_ensemble(self.evolution_points)
         self.initialised=True
 
     def produce_sample(self, consumer_lock, queue, IDcounter, logLmin, seed, ip, port, authkey):
@@ -85,10 +85,10 @@ class Sampler(object):
             queue.put((id,acceptance,jumps,outParam))
             if self.counter == 0 and len(self.cache)==5*self.maxmcmc:
                 self.autocorrelation()
-                self.kwargs.update(list(self.evolution_points))
+                self.proposals.set_ensemble(self.evolution_points)
             elif (self.counter%(self.poolsize/2))==0 or acceptance<0.01:
                 self.autocorrelation()
-                self.kwargs.update(list(self.evolution_points))
+                self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
         return 0
@@ -103,9 +103,9 @@ class Sampler(object):
         oldparam=inParam.copy()
         logp_old = self.user.log_prior(oldparam)
         while (jumps < nsteps or accepted==0):
-            newparam,log_acceptance = self.proposals[jumps%100].get_sample(oldparam.copy(),list(self.evolution_points),self.kwargs)
+            newparam = self.proposals.get_sample(oldparam.copy())
             newparam.logP = self.user.log_prior(newparam)
-            if newparam.logP-logp_old > log_acceptance:
+            if newparam.logP-logp_old + self.proposals.log_J < np.log(np.random.uniform()):
                 newparam.logL = self.user.log_likelihood(newparam)
                 if newparam.logL > logLmin:
                   oldparam=newparam.copy()
