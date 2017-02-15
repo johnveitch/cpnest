@@ -2,7 +2,7 @@
 from __future__ import division
 from functools import reduce
 import numpy as np
-from numpy import log
+from numpy import log,sqrt,fabs
 from abc import ABCMeta,abstractmethod
 
 def choice(a,size=None,replace=True,p=None):
@@ -46,6 +46,7 @@ class ProposalCycle(EnsembleProposal):
     N=0   # numer of proposals in the cycle
     def __init__(self,proposals,weights,cyclelength=100,*args,**kwargs):
         super(ProposalCycle,self).__init__(*args,**kwargs)
+        assert(len(weights)==len(proposals))
         # Normalise the weights
         norm = sum(weights)
         for i,_ in enumerate(weights):
@@ -101,10 +102,46 @@ class DifferentialEvolution(EnsembleProposal):
         out = old + (b-a)*np.random.normal(0,sigma)
         return out
 
+class EnsembleEigenVector(EnsembleProposal):
+    log_J = 0.0
+    eigen_values=None
+    eigen_vectors=None
+    def set_ensemble(self,ensemble):
+        super(EnsembleEigenVector,self).set_ensemble(ensemble)
+        self.update_eigenvectors()
+
+    def update_eigenvectors(self):
+        n=len(self.ensemble)
+        dim = self.ensemble[0].dimension
+        cov_array = np.zeros((dim,n))
+        if dim == 1:
+            name=self.ensemble[0].names[0]
+            self.eigen_values = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.eigen_vectors = np.eye(1)
+        else:	 
+            for i,n in enumerate(self.ensemble[0].names):
+                for j in range(n): cov_array[i,j] = pool[j][n]
+            covariance = np.cov(cov_array)
+            self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
+
+    def get_sample(self,old):
+        out = old.copy()
+        # pick a random eigenvector
+        i = np.random.randint(old.dimension)
+        jumpsize = sqrt(fabs(self.eigen_values[i]))*np.random.normal(0,1)
+        for k,n in enumerate(out.names):
+            out[n]+=jumpsize*self.eigen_vectors[k,i]
+        return out
+
+
 class DefaultProposalCycle(ProposalCycle):
+    """
+    A default proposal cycle that uses the Walk, Stretch, Differential Evolution
+    and Eigenvector proposals
+    """
     def __init__(self,*args,**kwargs):
-        proposals = [EnsembleWalk(), EnsembleStretch(), DifferentialEvolution()]
-        weights = [1.0,1.0,1.0]
+        proposals = [EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
+        weights = [1.0,1.0,1.0,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 def autocorrelation(x):
