@@ -46,12 +46,22 @@ class CPNest(object):
             each.start()
         self.NS.nested_sampling_loop(self.sampler_lock,self.queue,self.port,self.authkey)
         for each in self.process_pool:
-            each.join(5)
+            each.join(1)
 
         self.nested_samples = np.genfromtxt(self.NS.outfilename,names=True)
         self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
         np.savetxt(os.path.join(self.output,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
-        
+        if self.verbose>1: self.plot()
+
+    def plot(self):
+            pos = self.posterior_samples
+            from . import plot
+            for n in pos.dtype.names:
+                plot.plot_hist(pos[n].ravel(),name=n,filename='posterior_{0}.png'.format(n))
+            for n in self.nested_samples.dtype.names:
+                plot.plot_chain(self.nested_samples[n],name=n,filename='nschain_{0}.png'.format(n))
+            #print pos.view(np.array)
+            #plot.plot_corner(pos.view(np.array).T,labels=pos.dtype.names,filename='corner.png')
         
 
 
@@ -71,5 +81,5 @@ class CPNest(object):
             self.process_pool.append(p)
         for each in self.process_pool:
             each.start()
-
+        
 
