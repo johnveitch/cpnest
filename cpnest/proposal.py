@@ -16,6 +16,7 @@ class Proposal(object):
     def get_sample(self,old):
         """
         Returns a new proposed sample given the old one.
+        Must be implemented by user
         """
         pass
 
@@ -34,6 +35,15 @@ class ProposalCycle(EnsembleProposal):
     """
     A proposal that cycles through a list of
     jumps.
+
+    Initialisation arguments:
+    
+    proposals : A list of jump proposals
+    weights   : Weights for each type of jump
+    
+    Optional arguments:
+    cyclelength : length of the propsal cycle
+
     """
     idx=0 # index in the cycle
     N=0   # numer of proposals in the cycle
@@ -58,6 +68,7 @@ class ProposalCycle(EnsembleProposal):
         return new
 
     def set_ensemble(self,ensemble):
+        # Calls set_ensemble on each proposal that is of ensemble type
         self.ensemble=ensemble
         for p in self.proposals:
             if isinstance(p,EnsembleProposal):
@@ -124,6 +135,10 @@ class EnsembleEigenVector(EnsembleProposal):
     eigen_values=None
     eigen_vectors=None
     def set_ensemble(self,ensemble):
+        """
+        Over-ride default set_ensemble so that the
+        eigenvectors are recomputed when it is updated
+        """
         super(EnsembleEigenVector,self).set_ensemble(ensemble)
         self.update_eigenvectors()
 
