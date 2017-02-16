@@ -64,17 +64,28 @@ class ProposalCycle(EnsembleProposal):
                 p.set_ensemble(self.ensemble)
 
 class EnsembleWalk(EnsembleProposal):
+    """
+    The Ensemble "walk" move from Goodman & Weare
+    http://dx.doi.org/10.2140/camcos.2010.5.65
+
+    Draws a step with the sample covariance of the points
+    in the ensemble.
+    """
     log_J = 0.0 # Symmetric proposal
+    Npoints = 3
     def get_sample(self,old):
-        Nsubset = 3
-        subset = sample(self.ensemble,3)
-        center_of_mass = reduce(type(old).__add__,subset)/float(Nsubset)
+        subset = sample(self.ensemble,self.Npoints)
+        center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
         for x in subset:
             out += (x - center_of_mass)*gauss(0,1)
         return out
 
 class EnsembleStretch(EnsembleProposal):
+    """
+    The Ensemble "stretch" move from Goodman & Weare
+    http://dx.doi.org/10.2140/camcos.2010.5.65
+    """
     def get_sample(self,old):
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
@@ -88,6 +99,15 @@ class EnsembleStretch(EnsembleProposal):
         return out
 
 class DifferentialEvolution(EnsembleProposal):
+    """
+    Differential evolution move:
+    Draws a step by taking the difference vector between two points in the
+    ensemble and adding it to the current point.
+    See e.g. Exercise 30.12, p.398 in MacKay's book
+    http://www.inference.phy.cam.ac.uk/mackay/itila/
+
+    We add a small perturbation around the exact step
+    """
     log_J = 0.0 # Symmetric jump
     def get_sample(self,old):
         a,b = sample(self.ensemble,2)
@@ -96,6 +116,10 @@ class DifferentialEvolution(EnsembleProposal):
         return out
 
 class EnsembleEigenVector(EnsembleProposal):
+    """
+    A jump along a randomly-chosen eigenvector
+    of the covariance matrix of the ensemble
+    """
     log_J = 0.0
     eigen_values=None
     eigen_vectors=None
@@ -138,6 +162,10 @@ class DefaultProposalCycle(ProposalCycle):
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 def autocorrelation(x):
+    """
+    Compute the normalised autocorrelation
+    of array x
+    """
     N = len(x)
     x -= x.mean()
     s = np.fft.fft(x, N*2-1)
