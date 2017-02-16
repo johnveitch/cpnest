@@ -128,6 +128,10 @@ class EnsembleEigenVector(EnsembleProposal):
         self.update_eigenvectors()
 
     def update_eigenvectors(self):
+        """
+        Recompute the eigenvectors of the covariance matrix
+        from the ensemble
+        """
         n=len(self.ensemble)
         dim = self.ensemble[0].dimension
         cov_array = np.zeros((dim,n))
