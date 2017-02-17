@@ -47,16 +47,28 @@ bounds = [[0., 1e8]]
 mean = 0.
 sigma = 1.0
 
-model = GaussianModel(mean=mean, sigma=sigma, bounds=bounds)
-work = cpnest.CPNest(model,verbose=0,Nthreads=3,Nlive=512,maxmcmc=2000)
-work.run()
+proposals = ['EnsembleWalk']
+proposalweights = [1.0]
 
-tolerance = 2.0*np.sqrt(work.NS.state.info/work.NS.Nlive)
-print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
-print('Analytic logZ {0}'.format(model.analytic_log_Z))
-print('Estimated logZ {0}'.format(work.NS.logZ))
-print('KL divergence {0:0.3f}'.format(model.KLdiv))
+Nlive = 512
+model = GaussianModel(mean=mean, sigma=sigma, bounds=bounds)
+
+logZs = []
+logZratio = []
+errs = []
+
+for i in range(20):
+  work = cpnest.CPNest(model,verbose=0,Nthreads=3,Nlive=Nlive,maxmcmc=2000,poolsize=Nlive,proposals=proposals, proposalweights=proposalweights)
+  work.run()
+
+  errs.append(np.sqrt(work.NS.state.info/work.NS.Nlive))
+  logZs.append(work.NS.logZ)
+  logZratio.append(work.NS.logZ-model.analytic_log_Z)
+  #print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
+  #print('Analytic logZ {0}'.format(model.analytic_log_Z))
+  #print('Estimated logZ {0}'.format(work.NS.logZ))
+  #print('KL divergence {0:0.3f}'.format(model.KLdiv))
 
 # get posterior samples
-pos = work.posterior_samples['x']
+#pos = work.posterior_samples['x']
 
