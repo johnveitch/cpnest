@@ -42,3 +42,6 @@ build
 dist
 .eggs
 *.egg-info
+
+# Vim temp files
+*.swp
