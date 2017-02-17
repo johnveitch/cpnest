@@ -36,7 +36,6 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.Nmcmc_exact = float(maxmcmc)
-        self.cache = deque(maxlen=maxmcmc)
         self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
@@ -65,14 +64,15 @@ class Sampler(object):
         self.proposals.set_ensemble(self.evolution_points)
         self.initialised=True
 
-    def estimate_nmcmc(self, safety=5, tau = 1000):
+    def estimate_nmcmc(self, safety=5, tau=None):
         """
         Estimate autocorrelation length of chain using acceptance fraction
         ACL = (2/acc) - 1
         multiplied by a safety margin of 5
-        Uses moving average with decay time tau iterations
+        Uses moving average with decay time tau iterations (default: self.poolsize)
         Taken from W. Farr's github.com/farr/Ensemble.jl
         """
+        if tau is None: tau = self.poolsize
         if self.acceptance==0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
@@ -131,7 +131,6 @@ class Sampler(object):
             else:
                 rejected+=1
 
-            self.cache.append(np.array(oldparam.values))
             jumps+=1
             if jumps==10*self.maxmcmc:
               print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
@@ -139,30 +138,6 @@ class Sampler(object):
         self.estimate_nmcmc()
         return (float(accepted)/float(rejected+accepted),jumps,oldparam)
 
-    def autocorrelation(self):
-        """
-        estimates the autocorrelation length of the mcmc chain from the cached samples
-        """
-        try:
-            ACLs = []
-            cov_array = np.array(self.cache).T
-            N =  cov_array.shape[1]
-            for i,n in enumerate(self.evolution_points[0].names):
-                ACF = proposal.autocorrelation(cov_array[i,:])
-                ACL = np.min(np.where((ACF > -2./np.sqrt(N)) & (ACF < 2./np.sqrt(N)))[0])
-                if not(np.isnan(ACL)):
-                    ACLs.append(ACL)
-                    if self.verbose: sys.stderr.write("process {0!s} --> cache size: {1:d} autocorrelation length {2!s} = {3:.1f} mean = {4:g} standard deviation = {5:g}\n".format(os.getpid(), len(self.cache), n, ACLs[-1], np.mean(cov_array[:,i]), np.std(cov_array[:,i])))
-            self.Nmcmc =int((np.max(ACLs)))
-            if self.Nmcmc < 2: self.Nmcmc = 2
-            if self.Nmcmc > self.maxmcmc:
-                sys.stderr.write("Warning ACL --> {0:d}!\n".format(self.Nmcmc))
-                self.Nmcmc = self.maxmcmc
-        except:
-            sys.stderr.write("Warning ACL failed! setting {0:d}!\n".format(self.maxmcmc))
-            self.Nmcmc = self.maxmcmc
-        if len(self.cache)==5*self.maxmcmc:
-            self.cache = deque(maxlen=5*self.maxmcmc)
 
 if __name__=="__main__":
     pass

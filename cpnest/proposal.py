@@ -180,14 +180,3 @@ class DefaultProposalCycle(ProposalCycle):
         weights = [1.0,1.0,1.0,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
-def autocorrelation(x):
-    """
-    Compute the normalised autocorrelation
-    of array x
-    """
-    N = len(x)
-    x -= x.mean()
-    s = np.fft.fft(x, N*2-1)
-    result = np.real(np.fft.ifft(s * np.conjugate(s), N*2-1))
-    return result[:N]/result[0]
-
