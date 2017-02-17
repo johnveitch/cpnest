@@ -134,6 +134,7 @@ class NestedSampler(object):
         self.verbose = verbose
         self.accepted = 0
         self.rejected = 1
+        self.queue_counter = 0
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
@@ -143,8 +144,6 @@ class NestedSampler(object):
         self.worst = 0
         self.logLmax = -np.inf
         self.iteration = 0
-        self.nextID = 0
-        self.samples_cache = {}
         self.nested_samples=[]
         self.logZ=None
         self.state = _NSintegralState(self.Nlive)
@@ -205,23 +204,19 @@ class NestedSampler(object):
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         self.output_sample(self.params[self.worst])
         if self.verbose:
-          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f} cache: {9:d}"\
+          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f}"\
             .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
-              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax,\
-              len(self.samples_cache)))
+              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
         self.iteration+=1
         
         # Replace the point we just consumed with the next acceptable one
         while(True):
-          while not(self.nextID in self.samples_cache):
-            ID,acceptance,jumps,sample = queue[self.iteration%self.Nthreads].get()
-            self.samples_cache[ID] = acceptance,jumps,sample
-          self.acceptance,self.jumps,proposed = self.samples_cache.pop(self.nextID)
-          self.nextID += 1
-          if proposed.logL>self.logLmin.value:
-            # replace worst point with new one
-            self.params[self.worst]=proposed
-            break
+            self.acceptance,self.jumps,proposed = queue[self.queue_counter%self.Nthreads].get()
+            self.queue_counter += 1
+            if proposed.logL>self.logLmin.value:
+                # replace worst point with new one
+                self.params[self.worst]=proposed
+                break
 
 
     def get_worst_live_point(self):
@@ -241,14 +236,10 @@ class NestedSampler(object):
         self.Nthreads = len(queue)
         for i in range(self.Nlive):
             while True:
-                while not(self.nextID in self.samples_cache):
-                    jj = i%self.Nthreads
-                    print("getting from queue {0:d}".format(jj))
-                    ID,acceptance,jumps,param = queue[i%self.Nthreads].get()
-                    self.samples_cache[ID] = acceptance,jumps,param
-                self.acceptance,self.jumps,self.params[i] = self.samples_cache.pop(self.nextID)
-                self.nextID +=1
-                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
+                self.acceptance,self.jumps,self.params[i] = queue[self.queue_counter%self.Nthreads].get()
+                self.queue_counter += 1
+                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
+                    break
             if self.verbose:
               print("sampling the prior --> {0:.3f} % complete".format((100.0*float(i+1)/float(self.Nlive))),end="\r")
         if self.verbose: print("\n")
