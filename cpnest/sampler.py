@@ -5,7 +5,11 @@ from math import log
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
+<<<<<<< HEAD
 from random import random,randrange
+=======
+from random import random
+>>>>>>> master
 
 from . import parameter
 from . import proposal
@@ -35,14 +39,24 @@ class Sampler(object):
         self.user = usermodel
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
+<<<<<<< HEAD
         self.Nmcmc_exact = float(maxmcmc)
+=======
+        self.cache = deque(maxlen=maxmcmc)
+>>>>>>> master
         self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
+<<<<<<< HEAD
         self.inParam = self.user.new_point()
         self.dimension = self.inParam.dimension
         self.acceptance=0.0
+=======
+        self.inParam = parameter.LivePoint(self.user.names)
+        self.param = parameter.LivePoint(self.user.names)
+        self.dimension = self.param.dimension
+>>>>>>> master
         self.initialised=False
         
     def reset(self):
@@ -56,7 +70,11 @@ class Sampler(object):
           self.evolution_points.append(p)
         if self.verbose: sys.stderr.write("\n")
         self.proposals.set_ensemble(self.evolution_points)
+<<<<<<< HEAD
         for _ in range(len(self.evolution_points)):
+=======
+        for _ in range(self.poolsize):
+>>>>>>> master
           s = self.evolution_points.popleft()
           acceptance,jumps,s = self.metropolis_hastings(s,-np.inf,self.Nmcmc)
           self.evolution_points.append(s)
@@ -107,7 +125,6 @@ class Sampler(object):
             self.evolution_points.append(outParam.copy())
             queue.put((id,acceptance,jumps,outParam))
             if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.01:
-                #self.autocorrelation()
                 self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
