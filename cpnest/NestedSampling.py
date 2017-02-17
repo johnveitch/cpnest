@@ -134,6 +134,7 @@ class NestedSampler(object):
         self.verbose = verbose
         self.accepted = 0
         self.rejected = 1
+        self.queue_counter = 0
         self.Nlive = Nlive
         self.Nmcmc = maxmcmc
         self.maxmcmc = maxmcmc
@@ -143,8 +144,6 @@ class NestedSampler(object):
         self.worst = 0
         self.logLmax = -np.inf
         self.iteration = 0
-        self.nextID = 0
-        self.samples_cache = {}
         self.nested_samples=[]
         self.logZ=None
         self.state = _NSintegralState(self.Nlive)
@@ -154,7 +153,6 @@ class NestedSampler(object):
         header.write('\t'.join(self.model.names))
         header.write('logL\n')
         header.close()
-        self.jobID = Value(c_int,0,lock=Lock())
         self.logLmin = Value(c_double,-np.inf,lock=Lock())
 
     def setup_output(self,output):
@@ -195,9 +193,9 @@ class NestedSampler(object):
             if j!= self.worst:
                 return j
 
-    def consume_sample(self, producer_lock, queue, port, authkey):
+    def consume_sample(self, queue, port, authkey):
         """
-        consumes a sample from the shared queue and updates the evidence
+        consumes a sample from the shared queues and updates the evidence
         """
         # Increment the state of the evidence integration
         logLmin=self.get_worst_live_point()
@@ -205,23 +203,19 @@ class NestedSampler(object):
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         self.output_sample(self.params[self.worst])
         if self.verbose:
-          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f} cache: {9:d}"\
+          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f}"\
             .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
-              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax,\
-              len(self.samples_cache)))
+              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
         self.iteration+=1
         
         # Replace the point we just consumed with the next acceptable one
         while(True):
-          while not(self.nextID in self.samples_cache):
-            ID,acceptance,jumps,sample = queue.get()
-            self.samples_cache[ID] = acceptance,jumps,sample
-          self.acceptance,self.jumps,proposed = self.samples_cache.pop(self.nextID)
-          self.nextID += 1
-          if proposed.logL>self.logLmin.value:
-            # replace worst point with new one
-            self.params[self.worst]=proposed
-            break
+            self.acceptance,self.jumps,proposed = queue[self.queue_counter%self.Nthreads].get()
+            self.queue_counter += 1
+            if proposed.logL>self.logLmin.value:
+                # replace worst point with new one
+                self.params[self.worst]=proposed
+                break
 
 
     def get_worst_live_point(self):
@@ -234,18 +228,17 @@ class NestedSampler(object):
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, producer_lock, queue, port, authkey):
+    def nested_sampling_loop(self, queue, port, authkey):
         """
         main nested sampling loop
         """
+        self.Nthreads = len(queue)
         for i in range(self.Nlive):
             while True:
-                while not(self.nextID in self.samples_cache):
-                    ID,acceptance,jumps,param = queue.get()
-                    self.samples_cache[ID] = acceptance,jumps,param
-                self.acceptance,self.jumps,self.params[i] = self.samples_cache.pop(self.nextID)
-                self.nextID +=1
-                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf: break
+                self.acceptance,self.jumps,self.params[i] = queue[self.queue_counter%self.Nthreads].get()
+                self.queue_counter += 1
+                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
+                    break
             if self.verbose:
               print("sampling the prior --> {0:.3f} % complete".format((100.0*float(i+1)/float(self.Nlive))),end="\r")
         if self.verbose: print("\n")
@@ -261,14 +254,15 @@ class NestedSampler(object):
         logLmin = self.get_worst_live_point()
 
         while self.condition > self.tolerance:
-            self.consume_sample(producer_lock, queue, port, authkey)
+            self.consume_sample(queue, port, authkey)
 
 	# Signal worker threads to exit
         self.logLmin.value = np.inf
 
         # Flush the queue so subsequent join can succeed
-        while not queue.empty():
-            _ = queue.get()
+        for j in range(self.Nthreads):
+            while not queue[j].empty():
+                _ = queue[j].get()
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
@@ -290,9 +284,6 @@ class NestedSampler(object):
           self.state.plot(self.outfilename+'.png')
         
         return self.state.logZ
-
-
-
 
 def parse_to_list(option, opt, value, parser):
     """
