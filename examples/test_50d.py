@@ -10,7 +10,7 @@ class GaussianModel(cpnest.model.Model):
         self.dim=dim
         self.names=['{0}'.format(i) for i in range(self.dim)]
         self.bounds=[[-10,10] for _ in range(self.dim)]
-        self.analytic_log_Z=0.0 - sum([np.log(bounds[i][1]-bounds[i][0]) for i in range(self.dim)])
+        self.analytic_log_Z=0.0 - sum([np.log(self.bounds[i][1]-self.bounds[i][0]) for i in range(self.dim)])
 
     def log_likelihood(self,p):
         return -0.5*(sum(x**2 for x in p.values)) - 0.5*self.dim*np.log(2.0*np.pi)
