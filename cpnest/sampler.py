@@ -36,7 +36,8 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.Nmcmc_exact = float(maxmcmc)
-        self.proposals = proposal.DefaultProposalCycle()
+        #self.proposals = proposal.DefaultProposalCycle()
+        self.proposals = proposal.ProposalCycle([proposal.EnsembleWalk()], weights=[1.0]) # hardcode proposal to use walk
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
