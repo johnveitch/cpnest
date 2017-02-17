@@ -197,7 +197,7 @@ class NestedSampler(object):
 
     def consume_sample(self, producer_lock, queue, port, authkey):
         """
-        consumes a sample from the shared queue and updates the evidence
+        consumes a sample from the shared queues and updates the evidence
         """
         # Increment the state of the evidence integration
         logLmin=self.get_worst_live_point()
@@ -214,7 +214,7 @@ class NestedSampler(object):
         # Replace the point we just consumed with the next acceptable one
         while(True):
           while not(self.nextID in self.samples_cache):
-            ID,acceptance,jumps,sample = queue.get()
+            ID,acceptance,jumps,sample = queue[self.iteration%self.Nthreads].get()
             self.samples_cache[ID] = acceptance,jumps,sample
           self.acceptance,self.jumps,proposed = self.samples_cache.pop(self.nextID)
           self.nextID += 1
@@ -238,10 +238,13 @@ class NestedSampler(object):
         """
         main nested sampling loop
         """
+        self.Nthreads = len(queue)
         for i in range(self.Nlive):
             while True:
                 while not(self.nextID in self.samples_cache):
-                    ID,acceptance,jumps,param = queue.get()
+                    jj = i%self.Nthreads
+                    print("getting from queue {0:d}".format(jj))
+                    ID,acceptance,jumps,param = queue[i%self.Nthreads].get()
                     self.samples_cache[ID] = acceptance,jumps,param
                 self.acceptance,self.jumps,self.params[i] = self.samples_cache.pop(self.nextID)
                 self.nextID +=1
@@ -267,8 +270,9 @@ class NestedSampler(object):
         self.logLmin.value = np.inf
 
         # Flush the queue so subsequent join can succeed
-        while not queue.empty():
-            _ = queue.get()
+        for j in range(self.Nthreads):
+            while not queue[j].empty():
+                _ = queue[j].get()
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
@@ -290,9 +294,6 @@ class NestedSampler(object):
           self.state.plot(self.outfilename+'.png')
         
         return self.state.logZ
-
-
-
 
 def parse_to_list(option, opt, value, parser):
     """
