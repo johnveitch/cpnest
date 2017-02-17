@@ -31,13 +31,49 @@ class Sampler(object):
     default: 100
     
     """
-    def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100):
+    def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100,proposals=None,proposalweights=None):
         self.user = usermodel
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.Nmcmc_exact = float(maxmcmc)
-        #self.proposals = proposal.DefaultProposalCycle()
-        self.proposals = proposal.ProposalCycle([proposal.EnsembleWalk()], weights=[1.0]) # hardcode proposal to use walk
+        
+        inputprops = []
+        inputweights = []
+        if proposals is not None:
+          if not isinstance(proposals, list):
+            sys.stderr.write("Warning, proposals must be a list. Using default proposals instead\n".format(os.getpid()))
+            proposals = None
+          else:
+            for prop in proposals:
+              if prop in proposal.proposalnames:
+                if prop == 'EnsembleWalk':
+                  inputprops.append(proposal.EnsembleWalk())
+                elif prop == 'EnsembleStretch':
+                  inputprops.append(proposal.EnsembleStretch())
+                elif prop == 'EnsembleEigenVector':
+                  inputprops.append(EnsembleEigenVector())
+                elif prop == 'DifferentialEvolution':
+                  inputprops.append(proposal.DifferentialEvolution())
+
+        if proposalweights is not None and len(inputprops) > 0:
+          if not isinstance(proposals, list):
+            sys.stderr.write("Warning, proposals must be a list. Setting all weights as equal instead.\n".format(os.getpid()))
+            inputweights = [1.0 for i in range(len(inputprops))]
+          else:
+            if len(inputprops) != len(proposalweights):
+              sys.stderr.write("Warning, number of proposals and weights must be equal. Setting all weights as equal instead.\n".format(os.getpid()))
+              inputweights = [1.0 for i in range(len(inputprops))]
+            else:
+              inputweights = proposalweights
+              for iw in inputweights:
+                if iw < 0. and not np.isfinite(iw):
+                  sys.stderr.write("Error... problem with proposal weights.\n".format(os.getpid()))
+                  sys.exit(1)
+
+        if proposals is None:
+          self.proposals = proposal.DefaultProposalCycle()
+        else:
+          self.proposals = proposal.ProposalCycle(inputprops, weights=inputweights)
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose

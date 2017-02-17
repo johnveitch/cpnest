@@ -6,6 +6,8 @@ from abc import ABCMeta,abstractmethod
 import random
 from random import sample,gauss,randrange,uniform
 
+proposalnames = ['EnsembleWalk', 'EnsembleStretch', 'EnsembleEigenVector', 'DifferentialEvolution']
+
 class Proposal(object):
     """
     Base class for jump proposals
