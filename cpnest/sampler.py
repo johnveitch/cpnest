@@ -101,10 +101,10 @@ class Sampler(object):
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
             # If we bailed out then flag point as unusable
+            self.evolution_points.append(outParam.copy())
             if acceptance==0.0:
                 outParam.logL=-np.inf
             # Put sample back in the stack
-            self.evolution_points.append(outParam.copy())
             queue.put((id,acceptance,jumps,outParam))
             if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.01:
                 self.proposals.set_ensemble(self.evolution_points)
