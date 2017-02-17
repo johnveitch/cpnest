@@ -5,7 +5,7 @@ from math import log
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
-from random import random
+from random import random,randrange
 
 from . import parameter
 from . import proposal
@@ -40,16 +40,15 @@ class Sampler(object):
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
-        self.inParam = parameter.LivePoint(self.user.names)
-        self.param = parameter.LivePoint(self.user.names)
-        self.dimension = self.param.dimension
+        self.inParam = self.user.new_point()
+        self.dimension = self.inParam.dimension
         self.acceptance=0.0
         self.initialised=False
         
     def reset(self):
         for n in range(self.poolsize):
           while True:
-            if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.3f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
+            if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
             p = self.user.new_point()
             p.logP = self.user.log_prior(p)
             if np.isfinite(p.logP): break
@@ -57,7 +56,7 @@ class Sampler(object):
           self.evolution_points.append(p)
         if self.verbose: sys.stderr.write("\n")
         self.proposals.set_ensemble(self.evolution_points)
-        for _ in range(self.poolsize):
+        for _ in range(len(self.evolution_points)):
           s = self.evolution_points.popleft()
           acceptance,jumps,s = self.metropolis_hastings(s,-np.inf,self.Nmcmc)
           self.evolution_points.append(s)
@@ -89,8 +88,10 @@ class Sampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
         self.counter=0
-
         while(1):
+            # Pick a random point from the ensemble to start with
+            # Pop it out the stack to prevent cloning
+            self.inParam = self.evolution_points.popleft()
             IDcounter.get_lock().acquire()
             job_id = IDcounter.get_obj()
             id = job_id.value
@@ -99,6 +100,10 @@ class Sampler(object):
             if logLmin.value==np.inf:
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
+            # If we bailed out then flag point as unusable
+            if acceptance==0.0:
+                outParam.logL=-np.inf
+            # Put sample back in the stack
             self.evolution_points.append(outParam.copy())
             queue.put((id,acceptance,jumps,outParam))
             if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.01:
@@ -117,7 +122,7 @@ class Sampler(object):
         jumps = 0
         oldparam=inParam
         logp_old = self.user.log_prior(oldparam)
-        while (jumps < nsteps or accepted==0):
+        while (jumps < nsteps):
             newparam = self.proposals.get_sample(oldparam.copy())
             newparam.logP = self.user.log_prior(newparam)
             if newparam.logP-logp_old + self.proposals.log_J > log(random()):
