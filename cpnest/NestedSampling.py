@@ -153,7 +153,6 @@ class NestedSampler(object):
         header.write('\t'.join(self.model.names))
         header.write('logL\n')
         header.close()
-        self.jobID = Value(c_int,0,lock=Lock())
         self.logLmin = Value(c_double,-np.inf,lock=Lock())
 
     def setup_output(self,output):
@@ -194,7 +193,7 @@ class NestedSampler(object):
             if j!= self.worst:
                 return j
 
-    def consume_sample(self, producer_lock, queue, port, authkey):
+    def consume_sample(self, queue, port, authkey):
         """
         consumes a sample from the shared queues and updates the evidence
         """
@@ -229,7 +228,7 @@ class NestedSampler(object):
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, producer_lock, queue, port, authkey):
+    def nested_sampling_loop(self, queue, port, authkey):
         """
         main nested sampling loop
         """
@@ -255,7 +254,7 @@ class NestedSampler(object):
         logLmin = self.get_worst_live_point()
 
         while self.condition > self.tolerance:
-            self.consume_sample(producer_lock, queue, port, authkey)
+            self.consume_sample(queue, port, authkey)
 
 	# Signal worker threads to exit
         self.logLmin.value = np.inf

@@ -79,7 +79,7 @@ class Sampler(object):
         self.Nmcmc = max(safety,min(self.maxmcmc, int(round(self.Nmcmc_exact))))
         return self.Nmcmc
 
-    def produce_sample(self, consumer_lock, queue, IDcounter, logLmin, seed, ip, port, authkey):
+    def produce_sample(self, queue, logLmin, seed, ip, port, authkey):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
@@ -92,11 +92,6 @@ class Sampler(object):
             # Pick a random point from the ensemble to start with
             # Pop it out the stack to prevent cloning
             self.inParam = self.evolution_points.popleft()
-#            IDcounter.get_lock().acquire()
-#            job_id = IDcounter.get_obj()
-#            id = job_id.value
-#            job_id.value+=1
-#            IDcounter.get_lock().release()
             if logLmin.value==np.inf:
                 break
             acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)

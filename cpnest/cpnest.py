@@ -27,8 +27,6 @@ class CPNest(object):
         self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
         self.process_pool = []
-        self.ns_lock = mp.Lock()
-        self.sampler_lock = [mp.Lock() for _ in range(Nthreads)]
         self.queue = [mp.Queue() for _ in range(Nthreads)]
         self.port=5555
         self.authkey = "12345"
@@ -40,14 +38,14 @@ class CPNest(object):
         import os
         from .nest2pos import draw_posterior_many
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.Evolver.produce_sample, args=(self.ns_lock, self.queue[i], self.NS.jobID, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            p = mp.Process(target=self.Evolver.produce_sample, args=(self.queue[i], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
         #for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
         #    np = mp.Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
         #    self.process_pool.append(np)
         for each in self.process_pool:
             each.start()
-        self.NS.nested_sampling_loop(self.sampler_lock,self.queue,self.port,self.authkey)
+        self.NS.nested_sampling_loop(self.queue,self.port,self.authkey)
         for each in self.process_pool:
             each.join(1)
 
