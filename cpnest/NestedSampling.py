@@ -184,15 +184,6 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def _select_live(self):
-        """
-        select a live point
-        """
-        while True:
-            j = np.random.randint(self.Nlive)
-            if j!= self.worst:
-                return j
-
     def consume_sample(self, queue, port, authkey):
         """
         consumes a sample from the shared queues and updates the evidence
@@ -284,12 +275,3 @@ class NestedSampler(object):
           self.state.plot(self.outfilename+'.png')
         
         return self.state.logZ
-
-def parse_to_list(option, opt, value, parser):
-    """
-    parse a comma separated string into a list
-    """
-    setattr(parser.values, option.dest, value.split(','))
-
-if __name__=="__main__":
-    pass

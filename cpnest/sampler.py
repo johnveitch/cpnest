@@ -3,8 +3,6 @@ import os
 import numpy as np
 from math import log
 from collections import deque
-import multiprocessing as mp
-from multiprocessing import Process, Lock, Queue
 from random import random,randrange
 
 from . import parameter
@@ -38,10 +36,8 @@ class Sampler(object):
         self.Nmcmc_exact = float(maxmcmc)
         self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
-        self.evolution_points = deque(maxlen=self.poolsize)
+        self.evolution_points = deque(maxlen=self.poolsize + 1) # +1 for the point to evolve
         self.verbose=verbose
-        self.inParam = self.user.new_point()
-        self.dimension = self.inParam.dimension
         self.acceptance=0.0
         self.initialised=False
         
@@ -91,10 +87,10 @@ class Sampler(object):
         while(1):
             # Pick a random point from the ensemble to start with
             # Pop it out the stack to prevent cloning
-            self.inParam = self.evolution_points.popleft()
+            param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
-            acceptance,jumps,outParam = self.metropolis_hastings(self.inParam,logLmin.value,self.Nmcmc)
+            acceptance,jumps,outParam = self.metropolis_hastings(param,logLmin.value,self.Nmcmc)
             # If we bailed out then flag point as unusable
             self.evolution_points.append(outParam.copy())
             if acceptance==0.0:
@@ -136,7 +132,3 @@ class Sampler(object):
         self.acceptance = float(accepted)/float(jumps)
         self.estimate_nmcmc()
         return (float(accepted)/float(rejected+accepted),jumps,oldparam)
-
-
-if __name__=="__main__":
-    pass
