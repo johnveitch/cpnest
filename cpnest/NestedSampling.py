@@ -185,7 +185,7 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self, queue, port, authkey):
+    def consume_sample(self, queues, port, authkey):
         """
         consumes a sample from the shared queues and updates the evidence
         """
@@ -198,8 +198,8 @@ class NestedSampler(object):
         
         # Replace the point we just consumed with the next acceptable one
         while(True):
-            self.acceptance,self.jumps,proposed = queue[self.queue_counter%self.Nthreads].get()
-            self.queue_counter += 1
+            self.acceptance,self.jumps,proposed = queues[self.queue_counter].get()
+            self.queue_counter = (self.queue_counter + 1) % len(queues)
             if proposed.logL>self.logLmin.value:
                 # replace worst point with new one
                 self.params[self.worst]=proposed
@@ -219,15 +219,14 @@ class NestedSampler(object):
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, queue, port, authkey):
+    def nested_sampling_loop(self, queues, port, authkey):
         """
         main nested sampling loop
         """
-        self.Nthreads = len(queue)
         for i in range(self.Nlive):
             while True:
-                self.acceptance,self.jumps,self.params[i] = queue[self.queue_counter%self.Nthreads].get()
-                self.queue_counter += 1
+                self.acceptance,self.jumps,self.params[i] = queues[self.queue_counter].get()
+                self.queue_counter = (self.queue_counter + 1) % len(queues)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
                     break
             if self.verbose:
@@ -245,13 +244,13 @@ class NestedSampler(object):
         logLmin = self.get_worst_live_point()
 
         while self.condition > self.tolerance:
-            self.consume_sample(queue, port, authkey)
+            self.consume_sample(queues, port, authkey)
 
 	# Signal worker threads to exit
         self.logLmin.value = np.inf
 
         # Flush the queue so subsequent join can succeed
-        for q in queue:
+        for q in queues:
             while True:
               try:
                 _ = q.get_nowait()

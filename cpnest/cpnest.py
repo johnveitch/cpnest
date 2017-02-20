@@ -8,14 +8,27 @@ import time
 class CPNest(object):
     """
     Class to control CPNest sampler
+    cp = CPNest(usermodel,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balanced_sampling = True)
+    
+    Input variables:
+    usermodel : an object inheriting cpnest.model.Model that defines the user's problem
+    Nlive : Number of live points (100)
+    output : output directory (./)
+    verbose: Verbosity, 0=silent, 1=progress, 2=diagnostic
+    seed: random seed
+    maxmcmc: maximum MCMC points for sampling chains (100)
+    Nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
+    balance_samplers: If False, more samples will come from threads sampling "fast" parts of parameter space.
+                      This may cause bias if parts of your parameter space are more expensive than others.
+                      Default: True    
     """
-    def __init__(self,userclass,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None):
+    def __init__(self,usermodel,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balance_samplers = True):
         if Nthreads is None:
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
         from .sampler import Sampler
         from .NestedSampling import NestedSampler
-        self.user=userclass
+        self.user=usermodel
         self.verbose=verbose
         self.output=output
         if seed is None: self.seed=1234
@@ -27,7 +40,10 @@ class CPNest(object):
         self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
         self.process_pool = []
-        self.queue = [mp.Queue(maxsize=1000) for _ in range(Nthreads)]
+        if balance_samplers:
+          self.queues = [mp.Queue(maxsize=1000) for _ in range(Nthreads)]
+        else:
+          self.queues = [mp.Queue(maxsize=1000)]
         self.port=5555
         self.authkey = "12345"
         self.ip = "0.0.0.0"
@@ -38,14 +54,14 @@ class CPNest(object):
         import os
         from .nest2pos import draw_posterior_many
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.Evolver.produce_sample, args=(self.queue[i], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            p = mp.Process(target=self.Evolver.produce_sample, args=(self.queues[i%len(self.queues)], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
         #for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
         #    np = mp.Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
         #    self.process_pool.append(np)
         for each in self.process_pool:
             each.start()
-        self.NS.nested_sampling_loop(self.queue,self.port,self.authkey)
+        self.NS.nested_sampling_loop(self.queues,self.port,self.authkey)
         for each in self.process_pool:
             each.join(1)
 
