@@ -27,7 +27,7 @@ class CPNest(object):
         self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
         self.process_pool = []
-        self.queue = [mp.Queue() for _ in range(Nthreads)]
+        self.queue = [mp.Queue(maxsize=1000) for _ in range(Nthreads)]
         self.port=5555
         self.authkey = "12345"
         self.ip = "0.0.0.0"
