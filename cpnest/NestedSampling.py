@@ -152,7 +152,7 @@ class NestedSampler(object):
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
         header = open(os.path.join(output,'header.txt'),'w')
         header.write('\t'.join(self.model.names))
-        header.write('logL\n')
+        header.write('\tlogL\n')
         header.close()
         self.logLmin = Value(c_double,-np.inf,lock=Lock())
 
@@ -205,7 +205,7 @@ class NestedSampler(object):
                 self.params[self.worst]=proposed
                 break
         if self.verbose:
-          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f}"\
+          print("{0:d}: n:{1:4d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f}"\
             .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
               logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
 
