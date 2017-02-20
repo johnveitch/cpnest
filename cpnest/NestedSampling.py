@@ -8,7 +8,10 @@ import pickle
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
-from Queue import Empty
+try:
+  from queue import Empty
+except ImportError:
+  from Queue import Empty # For python 2 compatibility
 from multiprocessing.sharedctypes import Value
 from . import parameter
 from ctypes import c_int, c_double
