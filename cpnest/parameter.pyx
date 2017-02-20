@@ -16,7 +16,6 @@ cdef class LivePoint:
         self.logP = -inf
         self.names = names
         self.dimension = len(names)
-        cdef unsigned int i
         if d is not None:
           self.values = array.array('d',d)
         else:
@@ -44,49 +43,57 @@ cdef class LivePoint:
     def __add__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
         result=LivePoint(self.names)
-        for n in self.names:
-            result[n]=self[n]+other[n]
+        cdef int i
+        for i in range(self.dimension):
+          result.values[i]=self.values[i]+other.values[i]
         return result
 
     def __iadd__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
-        for n in self.names:
-            self[n]=self[n]+other[n]
+        cdef int i
+        for i in range(self.dimension):
+            self.values[i]+=other.values[i]
         return self
     
     def __sub__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
         result = LivePoint(self.names)
-        for n in self.names:
-            result[n]=self[n]-other[n]
+        cdef i
+        for i in range(self.dimension):
+            result.values[i]=self.values[i]-other.values[i]
         return result
 
     def __isub__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
-        for n in self.names:
-            self[n]=self[n]-other[n]
+        cdef int i
+        for i in range(self.dimension):
+            self.values[i]-=other.values[i]
         return self
 
     def __mul__(LivePoint self,float other):
         result=LivePoint(self.names)
-        for n in self.names:
-            result[n]=other*self[n]
+        cdef int i
+        for i in range(self.dimension):
+            result.values[i]=other*self.values[i]
         return result
 
     def __imul__(LivePoint self,float other):
-        for n in self.names:
-            self[n]=other*self[n]
+        cdef int i
+        for i in range(self.dimension):
+            self.values[i]*=other
         return self
 
     def __truediv__(LivePoint self,float other):
         result = LivePoint(self.names)
-        for n in self.names:
-            result[n]=self[n]/other
+        cdef int i
+        for i in range(self.dimension):
+            result.values[i]=self.values[i]/other
         return result
 
     def __itruediv__(LivePoint self,float other):
-        for n in self.names:
-            self[n]=self[n]/other
+        cdef int i
+        for i in range(self.dimension):
+            self.values[i]/=other
         return self
 
     def __len__(LivePoint self):
