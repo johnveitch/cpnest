@@ -194,10 +194,6 @@ class NestedSampler(object):
         self.state.increment(self.params[self.worst].logL)
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         self.output_sample(self.params[self.worst])
-        if self.verbose:
-          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f}"\
-            .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
-              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
         self.iteration+=1
         
         # Replace the point we just consumed with the next acceptable one
@@ -208,7 +204,10 @@ class NestedSampler(object):
                 # replace worst point with new one
                 self.params[self.worst]=proposed
                 break
-
+        if self.verbose:
+          print("{0:d}: n:{1:d} acc:{2:.3f} H: {3:.2f} logL {4:.5f} --> {5:.5f} dZ: {6:.3f} logZ: {7:.3f} logLmax: {8:.2f}"\
+            .format(self.iteration, self.jumps, self.acceptance, self.state.info,\
+              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
 
     def get_worst_live_point(self):
         """
