@@ -8,6 +8,7 @@ import pickle
 from collections import deque
 import multiprocessing as mp
 from multiprocessing import Process, Lock, Queue
+from Queue import Empty
 from multiprocessing.sharedctypes import Value
 from . import parameter
 from ctypes import c_int, c_double
@@ -251,9 +252,12 @@ class NestedSampler(object):
         self.logLmin.value = np.inf
 
         # Flush the queue so subsequent join can succeed
-        for j in range(self.Nthreads):
-            while not queue[j].empty():
-                _ = queue[j].get()
+        for q in queue:
+            while True:
+              try:
+                _ = q.get_nowait()
+              except Empty:
+                break
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
