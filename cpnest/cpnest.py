@@ -75,10 +75,10 @@ class CPNest(object):
     def profile(self):
         
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.worker_sampler, args=(self.ns_lock, self.queue, self.NS.jobID, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            p = mp.Process(target=self.worker_sampler, args=(self.queue[i], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
         for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
-            p = mp.Process(target=self.worker_ns, args=(self.sampler_lock, self.queue, self.port, self.authkey))
+            p = mp.Process(target=self.worker_ns, args=(self.queue, self.port, self.authkey))
             self.process_pool.append(p)
         for each in self.process_pool:
             each.start()
