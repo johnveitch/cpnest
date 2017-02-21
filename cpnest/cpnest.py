@@ -79,9 +79,7 @@ class CPNest(object):
             for n in self.nested_samples.dtype.names:
                 plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
             import numpy as np
-            print pos.dtype.names
             plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-            print plotting_posteriors.shape
             plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename='corner.png')
         
 
