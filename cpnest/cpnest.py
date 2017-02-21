@@ -4,6 +4,7 @@
 import multiprocessing as mp
 import cProfile
 import time
+import os
 
 class CPNest(object):
     """
@@ -74,9 +75,9 @@ class CPNest(object):
             pos = self.posterior_samples
             from . import plot
             for n in pos.dtype.names:
-                plot.plot_hist(pos[n].ravel(),name=n,filename='posterior_{0}.png'.format(n))
+                plot.plot_hist(pos[n].ravel(),name=n,filename=os.path.join(self.output,'posterior_{0}.png'.format(n)))
             for n in self.nested_samples.dtype.names:
-                plot.plot_chain(self.nested_samples[n],name=n,filename='nschain_{0}.png'.format(n))
+                plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
             #print pos.view(np.array)
             #plot.plot_corner(pos.view(np.array).T,labels=pos.dtype.names,filename='corner.png')
         

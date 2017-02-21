@@ -152,6 +152,7 @@ class NestedSampler(object):
         self.logZ=None
         self.state = _NSintegralState(self.Nlive)
         sys.stdout.flush()
+        self.output_folder = output
         self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
         header = open(os.path.join(output,'header.txt'),'w')
         header.write('\t'.join(self.model.names))
@@ -277,6 +278,6 @@ class NestedSampler(object):
         
         # Some diagnostics
         if(self.verbose>1):
-          self.state.plot(self.outfilename+'.png')
+          self.state.plot(os.path.join(self.output_folder,self.outfilename+'.png'))
         
         return self.state.logZ
