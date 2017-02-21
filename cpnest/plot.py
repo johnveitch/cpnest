@@ -41,4 +41,5 @@ def plot_corner(xs,filename=None,**kwargs):
     corner.corner(xs,**kwargs)
     if filename is not None:
         plt.savefig(filename)
+    plt.close()
 
