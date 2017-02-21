@@ -14,6 +14,7 @@ def plot_chain(x,name=None,filename=None):
             filename=name+'_chain.png'
     if filename is not None:
         plt.savefig(filename)
+    plt.close()
 
 
 def plot_hist(x,name=None,filename=None):
@@ -29,6 +30,7 @@ def plot_hist(x,name=None,filename=None):
             filename=name+'_hist.png'
     if filename is not None:
         plt.savefig(filename)
+    plt.close()
 
 def plot_corner(xs,filename=None,**kwargs):
     """

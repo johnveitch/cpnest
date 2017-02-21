@@ -78,8 +78,11 @@ class CPNest(object):
                 plot.plot_hist(pos[n].ravel(),name=n,filename=os.path.join(self.output,'posterior_{0}.png'.format(n)))
             for n in self.nested_samples.dtype.names:
                 plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
-            #print pos.view(np.array)
-            #plot.plot_corner(pos.view(np.array).T,labels=pos.dtype.names,filename='corner.png')
+            import numpy as np
+            print pos.dtype.names
+            plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
+            print plotting_posteriors.shape
+            plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename='corner.png')
         
 
 
