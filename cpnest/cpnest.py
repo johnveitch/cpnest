@@ -66,9 +66,9 @@ class CPNest(object):
         for each in self.process_pool:
             each.join(1)
 
-        self.nested_samples = np.genfromtxt(self.NS.outfilename,names=True)
+        self.nested_samples = np.genfromtxt(os.path.join(self.NS.output_folder,self.NS.outfilename),names=True)
         self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
-        np.savetxt(os.path.join(self.output,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
+        np.savetxt(os.path.join(self.NS.output_folder,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
         if self.verbose>1: self.plot()
 
     def plot(self):
