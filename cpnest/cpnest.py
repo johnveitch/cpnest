@@ -80,7 +80,7 @@ class CPNest(object):
                 plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
             import numpy as np
             plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-            plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename='corner.png')
+            plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
         
 
 
