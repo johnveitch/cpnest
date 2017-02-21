@@ -11,9 +11,9 @@ def rebuild_livepoint(names):
   return lp
 
 cdef class LivePoint:
-    def __cinit__(LivePoint self, list names, d=None):
-        self.logL = -inf
-        self.logP = -inf
+    def __cinit__(LivePoint self, list names, d=None, logL=-inf, logP=-inf):
+        self.logL = logL
+        self.logP = logP
         self.names = names
         self.dimension = len(names)
         if d is not None:
@@ -24,6 +24,9 @@ cdef class LivePoint:
     def __reduce__(self):
         return (rebuild_livepoint, (self.names,),self.__getstate__()) 
     
+    def __repr__(self):
+        return 'LivePoint({0:s}, d={1:s}, logL={2:f}, logP={3:f})'.format(str(self.names),str(self.values),self.logL,self.logP)
+
     def __getstate__(self):
       return (self.logL,self.logP,self.values)
     def __setstate__(self,state):
