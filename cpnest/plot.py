@@ -13,7 +13,7 @@ def plot_chain(x,name=None,filename=None):
         if filename is None:
             filename=name+'_chain.png'
     if filename is not None:
-        plt.savefig(filename)
+        plt.savefig(filename,bbox_inches='tight')
     plt.close()
 
 
@@ -22,14 +22,14 @@ def plot_hist(x,name=None,filename=None):
     Produce a histogram
     """
     fig=plt.figure(figsize=(4,3))
-    plt.hist(x,normed=True)
-    plt.ylabel('density')
+    plt.hist(x,normed=True,bins=int(len(x)/10))
+    plt.ylabel('probability density')
     if name is not None:
         plt.xlabel(name)
         if filename is None:
             filename=name+'_hist.png'
     if filename is not None:
-        plt.savefig(filename)
+        plt.savefig(filename,bbox_inches='tight')
     plt.close()
 
 def plot_corner(xs,filename=None,**kwargs):
@@ -40,6 +40,6 @@ def plot_corner(xs,filename=None,**kwargs):
     fig=plt.figure(figsize=(10,10))
     corner.corner(xs,**kwargs)
     if filename is not None:
-        plt.savefig(filename)
+        plt.savefig(filename,bbox_inches='tight')
     plt.close()
 
