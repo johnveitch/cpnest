@@ -50,24 +50,31 @@ sigma = 1.0
 proposals = ['EnsembleWalk']
 proposalweights = [1.0]
 
-Nlive = 512
+Nlives = [512, 1024, 2048]
+niter = 25
 model = GaussianModel(mean=mean, sigma=sigma, bounds=bounds)
 
 logZs = []
 logZratio = []
 errs = []
 
-for i in range(20):
-  work = cpnest.CPNest(model,verbose=0,Nthreads=3,Nlive=Nlive,maxmcmc=2000,poolsize=Nlive,proposals=proposals, proposalweights=proposalweights)
-  work.run()
+for j in Nlives:
+  lZ = []
+  lZr = []
+  er = []
+  for i in range(niter):
+    work = cpnest.CPNest(model, verbose=0, Nthreads=3, Nlive=j, maxmcmc=2000, poolsize=j, proposals=proposals, proposalweights=proposalweights)
+    work.run()
 
-  errs.append(np.sqrt(work.NS.state.info/work.NS.Nlive))
-  logZs.append(work.NS.logZ)
-  logZratio.append(work.NS.logZ-model.analytic_log_Z)
-  #print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
-  #print('Analytic logZ {0}'.format(model.analytic_log_Z))
-  #print('Estimated logZ {0}'.format(work.NS.logZ))
-  #print('KL divergence {0:0.3f}'.format(model.KLdiv))
+    er.append(np.sqrt(work.NS.state.info/work.NS.Nlive))
+    lZ.append(work.NS.logZ)
+    lZr.append(work.NS.logZ-model.analytic_log_Z)
+
+    del work
+
+  logZs.append(lZ)
+  logZratio.append(lZr)
+  errs.append(er)
 
 # get posterior samples
 #pos = work.posterior_samples['x']
