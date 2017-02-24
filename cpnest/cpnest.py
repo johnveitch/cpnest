@@ -65,8 +65,12 @@ class CPNest(object):
         self.NS.nested_sampling_loop(self.queues,self.port,self.authkey)
         for each in self.process_pool:
             each.join(1)
+        
+        self.types = np.dtype({'names':self.NS.params[0].names, 'formats':['f8' for _ in self.NS.params[0].names]})
+        print self.types
+        self.nested_samples = np.array(self.NS.nested_samples, dtype=self.types)
 
-        self.nested_samples = np.genfromtxt(os.path.join(self.NS.output_folder,self.NS.outfilename),names=True)
+#np.genfromtxt(os.path.join(self.NS.output_folder,self.NS.outfilename),names=True)
         self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
         np.savetxt(os.path.join(self.NS.output_folder,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
         if self.verbose>1: self.plot()
