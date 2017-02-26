@@ -69,9 +69,6 @@ class CPNest(object):
 
         import numpy.lib.recfunctions as rfn
         self.nested_samples = rfn.stack_arrays([self.NS.nested_samples[j].asnparray() for j in range(len(self.NS.nested_samples))],usemask=False)
-        print self.nested_samples.dtype.names
-        print self.nested_samples.shape
-
         self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
         np.savetxt(os.path.join(self.NS.output_folder,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
         if self.verbose>1: self.plot()
