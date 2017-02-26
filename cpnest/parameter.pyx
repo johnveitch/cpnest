@@ -122,9 +122,12 @@ cdef class LivePoint:
       result = LivePoint(self.names)
       result.__setstate__(self.__getstate__())
       return result
+      
     cpdef asnparray(LivePoint self):
-      types = np.dtype({'names':self.names, 'formats':['f8' for _ in self.names]})
-      values = np.array([self[n] for n in self.names],dtype=types)
-      return values
+      names = self.names+['logL']
+      x = np.zeros(self.dimension, dtype = {'names':names, 'formats':['f8' for _ in names]})
+      for n in self.names: x[n] = self[n]
+      x['logL'] = self.logL
+      return x
                 
 
