@@ -5,6 +5,7 @@
 from __future__ import division
 from numpy import inf
 from cpython cimport array
+import numpy as np
 
 def rebuild_livepoint(names):
   lp=LivePoint(names)
@@ -121,5 +122,9 @@ cdef class LivePoint:
       result = LivePoint(self.names)
       result.__setstate__(self.__getstate__())
       return result
+    cpdef asnparray(LivePoint self):
+      types = np.dtype({'names':self.names, 'formats':['f8' for _ in self.names]})
+      values = np.array([self[n] for n in self.names],dtype=types)
+      return values
                 
 
