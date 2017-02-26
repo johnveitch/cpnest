@@ -173,7 +173,7 @@ class NestedSampler(object):
     def output_sample(self,sample):
         self.outputfile.write(self.strsample(sample))
         self.nested_samples.append(sample)
-
+        
     @staticmethod
     def strsample(sample):
         line=''

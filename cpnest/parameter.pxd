@@ -8,3 +8,4 @@ cdef class LivePoint:
     cdef public list names
     cdef public list bounds
     cpdef copy(LivePoint self)
+    cpdef asnparray(LivePoint self)

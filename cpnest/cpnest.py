@@ -65,9 +65,8 @@ class CPNest(object):
         self.NS.nested_sampling_loop(self.queues,self.port,self.authkey)
         for each in self.process_pool:
             each.join(1)
-        
-        self.types = np.dtype({'names':self.NS.params[0].names, 'formats':['f8' for _ in self.NS.params[0].names]})
-        print self.types
+
+        print self.NS.nested_samples[0].asnparray()
         self.nested_samples = np.array(self.NS.nested_samples, dtype=self.types)
 
 #np.genfromtxt(os.path.join(self.NS.output_folder,self.NS.outfilename),names=True)
