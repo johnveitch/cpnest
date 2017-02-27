@@ -38,7 +38,10 @@ def plot_corner(xs,filename=None,**kwargs):
     """
     import corner
     fig=plt.figure(figsize=(10,10))
-    corner.corner(xs,**kwargs)
+    mask = [i for i in range(xs.shape[-1]) if not all(xs[:,i]==xs[0,i]) ]
+    print mask
+    print xs[:,mask].shape
+    corner.corner(xs[:,mask],**kwargs)
     if filename is not None:
         plt.savefig(filename,bbox_inches='tight')
     plt.close()
