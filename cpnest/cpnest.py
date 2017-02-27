@@ -14,8 +14,9 @@ class CPNest(object):
     Input variables:
     usermodel : an object inheriting cpnest.model.Model that defines the user's problem
     Nlive : Number of live points (100)
+    Poolsize: Number of objects in the sampler pool (100)
     output : output directory (./)
-    verbose: Verbosity, 0=silent, 1=progress, 2=diagnostic
+    verbose: Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
     seed: random seed
     maxmcmc: maximum MCMC points for sampling chains (100)
     Nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
@@ -23,7 +24,7 @@ class CPNest(object):
                       This may cause bias if parts of your parameter space are more expensive than others.
                       Default: True    
     """
-    def __init__(self,usermodel,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balance_samplers = True):
+    def __init__(self,usermodel,Nlive=100,Poolsize=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balance_samplers = True):
         if Nthreads is None:
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
@@ -36,7 +37,7 @@ class CPNest(object):
         else:
             self.seed=seed
         self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
-        self.Evolver = Sampler(self.user,maxmcmc,verbose=0)
+        self.Evolver = Sampler(self.user,maxmcmc,verbose=verbose,poolsize=Poolsize)
         self.NUMBER_OF_PRODUCER_PROCESSES = Nthreads
         self.NUMBER_OF_CONSUMER_PROCESSES = 1
 

@@ -29,7 +29,7 @@ class Sampler(object):
     default: 100
     
     """
-    def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=100):
+    def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=1000):
         self.user = usermodel
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
@@ -44,13 +44,13 @@ class Sampler(object):
     def reset(self):
         for n in range(self.poolsize):
           while True:
-            if self.verbose: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
+            if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
             p = self.user.new_point()
             p.logP = self.user.log_prior(p)
             if np.isfinite(p.logP): break
           p.logL=self.user.log_likelihood(p)
           self.evolution_points.append(p)
-        if self.verbose: sys.stderr.write("\n")
+        if self.verbose > 2: sys.stderr.write("\n")
         self.proposals.set_ensemble(self.evolution_points)
         for _ in range(len(self.evolution_points)):
           s = self.evolution_points.popleft()
