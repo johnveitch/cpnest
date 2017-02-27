@@ -124,10 +124,11 @@ cdef class LivePoint:
       return result
       
     cpdef asnparray(LivePoint self):
-      names = self.names+['logL']
-      x = np.zeros(self.dimension, dtype = {'names':names, 'formats':['f8' for _ in names]})
+      names = self.names+['logL','logPrior']
+      x = np.zeros(self.dimension+2, dtype = {'names':names, 'formats':['f8' for _ in names]})
       for n in self.names: x[n] = self[n]
       x['logL'] = self.logL
+      x['logPrior'] = self.logP
       return x
                 
 
