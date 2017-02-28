@@ -20,15 +20,18 @@ class GaussianModel(cpnest.model.Model):
         inv_sqrt2 = 1./np.sqrt(2.)
         minv = self.bounds[0][0]
         maxv = self.bounds[0][1]
-        lnC = -np.log(maxv - minv)
+        prior = 1./(maxv-minv)
+        lnC = np.log(prior)
         self._analytic_log_Z = np.log(0.5*(erf(inv_sqrt2*(self.mean - minv)/self.sigma) - erf(inv_sqrt2*(self.mean - maxv)/self.sigma)))
-        self._analytic_log_Z += lnC # divide by prior
+        self._analytic_log_Z += lnC # multiply by prior
 
-        D = np.sqrt(2.*np.pi*self.sigma*self.sigma)
-        Cpart = 0.25*(1. + 2.*lnC + 2.*np.log(D));
-        self._KLdiv = (0.5/D)*np.exp(-0.5*((maxv-self.mean)/self.sigma)*((maxv-self.mean)/self.sigma))*(maxv-self.mean) - Cpart*erf(inv_sqrt2*(maxv-self.mean)/self.sigma)
-        self._KLdiv -= ((0.5/D)*np.exp(-0.5*((minv-self.mean)/self.sigma)*((minv-self.mean)/self.sigma))*(minv-self.mean) - Cpart*erf(inv_sqrt2*(minv-self.mean)/self.sigma))
-    
+        p_Z = np.exp(lnC - self._analytic_log_Z)
+
+        L = self._analytic_log_Z + 0.5*np.log(2.*np.pi*self.sigma**2)
+        D = -(p_Z/4.)*(1.+2.*L)*(erf((self.mean-minv)/(np.sqrt(2.)*self.sigma))-erf((self.mean-maxv)/(np.sqrt(2.)*self.sigma)))
+        G = -(p_Z/(2.*np.sqrt(2.*np.pi)*self.sigma))*((minv-self.mean)*np.exp(-0.5*(minv-self.mean)**2/self.sigma**2) - (maxv-self.mean)*np.exp(-0.5*(maxv-self.mean)**2/self.sigma**2))
+        self._KLdiv = D+G
+
     names=['x']
 
     def log_likelihood(self,p):
@@ -43,7 +46,7 @@ class GaussianModel(cpnest.model.Model):
     def KLdiv(self):
         return self._KLdiv
 
-bounds = [[0., 1e8]]
+bounds = [[0., 1e2]]
 mean = 0.
 sigma = 1.0
 
