@@ -42,10 +42,11 @@ class CPNest(object):
         self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
         self.process_pool = []
+        # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
         if balance_samplers:
-          self.queues = [mp.Queue(maxsize=1000) for _ in range(Nthreads)]
+          self.queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
         else:
-          self.queues = [mp.Queue(maxsize=1000)]
+          self.queues = [mp.Queue(maxsize=Nlive)]
         self.port=5555
         self.authkey = "12345"
         self.ip = "0.0.0.0"
