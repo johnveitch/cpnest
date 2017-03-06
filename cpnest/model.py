@@ -21,7 +21,10 @@ class Model(object):
     """
     Create a new LivePoint, drawn from within bounds
     """
-    p = LivePoint(self.names,[uniform(self.bounds[i][0],self.bounds[i][1]) for i,_ in enumerate(self.names)] )
+    logP=-inf
+    while(logP==-inf):
+      p = LivePoint(self.names,[uniform(self.bounds[i][0],self.bounds[i][1]) for i,_ in enumerate(self.names)] )
+      logP=self.log_prior(p)
     return p
   
   @abstractmethod
