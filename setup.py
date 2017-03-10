@@ -14,7 +14,7 @@ with open(path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
 
 setup(
         name = 'cpnest',
-        version = '0.1.0',
+        version = '0.1.1',
         description = 'CPNest: Parallel nested sampling',
         long_description=long_description,
         author = 'Walter Del Pozzo, John Veitch',
