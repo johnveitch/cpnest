@@ -41,3 +41,17 @@ class Model(object):
     if self.in_bounds(param):
       return 0.0
     else: return -inf
+    
+  def strsample(self,sample):
+    """
+    Return a string representation for the sample to be written
+    to the output file. User may overload for additional output
+    """
+    line='\t'.join('{0:.20e}'.format(sample[n]) for n in sample.names)
+    line+='{0:20e}'.format(sample.logL)
+    return line
+  def header(self):
+    """
+    Return a string with the output file header
+    """
+    return '\t'.join(self.names) + '\tlogL'

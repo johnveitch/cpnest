@@ -167,20 +167,12 @@ class NestedSampler(object):
         os.system("mkdir -p {0!s}".format(output))
         self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         self.outputfile=open(os.path.join(output,self.outfilename),"w")
-        self.outputfile.write('\t'.join(self.model.names) + '\tlogL\n')
+        self.outputfile.write('{0:s}\n'.format(self.model.header().rstrip()))
         return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
 
     def output_sample(self,sample):
-        self.outputfile.write(self.strsample(sample))
+        self.outputfile.write('{0:s}\n'.format(self.model.strsample(sample).rstrip()))
         self.nested_samples.append(sample)
-
-    @staticmethod
-    def strsample(sample):
-        line=''
-        for n in sample.names:
-                line+='{0:.30e}\t'.format(sample[n])
-        line+='{0:30e}\n'.format(sample.logL)
-        return line
 
     def setup_random_seed(self,seed):
         """
