@@ -30,7 +30,7 @@ class GaussianTestCase(unittest.TestCase):
 
     def test_run(self):
         self.work.run()
-        print 'Analytic evidence: {0}'.format(self.model.analyticZ)
+        print('Analytic evidence: {0}'.format(self.model.analyticZ))
 
 
 

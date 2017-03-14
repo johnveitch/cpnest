@@ -40,7 +40,7 @@ class GaussianTestCase(unittest.TestCase):
         pos=self.work.posterior_samples['x']
         #t,pval=stats.kstest(pos,self.model.distr.cdf)
         stat,pval = stats.normaltest(pos.T)
-        print 'Normal test p-value ',str(pval)
+        print('Normal test p-value {0}'.format(str(pval)))
         plt.figure()
         plt.hist(pos.ravel(),normed=True)
         x=np.linspace(self.model.bounds[0][0],self.model.bounds[0][1],100)
@@ -61,4 +61,4 @@ def test_all():
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
- 
+
