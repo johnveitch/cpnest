@@ -1,19 +1,16 @@
-from __future__ import division,print_function
-import numpy as np
-from numpy import logaddexp,exp
-from numpy import inf
+from __future__ import division, print_function
 import sys
 import os
-import pickle
-from collections import deque
+import numpy as np
 import multiprocessing as mp
-from multiprocessing import Process, Lock, Queue
+from multiprocessing import Lock
+from numpy import logaddexp, exp
+from numpy import inf
 try:
-  from queue import Empty
+    from queue import Empty
 except ImportError:
-  from Queue import Empty # For python 2 compatibility
+    from Queue import Empty # For python 2 compatibility
 from multiprocessing.sharedctypes import Value
-from . import parameter
 from ctypes import c_int, c_double
 import types
 from . import nest2pos
@@ -261,7 +258,7 @@ class NestedSampler(object):
  
         # Refine evidence estimate
         self.state.finalise()
-        self.logZ=self.state.logZ
+        self.logZ = self.state.logZ
 
         self.output.close()
         self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
@@ -269,7 +266,6 @@ class NestedSampler(object):
         print('Final evidence: {0:0.2f}\nInformation: {1:.2f}'.format(self.state.logZ,self.state.info))
         
         # Some diagnostics
-        if(self.verbose>1):
+        if self.verbose>1 :
           self.state.plot(os.path.join(self.output_folder,self.outfilename+'.png'))
-        
         return self.state.logZ
