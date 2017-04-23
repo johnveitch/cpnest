@@ -161,6 +161,9 @@ class EnsembleEigenVector(EnsembleProposal):
             self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
 
     def get_sample(self,old):
+        """
+        Propose a jump along a random eigenvector
+        """
         out = old
         # pick a random eigenvector
         i = randrange(old.dimension)

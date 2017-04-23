@@ -79,6 +79,9 @@ class _NSintegralState(object):
     self.logZ=nest2pos.log_integrate_log_trap(np.array(self.logLs),np.array(self.log_vols))
     return self.logZ
   def plot(self,filename):
+    """
+    Plot the logX vs logL
+    """
     import matplotlib as mpl
     mpl.use('Agg')
     from matplotlib import pyplot as plt

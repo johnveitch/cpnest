@@ -18,7 +18,6 @@ class Sampler(object):
     
     maxmcmc:
     maximum number of mcmc steps to be used in the sampler
-    default: 4096
     
     verbose:
     display debug information on screen
@@ -26,7 +25,6 @@ class Sampler(object):
     
     poolsize:
     number of objects for the affine invariant sampling
-    default: 100
     
     """
     def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=1000):
@@ -42,6 +40,9 @@ class Sampler(object):
         self.initialised=False
         
     def reset(self):
+        """
+        Initialise the sampler
+        """
         for n in range(self.poolsize):
           while True:
             if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))

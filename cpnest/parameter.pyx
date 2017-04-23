@@ -12,6 +12,14 @@ def rebuild_livepoint(names):
   return lp
 
 cdef class LivePoint:
+    """
+    Class defining a live point.
+    Initialisation arguments:
+    names: names of parameters
+    d: (optional) an array for initialisation
+    logL: (optional) log likelihood of this sample
+    logP: (optional) log prior of this sample
+    """
     def __cinit__(LivePoint self, list names, d=None, logL=-inf, logP=-inf):
         self.logL = logL
         self.logP = logP
@@ -119,16 +127,22 @@ cdef class LivePoint:
         raise KeyError
 
     cpdef copy(LivePoint self):
-      result = LivePoint(self.names)
-      result.__setstate__(self.__getstate__())
-      return result
+        """
+        Returns a copy of the current live point
+        """
+        result = LivePoint(self.names)
+        result.__setstate__(self.__getstate__())
+        return result
       
     cpdef asnparray(LivePoint self):
-      names = self.names+['logL','logPrior']
-      x = np.zeros(1, dtype = {'names':names, 'formats':['f8' for _ in names]})
-      for n in self.names: x[n] = self[n]
-      x['logL'] = self.logL
-      x['logPrior'] = self.logP
-      return x
+        """
+        Return the sample as a numpy record array
+        """
+        names = self.names+['logL','logPrior']
+        x = np.zeros(1, dtype = {'names':names, 'formats':['f8' for _ in names]})
+        for n in self.names: x[n] = self[n]
+        x['logL'] = self.logL
+        x['logPrior'] = self.logP
+        return x
                 
 

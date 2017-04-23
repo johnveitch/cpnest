@@ -53,6 +53,9 @@ class CPNest(object):
 
 
     def run(self):
+        """
+        Run the sampler
+        """
         import numpy as np
         import os
         from .nest2pos import draw_posterior_many
@@ -75,17 +78,18 @@ class CPNest(object):
         if self.verbose>1: self.plot()
 
     def plot(self):
-            pos = self.posterior_samples
-            from . import plot
-            for n in pos.dtype.names:
-                plot.plot_hist(pos[n].ravel(),name=n,filename=os.path.join(self.output,'posterior_{0}.png'.format(n)))
-            for n in self.nested_samples.dtype.names:
-                plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
-            import numpy as np
-            plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-            plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
-        
-
+        """
+        Make some plots of the posterior and nested samples
+        """
+        pos = self.posterior_samples
+        from . import plot
+        for n in pos.dtype.names:
+            plot.plot_hist(pos[n].ravel(),name=n,filename=os.path.join(self.output,'posterior_{0}.png'.format(n)))
+        for n in self.nested_samples.dtype.names:
+            plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
+        import numpy as np
+        plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
+        plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
 
     def worker_sampler(self,*args):
         cProfile.runctx('self.Evolver.produce_sample(*args)', globals(), locals(), 'prof_sampler.prof')
@@ -94,7 +98,6 @@ class CPNest(object):
         cProfile.runctx('self.NS.nested_sampling_loop(*args)', globals(), locals(), 'prof_nested_sampling.prof')
 
     def profile(self):
-        
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
             p = mp.Process(target=self.worker_sampler, args=(self.queues[i%len(self.queues)], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
             self.process_pool.append(p)
@@ -103,5 +106,3 @@ class CPNest(object):
             self.process_pool.append(p)
         for each in self.process_pool:
             each.start()
-        
-
