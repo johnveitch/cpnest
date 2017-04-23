@@ -39,6 +39,9 @@ class _NSintegralState(object):
     self.nlive=nlive
     self.reset()
   def reset(self):
+    """
+    Reset the sampler
+    """
     self.iteration=0
     self.logZ=-inf
     self.oldZ=-inf
