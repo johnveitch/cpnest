@@ -66,7 +66,7 @@ class CPNest(object):
             each.start()
         self.NS.nested_sampling_loop(self.queues,self.port,self.authkey)
         for each in self.process_pool:
-            each.join(1)
+            each.join()
 
         import numpy.lib.recfunctions as rfn
         self.nested_samples = rfn.stack_arrays([self.NS.nested_samples[j].asnparray() for j in range(len(self.NS.nested_samples))],usemask=False)

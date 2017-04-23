@@ -81,6 +81,8 @@ class Sampler(object):
         """
         if not self.initialised:
           self.reset()
+        # Prevent process from zombification if consumer thread exits
+        queue.cancel_join_thread()
         self.seed = seed
         np.random.seed(seed=self.seed)
         self.counter=0
