@@ -229,7 +229,7 @@ class NestedSampler(object):
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
                     break
             if self.verbose:
-              sys.stderr.write("sampling the prior --> {0:.3f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
+              sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
         if self.verbose: sys.stderr.write("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
