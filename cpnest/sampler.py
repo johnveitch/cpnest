@@ -26,14 +26,14 @@ class Sampler(object):
     
     poolsize:
     number of objects for the affine invariant sampling
-    default: 100
+    default: 1000
     
     """
     def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=1000):
         self.user = usermodel
         self.maxmcmc = maxmcmc
-        self.Nmcmc = maxmcmc
-        self.Nmcmc_exact = float(maxmcmc)
+        self.Nmcmc = maxmcmc//10
+        self.Nmcmc_exact = float(maxmcmc)//10
         self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize + 1) # +1 for the point to evolve
@@ -72,7 +72,10 @@ class Sampler(object):
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
             self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.acceptance - 1.0)
-        self.Nmcmc = max(safety,min(self.maxmcmc, int(round(self.Nmcmc_exact))))
+        if np.isfinite(self.Nmcmc_exact):
+            self.Nmcmc = max(safety,min(self.maxmcmc, int(round(self.Nmcmc_exact))))
+        else:
+            self.Nmcmc = max(safety,self.maxmcmc)
         return self.Nmcmc
 
     def produce_sample(self, queue, logLmin, seed, ip, port, authkey):
