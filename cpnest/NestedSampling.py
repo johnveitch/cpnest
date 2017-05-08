@@ -1,19 +1,16 @@
-from __future__ import division,print_function
-import numpy as np
-from numpy import logaddexp,exp
-from numpy import inf
+from __future__ import division, print_function
 import sys
 import os
-import pickle
-from collections import deque
+import numpy as np
 import multiprocessing as mp
-from multiprocessing import Process, Lock, Queue
+from multiprocessing import Lock
+from numpy import logaddexp, exp
+from numpy import inf
 try:
-  from queue import Empty
+    from queue import Empty
 except ImportError:
-  from Queue import Empty # For python 2 compatibility
+    from Queue import Empty # For python 2 compatibility
 from multiprocessing.sharedctypes import Value
-from . import parameter
 from ctypes import c_int, c_double
 import types
 from . import nest2pos
@@ -42,6 +39,9 @@ class _NSintegralState(object):
     self.nlive=nlive
     self.reset()
   def reset(self):
+    """
+    Reset the sampler
+    """
     self.iteration=0
     self.logZ=-inf
     self.oldZ=-inf
@@ -82,6 +82,9 @@ class _NSintegralState(object):
     self.logZ=nest2pos.log_integrate_log_trap(np.array(self.logLs),np.array(self.log_vols))
     return self.logZ
   def plot(self,filename):
+    """
+    Plot the logX vs logL
+    """
     import matplotlib as mpl
     mpl.use('Agg')
     from matplotlib import pyplot as plt
@@ -226,7 +229,7 @@ class NestedSampler(object):
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
                     break
             if self.verbose:
-              sys.stderr.write("sampling the prior --> {0:.3f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
+              sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
         if self.verbose: sys.stderr.write("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
@@ -261,7 +264,7 @@ class NestedSampler(object):
  
         # Refine evidence estimate
         self.state.finalise()
-        self.logZ=self.state.logZ
+        self.logZ = self.state.logZ
 
         self.output.close()
         self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
@@ -269,7 +272,6 @@ class NestedSampler(object):
         print('Final evidence: {0:0.2f}\nInformation: {1:.2f}'.format(self.state.logZ,self.state.info))
         
         # Some diagnostics
-        if(self.verbose>1):
+        if self.verbose>1 :
           self.state.plot(os.path.join(self.output_folder,self.outfilename+'.png'))
-        
         return self.state.logZ
