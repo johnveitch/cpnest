@@ -30,8 +30,8 @@ class Sampler(object):
     def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=1000):
         self.user = usermodel
         self.maxmcmc = maxmcmc
-        self.Nmcmc = maxmcmc//10
-        self.Nmcmc_exact = float(maxmcmc)//10
+        self.Nmcmc = maxmcmc
+        self.Nmcmc_exact = float(maxmcmc)
         self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize + 1) # +1 for the point to evolve
@@ -69,6 +69,7 @@ class Sampler(object):
         Taken from W. Farr's github.com/farr/Ensemble.jl
         """
         if tau is None: tau = self.poolsize
+        else: tau /= float(safety)
         if self.acceptance==0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
@@ -105,7 +106,7 @@ class Sampler(object):
             # Push the sample onto the queue
             queue.put((acceptance,jumps,outParam))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.01:
+            if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.001:
                 self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
@@ -138,5 +139,5 @@ class Sampler(object):
             if jumps==10*self.maxmcmc:
               print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
         self.acceptance = float(accepted)/float(jumps)
-        self.estimate_nmcmc()
+        self.estimate_nmcmc(tau=nsteps)
         return (float(accepted)/float(rejected+accepted),jumps,oldparam)
