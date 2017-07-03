@@ -6,6 +6,7 @@ from __future__ import division
 from numpy.math cimport INFINITY
 from cpython cimport array
 cimport numpy as np
+import numpy as np
 
 def rebuild_livepoint(names):
   lp=LivePoint(names)
