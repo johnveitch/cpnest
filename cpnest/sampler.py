@@ -55,7 +55,7 @@ class Sampler(object):
         self.proposals.set_ensemble(self.evolution_points)
         for _ in range(len(self.evolution_points)):
           s = self.evolution_points.popleft()
-          acceptance,jumps,s = self.metropolis_hastings(s,-np.inf)
+          self.acceptance,jumps,s = self.metropolis_hastings(s,-np.inf)
           self.evolution_points.append(s)
         self.proposals.set_ensemble(self.evolution_points)
         self.initialised=True
@@ -69,8 +69,8 @@ class Sampler(object):
         Taken from W. Farr's github.com/farr/Ensemble.jl
         """
         if tau is None: tau = self.poolsize
-        else: tau /= float(safety)
-        if self.acceptance==0:
+
+        if self.acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
             self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.acceptance - 1.0)
@@ -93,17 +93,15 @@ class Sampler(object):
         self.counter=0
         while(1):
             # Pick a random point from the ensemble to start with
-            # Rotate the stack by a random integer
-            self.evolution_points.rotate(np.random.randint(self.poolsize))
             # Pop it out the stack to prevent cloning
             param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
-            acceptance,jumps,outParam = self.metropolis_hastings(param,logLmin.value)
+            acceptance,jumps,outParam = self.metropolis_hastings(param.copy(),logLmin.value)
             # If we bailed out then flag point as unusable
             if acceptance==0.0:
                 outParam.logL=-np.inf
-
+           
             # Put sample back in the stack
             self.evolution_points.append(outParam.copy())
             # Push the sample onto the queue
@@ -142,6 +140,6 @@ class Sampler(object):
             if jumps==10*self.maxmcmc:
                 if self.verbose > 2: print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
                 break
-        self.acceptance = float(accepted)/float(jumps)
-        self.estimate_nmcmc(tau=self.Nmcmc)
+        self.acceptance = float(accepted)/float(rejected+accepted)
+        self.estimate_nmcmc(tau=jumps)
         return (float(accepted)/float(rejected+accepted),jumps,oldparam)
