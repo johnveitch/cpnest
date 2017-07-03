@@ -3,9 +3,9 @@
 # cython: linetrace=False
 
 from __future__ import division
-from numpy import inf
+from numpy.math cimport INFINITY
 from cpython cimport array
-import numpy as np
+cimport numpy as np
 
 def rebuild_livepoint(names):
   lp=LivePoint(names)
@@ -20,7 +20,7 @@ cdef class LivePoint:
     logL: (optional) log likelihood of this sample
     logP: (optional) log prior of this sample
     """
-    def __cinit__(LivePoint self, list names, d=None, logL=-inf, logP=-inf):
+    def __cinit__(LivePoint self, list names, d=None, logL=-INFINITY, logP=-INFINITY):
         self.logL = logL
         self.logP = logP
         self.names = names
@@ -38,6 +38,7 @@ cdef class LivePoint:
 
     def __getstate__(self):
       return (self.logL,self.logP,self.values)
+    
     def __setstate__(self,state):
       self.logL=state[0]
       self.logP=state[1]
