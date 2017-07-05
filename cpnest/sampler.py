@@ -97,7 +97,7 @@ class Sampler(object):
             param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
-            acceptance,jumps,outParam = self.metropolis_hastings(param.copy(),logLmin.value)
+            acceptance,jumps,outParam = self.metropolis_hastings(param,logLmin.value)
             # If we bailed out then flag point as unusable
             if acceptance==0.0:
                 outParam.logL=-np.inf
@@ -142,4 +142,4 @@ class Sampler(object):
                 break
         self.acceptance = float(accepted)/float(rejected+accepted)
         self.estimate_nmcmc(tau=jumps)
-        return (float(accepted)/float(rejected+accepted),jumps,oldparam)
+        return (self.acceptance,jumps,oldparam)
