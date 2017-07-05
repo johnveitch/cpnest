@@ -52,11 +52,7 @@ setup(
         packages=['cpnest'],
         install_requires=['numpy','scipy','cython'],
         setup_requires=['numpy'],
-        # Don't know what this does
-        extras_require={
-            'dev': ['check-manifest'],
-            'test': ['coverage'],
-            },
+        tests_require=['corner'],
         # Dictionary for data files
         # {'sample':['sample_file.dat']}
         package_data={"":['README.rst','LICENSE']},
