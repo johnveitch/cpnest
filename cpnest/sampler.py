@@ -141,5 +141,5 @@ class Sampler(object):
                 if self.verbose > 2: print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
                 break
         self.acceptance = float(accepted)/float(rejected+accepted)
-        self.estimate_nmcmc(tau=jumps)
+        self.estimate_nmcmc(tau=self.poolsize)
         return (self.acceptance,jumps,oldparam)
