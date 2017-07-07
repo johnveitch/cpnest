@@ -1,10 +1,33 @@
 #Always prefer setuptools over distutils
 from setuptools import setup, find_packages
 from setuptools import Extension
+from setuptools.command.build_ext import build_ext as _build_ext
 # To use a consistent encoding
 from codecs import open
 from os import path
-import numpy
+
+# see https://stackoverflow.com/a/21621689/1862861 for why this is here
+class build_ext(_build_ext):
+    def finalize_options(self):
+        _build_ext.finalize_options(self)
+        # Prevent numpy from thinking it is still in its setup process:
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        self.include_dirs.append(numpy.get_include())
+
+# check whether user has Cython
+try:
+    import Cython
+except ImportError:
+    have_cython = False
+else:
+    have_cython = True
+
+# set extension
+if have_cython: # convert the pyx file to a .c file if cython is available
+    ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.pyx"], include_dirs=['cpnest/'], libraries=['m']) ]
+else: # just compile the included parameter.c (already converted from parameter.pyx) file
+    ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.c"], include_dirs=['cpnest/'], libraries=['m']) ]
 
 here = path.abspath(path.dirname(__file__))
 
@@ -21,6 +44,7 @@ setup(
         author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
         url='https://github.com/johnveitch/cpnest',
         license='MIT',
+        cmdclass = {'build_ext': build_ext},
         classifiers =[
         # How mature is this project? Common values are
         #   3 - Alpha
@@ -49,14 +73,11 @@ setup(
 
         keywords='nested sampling bayesian inference',
         #packages=find_packages(exclude=['contrib','docs','tests*','examples']),
-        packages=['cpnest'],
-        install_requires=['numpy','scipy','cython'],
+        packages=['.', 'cpnest'],
+        install_requires=['numpy','scipy'],
         setup_requires=['numpy'],
         tests_require=['corner'],
-        # Dictionary for data files
-        # {'sample':['sample_file.dat']}
-        package_data={"":['README.rst','LICENSE']},
-        include_package_data=True,
+        package_data={"": ['*.c', '*.pyx', '*.pxd']},
         # To provide executable scripts, use entry points in preference to the
         # "scripts" keyword. Entry points provide cross-platform support and allow
         # pip to create the appropriate form of executable for the target platform.
@@ -65,8 +86,6 @@ setup(
         #        ],
             },
             test_suite='tests',
-        ext_modules=[
-                Extension('cpnest.parameter',sources=['cpnest/parameter.pyx'],libraries=['m'],include_dirs=[numpy.get_include(),'cpnest/']),
-                ]
+        ext_modules=ext_modules
         )
 
