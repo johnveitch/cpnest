@@ -1,3 +1,4 @@
+from __future__ import division
 import sys
 import os
 import numpy as np
@@ -55,7 +56,7 @@ class Sampler(object):
         self.proposals.set_ensemble(self.evolution_points)
         for _ in range(len(self.evolution_points)):
           s = self.evolution_points.popleft()
-          self.acceptance,jumps,s = self.metropolis_hastings(s,-np.inf)
+          s = self.metropolis_hastings(s,-np.inf)
           self.evolution_points.append(s)
         self.proposals.set_ensemble(self.evolution_points)
         self.initialised=True
@@ -97,15 +98,15 @@ class Sampler(object):
             param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
-            acceptance,jumps,outParam = self.metropolis_hastings(param,logLmin.value)
+            outParam = self.metropolis_hastings(param,logLmin.value)
             # If we bailed out then flag point as unusable
-            if acceptance==0.0:
+            if self.acceptance==0.0:
                 outParam.logL=-np.inf
            
             # Put sample back in the stack
             self.evolution_points.append(outParam.copy())
             # Push the sample onto the queue
-            queue.put((acceptance,jumps,outParam))
+            queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.001:
                 self.proposals.set_ensemble(self.evolution_points)
@@ -118,28 +119,19 @@ class Sampler(object):
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
         accepted = 0
-        rejected = 0
-        jumps = 0
         oldparam = inParam.copy()
         logp_old = self.user.log_prior(oldparam)
-        while (jumps < self.Nmcmc) or accepted == 0:
+        for jumps in range(self.Nmcmc):
             newparam = self.proposals.get_sample(oldparam.copy())
             newparam.logP = self.user.log_prior(newparam)
             if newparam.logP-logp_old + self.proposals.log_J > log(random()):
                 newparam.logL = self.user.log_likelihood(newparam)
                 if newparam.logL > logLmin:
-                  oldparam = newparam.copy()
+                  oldparam = newparam
                   logp_old = newparam.logP
                   accepted+=1
-                else:
-                  rejected+=1
-            else:
-                rejected+=1
 
-            jumps+=1
-            if jumps==10*self.maxmcmc:
-                if self.verbose > 2: print('Warning, MCMC chain exceeded {0} iterations!'.format(10*self.maxmcmc))
-                break
-        self.acceptance = float(accepted)/float(rejected+accepted)
-        self.estimate_nmcmc(tau=jumps)
-        return (self.acceptance,jumps,oldparam)
+        self.acceptance = float(accepted)/float(self.Nmcmc)
+        self.estimate_nmcmc()
+        return oldparam
+
