@@ -54,7 +54,7 @@ setup(
 
         # Indicate who your project is intended for
         #'Intended Audience :: Developers',
-        'Topic :: Data Analysis :: Bayesian Inference',
+        #'Topic :: Data Analysis :: Bayesian Inference',
 
         # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: MIT License',
