@@ -53,7 +53,7 @@ setup(
         'Development Status :: 4 - Beta',
 
         # Indicate who your project is intended for
-        'Intended Audience :: Data Analysts',
+        #'Intended Audience :: Developers',
         'Topic :: Data Analysis :: Bayesian Inference',
 
         # Pick your license as you wish (should match "license" above)
