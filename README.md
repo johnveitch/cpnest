@@ -2,7 +2,7 @@
 ### Parallel nested sampling in python
 ---
 © 2015-2017 Walter Del Pozzo, John Veitch
-![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/johnveitch/cpnest/blob/master/LICENSE)
 
 walter.delpozzo@ligo.org,
 john.veitch@ligo.org
