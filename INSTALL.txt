@@ -1,4 +1,10 @@
-Install this package using setuptools:
+
+The simplest way to install cpnest is via pip
+  pip install cpnest
+
+--
+
+Install this package from source using setuptools:
   python setup.py install
 
 Tests can be run with:
