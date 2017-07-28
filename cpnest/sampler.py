@@ -98,6 +98,7 @@ class Sampler(object):
             param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
+            
             outParam = self.metropolis_hastings(param,logLmin.value)
             # If we bailed out then flag point as unusable
             if self.acceptance==0.0:
@@ -135,3 +136,22 @@ class Sampler(object):
         self.estimate_nmcmc()
         return oldparam
 
+    def ensemble_sampler(self,logLmin):
+        """
+        ensemble sampler loop to generate the new live point taking nmcmc steps
+        """
+        accepted = 0
+        N = len(self.evolution_points)
+        for jumps in range(self.Nmcmc):
+            newparam = self.proposals.get_sample(self.evolution_points[jumps%N].copy())
+            newparam.logP = self.user.log_prior(newparam)
+            if newparam.logP-logp_old + self.proposals.log_J > log(random()):
+                newparam.logL = self.user.log_likelihood(newparam)
+                if newparam.logL > logLmin:
+                  oldparam = newparam
+                  logp_old = newparam.logP
+                  accepted+=1
+
+        self.acceptance = float(accepted)/float(self.Nmcmc)
+        self.estimate_nmcmc()
+        return oldparam
