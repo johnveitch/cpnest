@@ -95,9 +95,11 @@ class Sampler(object):
         while(1):
             # Pick a random point from the ensemble to start with
             # Pop it out the stack to prevent cloning
-            param = self.evolution_points.rotate(np.random.randint(self.poolsize))
+            #param = self.evolution_points.rotate()
 
-            param = self.evolution_points.popleft()
+            param = self.evolution_points[np.random.randint(self.poolsize)]
+            self.evolution_points.remove(param)
+            
             if logLmin.value==np.inf:
                 break
             
@@ -138,23 +140,3 @@ class Sampler(object):
         self.estimate_nmcmc()
         return oldparam
 
-    def ensemble_sampler(self,logLmin):
-        """
-        ensemble sampler loop to generate the new live point taking nmcmc steps
-        """
-        accepted = 0
-        N = len(self.evolution_points)
-        for jumps in range(self.Nmcmc):
-            logp_old = self.evolution_points[jumps%N].logP
-            newparam = self.proposals.get_sample(self.evolution_points[jumps%N].copy())
-            newparam.logP = self.user.log_prior(newparam)
-            if newparam.logP-logp_old + self.proposals.log_J > log(random()):
-                newparam.logL = self.user.log_likelihood(newparam)
-                if newparam.logL > logLmin:
-                  self.evolution_points[jumps%N] = newparam
-                  logp_old = newparam.logP
-                  accepted+=1
-
-        self.acceptance = float(accepted)/float(self.Nmcmc)
-        self.estimate_nmcmc()
-        return self.evolution_points[jumps%N]
