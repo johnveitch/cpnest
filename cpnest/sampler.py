@@ -143,15 +143,16 @@ class Sampler(object):
         accepted = 0
         N = len(self.evolution_points)
         for jumps in range(self.Nmcmc):
+            logp_old = self.evolution_points[jumps%N].logP
             newparam = self.proposals.get_sample(self.evolution_points[jumps%N].copy())
             newparam.logP = self.user.log_prior(newparam)
             if newparam.logP-logp_old + self.proposals.log_J > log(random()):
                 newparam.logL = self.user.log_likelihood(newparam)
                 if newparam.logL > logLmin:
-                  oldparam = newparam
+                  self.evolution_points[jumps%N] = newparam
                   logp_old = newparam.logP
                   accepted+=1
 
         self.acceptance = float(accepted)/float(self.Nmcmc)
         self.estimate_nmcmc()
-        return oldparam
+        return self.evolution_points[jumps%N]
