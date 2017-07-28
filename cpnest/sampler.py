@@ -76,7 +76,7 @@ class Sampler(object):
         else:
             self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.acceptance - 1.0)
         
-        self.Nmcmc_exact = float(min(self.Nmcmc_exact,1.2*self.maxmcmc))
+        self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
         return self.Nmcmc
 
