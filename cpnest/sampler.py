@@ -75,10 +75,9 @@ class Sampler(object):
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
             self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.acceptance - 1.0)
-        if np.isfinite(self.Nmcmc_exact):
-            self.Nmcmc = max(safety,min(self.maxmcmc, int(round(self.Nmcmc_exact))))
-        else:
-            self.Nmcmc = max(safety,self.maxmcmc)
+        
+        self.Nmcmc_exact = float(min(self.Nmcmc_exact,1.2*self.maxmcmc))
+        self.Nmcmc = max(safety,int(self.Nmcmc_exact))
         return self.Nmcmc
 
     def produce_sample(self, queue, logLmin, seed, ip, port, authkey):
