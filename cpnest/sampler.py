@@ -95,6 +95,8 @@ class Sampler(object):
         while(1):
             # Pick a random point from the ensemble to start with
             # Pop it out the stack to prevent cloning
+            param = self.evolution_points.rotate(np.random.randint(self.poolsize))
+
             param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
