@@ -1,3 +1,30 @@
+from __future__ import division, print_function
+import sys
+import os
+import numpy as np
+from numpy import logaddexp, exp, array, log, log1p
+from numpy import inf
+from . import nest2pos
+from .nest2pos import logsubexp, log_integrate_log_trap
+from functools import reduce
+import itertools as it
+from bisect import bisect_left
+import time
+from scipy.misc import logsumexp
+
+def timeit(method):
+
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+
+        print('%r (%r, %r) %2.2f sec' % \
+              (method.__name__, args, kw, te-ts))
+        return result
+
+    return timed
+
 class DynamicNestedSampler(object):
     """
     Dynamic nested sampling algorithm
@@ -13,16 +40,15 @@ class DynamicNestedSampler(object):
         """
         self.G = G
         self.Ninit = Ninit
-        pass
+        self.nest=Contour()
+
     def terminate(self):
         """
         Returns True if termination condition met
         """
-    def importance(self):
-        """
-        Compute the importance function
-        """
         pass
+
+
     def run(self):
         """
         Run the algorithm
@@ -37,109 +63,113 @@ class DynamicNestedSampler(object):
             Lmax = self.logLs[maxI_idx]
             Lmin = min( self.logLs[importance>importance_frac*maxI] )
             self.sample_between(Lmin, Lmax)
-            
-class DynamicNestState(object):
-    """
-    Stores the state of dynamic nest
-    """
-    def __init__(self):
-        self.logL=[]
-        self.n=[]
-        
-    @property
-    def logt(self):
-        """
-        E[ log(t) ]
-        """
-        return -1/self.n
 
-    @property
-    def Var_logt(self):
+class LivePoint(object):
+    """
+    Representation of a basic atom of NS
+    """
+    def __init__(self,logLmin=-inf,logL=None,params=None,parent=None):
         """
-        Var [ log(t) ]
+        logLmin : likelihood contour this sample was generated within
+        logL    : likelihood of this sample
+        params  : parameters
         """
-        return 1/self.n**2
+        self.logLmin=logLmin
+        self.logL=logL
+        self.params=params
+        self.parent=parent
+    def is_sibling(self,other):
+        return self.logLmin < other.logL and self.logL < other.logL
+
+class Contour(object):
+    def __init__(self,logLmin=-inf,logP=0,contents=None):
+        self.logLmin=logLmin
+        self.logP=logP
+        self.points=list([]) if contents is None else contents
     
-    def Z(self,t):
+    @property
+    def _logls(self):
+        return [p.logL for p in self.points]
+    
+    def contains(self,p):
+        return self.logLmin <= p.logL
+    def count(self,ps):
+        return sum(map(self.contains,ps))
+    def add(self,p):
+        if p.logL>=self.logLmin:
+            i=bisect_left(self._logls,p.logL)
+            self.points.insert(i,p)
+
+    def update(self,ps):
+        for p in ps: self.add(p)
+    
+    @property
+    def n(self):
+        return len(self.points)
+
+    def logt(self, c):
         """
-        Evidence in dead points
+        log volume of self occupied by c
+        """
+        if not isinstance(c,Contour): c = Contour(logLmin=c)
+        num_below = bisect_left(self._logls, c.logLmin)
+        #num_below = sum(p.logL>=c.logLmin for p in self.contents)
+        return log(self.n-num_below)-log(self.n)
+    
+    @property
+    def nested(self):
+        """
+        sub-contours for all points
+        """
+        i=1
+        ps=self.points
+        while i<len(ps):
+            p=ps[i]
+            i+=1
+            yield Contour(  logLmin = p.logL,
+                    logP = self.logP+self.logt(p.logL),
+                    contents=ps[i:]
+                    )
+    def logw(self):
+        if self.n<=1: return 0
+        else: return self.logt(self._logls[0])+self.logLmin
+    @property
+    #@timeit
+    def logZ(self):
+        """
+        Evidence inside this contour
         Z(t) = sum_{dead} L_i w_i(t)
         """
-        pass
-    
-    def logX(self,logt):
-        """
-        Integral mass inside contour t
-        """
-        result = 0
-        while(logt<result):
-            result=np.logaddexp(result,next(self.logt))
-        return result
-    
-    def w(self,t):
-        """
-        weight of sample at shrinkage t
-        """
-        pass
-    
+        n=self.n
+        if n==0:
+            return self.logP+self.logLmin
+        logX=np.zeros(n+1)
+        logX[0]=self.logP
+        for i in range(1,n):
+            logX[i]=logX[i-1] - 1/(n-i)
+        logX[-1]=-np.inf
+        ls=np.concatenate(([self.logLmin],self._logls,self._logls[-1:]))
+        log_func_sum = logaddexp(ls[:-1], ls[1:]) - np.log(2)
+        return log_integrate_log_trap(log_func_sum, logX)
     
     def I_z(self):
         """
         Importance of current set to evidence
         I_z[i] = E[Z_{>i}] / n_i
         """
+        return(self.logZ/(1+self.n))
+    def I_post(self):
+        """
+        Importance of current set to posterior
+        I_post[i] = L_i w_i
+        """
+        return self.logw()
+    def I(self,G=0.25):
+        """
+        Importance
+        """
+        Iz = array([np.exp(c.I_z()) for c in self.nested])
+        Ipost = array([np.exp(c.I_post()) for c in self.nested])
+        return (1.0-G)*Iz/sum(Iz) + G*Ipost/sum(Ipost)
         
         
-        
-    
-
-class DynamicNestState(object):
-  """
-  Stores the state of the nested sampling integrator
-  """
-  def __init__(self,nlive):
-    self.nlive=nlive
-    self.reset()
-  def reset(self):
-    """
-    Reset the sampler
-    """
-    self.iteration=0
-    self.logZ=-inf
-    self.oldZ=-inf
-    self.logw=0
-    self.info=0
-    # Start with a dummy sample enclosing the whole prior
-    self.logLs=[-inf] # Likelihoods sampled
-    self.log_vols=[0.0] # Volumes enclosed by contours
-  def increment(self,logL,nlive=None):
-    """
-    Increment the state of the evidence integrator
-    Simply uses rectangle rule for initial estimate
-    """
-    if(logL<=self.logLs[-1]):
-      print('WARNING: NS integrator received non-monotonic logL. {0:.3f} -> {1:.3f}'.format(self.logLs[-1],logL))
-    if nlive is None:
-      nlive = self.nlive
-    oldZ = self.logZ
-    logt=-1.0/nlive
-    Wt = self.logw + logL + logsubexp(0,logt)
-    self.logZ = logaddexp(self.logZ,Wt)
-    # Update information estimate
-    if np.isfinite(oldZ) and np.isfinite(self.logZ):
-      self.info = exp(Wt - self.logZ)*logL + exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
-    
-    # Update history
-    self.logw += logt
-    self.iteration += 1
-    self.logLs.append(logL)
-    self.log_vols.append(self.logw)
-  def finalise(self):
-    """
-    Compute the final evidence with more accurate integrator
-    Call at end of sampling run to refine estimate
-    """
-    from scipy import integrate
-    # Trapezoidal rule
-    self.logZ=nest2pos.log_integrate_log_trap(np.array(self.logLs),np.array(self.log_vols))
-    return self.logZ
