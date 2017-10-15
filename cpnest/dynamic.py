@@ -78,6 +78,7 @@ class LivePoint(object):
         self.logL=logL
         self.params=params
         self.parent=parent
+        
     def is_sibling(self,other):
         return self.logLmin < other.logL and self.logL < other.logL
 
@@ -85,7 +86,11 @@ class Contour(object):
     def __init__(self,logLmin=-inf,logP=0,contents=None):
         self.logLmin=logLmin
         self.logP=logP
-        self.points=list([]) if contents is None else contents
+        if contents is not None:
+            contents = sorted(contents,key=lambda x:x.logL)
+        self.points=[LivePoint(logLmin=logLmin,logL=logLmin)] if contents is None else contents
+        #print('Created contour with logLmin {0}, logP {1}, {2} samples'.format(
+        #    logLmin,logP,len(self.points)))
     
     @property
     def _logls(self):
@@ -96,9 +101,12 @@ class Contour(object):
     def count(self,ps):
         return sum(map(self.contains,ps))
     def add(self,p):
-        if p.logL>=self.logLmin:
-            i=bisect_left(self._logls,p.logL)
-            self.points.insert(i,p)
+        if p.logL<=self.logLmin:
+            print('Error: tried to add point logL {0} to contour at {1}'.format(p.logL,self.logLmin))
+            return
+        i=bisect_left(self._logls,p.logL)
+
+        self.points.insert(i,p)
 
     def update(self,ps):
         for p in ps: self.add(p)
@@ -107,14 +115,18 @@ class Contour(object):
     def n(self):
         return len(self.points)
 
-    def logt(self, c):
+    def logt(self, logL):
         """
-        log volume of self occupied by c
+        log volume of self occupied by contour at logL
         """
-        if not isinstance(c,Contour): c = Contour(logLmin=c)
-        num_below = bisect_left(self._logls, c.logLmin)
+        assert logL>=self.logLmin, 'Cannot estimate shrinkage, {0}<{1} : order is wrong'.format(self.logLmin,logL)
+        #if not isinstance(c,Contour): c = Contour(logLmin=c)
+        below = bisect_left(self._logls, logL)+1
+        trials = sum(p.logLmin <= logL for p in self.points)
+        #print('Between {0} and {1}: {2}/{3} trials were below {1}'.format(self.logLmin,logL,below,trials))
+        return log(trials - below)-log(trials)
         #num_below = sum(p.logL>=c.logLmin for p in self.contents)
-        return log(self.n-num_below)-log(self.n)
+        #return log(self.n-below)-log(self.n)
     
     @property
     def nested(self):
@@ -123,13 +135,15 @@ class Contour(object):
         """
         i=1
         ps=self.points
-        while i<len(ps):
-            p=ps[i]
-            i+=1
-            yield Contour(  logLmin = p.logL,
-                    logP = self.logP+self.logt(p.logL),
-                    contents=ps[i:]
+        prev=self
+        for i,p in enumerate(self.points):
+            cur = Contour(  logLmin = p.logL,
+                    logP = prev.logP+prev.logt(p.logL),
+                    contents=prev.points[1:]
                     )
+            yield cur
+            prev=cur
+            
     def logw(self):
         if self.n<=1: return 0
         else: return self.logt(self._logls[0])+self.logLmin
@@ -140,13 +154,18 @@ class Contour(object):
         Evidence inside this contour
         Z(t) = sum_{dead} L_i w_i(t)
         """
-        n=self.n
+        n=len(self.points)
         if n==0:
             return self.logP+self.logLmin
         logX=np.zeros(n+1)
         logX[0]=self.logP
-        for i in range(1,n):
-            logX[i]=logX[i-1] - 1/(n-i)
+        cur=self
+        for i,c in enumerate(self.nested):
+            # i=0 is this countour
+            #logX[i+1]=logX[i] + cur.logt(c)
+            logX[i+1]=c.logP
+            cur=c
+        
         logX[-1]=-np.inf
         ls=np.concatenate(([self.logLmin],self._logls,self._logls[-1:]))
         log_func_sum = logaddexp(ls[:-1], ls[1:]) - np.log(2)

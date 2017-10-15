@@ -4,7 +4,7 @@ from numpy.random import uniform
 from functools import reduce
 
 def logsubexp(x,y):
-        assert np.all(x >= y), 'cannot take log of negative number {0!s} - {1!s}'.format(str(x), str(y))
+        assert np.all(x >= y), 'cannot take log of negative number {0!s} \n\t - {1!s} \n\t= {2!s}'.format(str(x), str(y),str(x-y))
 
         return x + np.log1p(-np.exp(y-x))
 
