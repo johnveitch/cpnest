@@ -86,6 +86,7 @@ class Contour(object):
     def __init__(self,logLmin=-inf,logP=0,contents=None):
         self.logLmin=logLmin
         self.logP=logP
+        self._logZ=None
         if contents is not None:
             contents = sorted(contents,key=lambda x:x.logL)
         self.points=[LivePoint(logLmin=logLmin,logL=logLmin)] if contents is None else contents
@@ -154,6 +155,7 @@ class Contour(object):
         Evidence inside this contour
         Z(t) = sum_{dead} L_i w_i(t)
         """
+        if self._logZ: return self._logZ
         n=len(self.points)
         if n==0:
             return self.logP+self.logLmin
@@ -169,14 +171,15 @@ class Contour(object):
         logX[-1]=-np.inf
         ls=np.concatenate(([self.logLmin],self._logls,self._logls[-1:]))
         log_func_sum = logaddexp(ls[:-1], ls[1:]) - np.log(2)
-        return log_integrate_log_trap(log_func_sum, logX)
+        self._logZ = log_integrate_log_trap(log_func_sum, logX)
+        return self._logZ
     
     def I_z(self):
         """
         Importance of current set to evidence
         I_z[i] = E[Z_{>i}] / n_i
         """
-        return(self.logZ/(1+self.n))
+        return(self.logZ - np.log(1+self.n))
     def I_post(self):
         """
         Importance of current set to posterior
@@ -188,7 +191,9 @@ class Contour(object):
         Importance
         """
         Iz = array([np.exp(c.I_z()) for c in self.nested])
+        Iz = np.sum(Iz)
         Ipost = array([np.exp(c.I_post()) for c in self.nested])
+        Ipost = Ipost/np.sum(Ipost)
         return (1.0-G)*Iz/sum(Iz) + G*Ipost/sum(Ipost)
         
         
