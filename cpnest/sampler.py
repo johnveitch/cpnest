@@ -107,9 +107,9 @@ class Sampler(object):
             # Pop it out the stack to prevent cloning
             #param = self.evolution_points.rotate()
 
-            param = self.evolution_points[np.random.randint(self.poolsize)]
-            self.evolution_points.remove(param)
-            
+#            param = self.evolution_points[np.random.randint(self.poolsize)]
+#            self.evolution_points.remove(param)
+            param = self.evolution_points.popleft()
             if logLmin.value==np.inf:
                 break
             
