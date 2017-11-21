@@ -217,7 +217,7 @@ class NestedSampler(object):
         """
         logL_array = np.array([p.logL for p in self.params])
         self.worst = logL_array.argmin()
-        self.logLmin.value = logL_array[self.worst]
+        self.logLmin.value = np.float128(logL_array[self.worst])
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
@@ -242,8 +242,6 @@ class NestedSampler(object):
             self.logLmin.value = np.inf
             print("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
-        
-        logLmin = self.get_worst_live_point()
 
         while self.condition > self.tolerance:
             self.consume_sample(queues)
