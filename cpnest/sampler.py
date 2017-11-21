@@ -110,11 +110,14 @@ class Sampler(object):
         queue.cancel_join_thread()
         
         self.counter=0
+        
         while True:
             if logLmin.value==np.inf:
                 break
         
+        
             self.metropolis_hastings(logLmin.value)
+
             outParam = self.evolution_points[np.random.randint(self.poolsize)]
 
             # Push the sample onto the queue
@@ -128,6 +131,7 @@ class Sampler(object):
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(len(self.samples))],usemask=False)
         np.savetxt(os.path.join('mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
+        sys.stderr.write("Sampler process {0!s}, saved chain in {1!s}\n".format(os.getpid(),'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
         return 0
 
@@ -136,13 +140,14 @@ class Sampler(object):
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
         accepted = 0
-       
-        for jumps in range(self.Nmcmc):
+        
+        for j in range(self.poolsize):
 
-            for j in range(self.poolsize):
+            oldparam = self.evolution_points.popleft()
+            logp_old = self.user.log_prior(oldparam)
 
-                oldparam = self.evolution_points.popleft()
-                logp_old = self.user.log_prior(oldparam)
+            for _ in range(self.Nmcmc):
+
                 newparam = self.proposals.get_sample(oldparam.copy())
                 newparam.logP = self.user.log_prior(newparam)
                 if newparam.logP-logp_old + self.proposals.log_J > log(random()):
@@ -151,8 +156,9 @@ class Sampler(object):
                       oldparam = newparam
                       logp_old = newparam.logP
                       accepted+=1
-                # Put sample back in the stack
-                self.samples.append(oldparam)
-                self.evolution_points.append(oldparam)
-        self.acceptance = float(accepted)/float(self.Nmcmc*self.poolsize)
+            # Put sample back in the stack
+            self.samples.append(oldparam)
+            self.evolution_points.append(oldparam)
+
+        self.acceptance = float(accepted)/float(self.poolsize*self.Nmcmc)
         self.estimate_nmcmc()
