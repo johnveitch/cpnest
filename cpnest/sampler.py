@@ -102,7 +102,9 @@ class Sampler(object):
         queue.cancel_join_thread()
         
         self.counter=0
-        while(1):
+        while True:
+            if logLmin.value==np.inf:
+                break
             # Pick a random point from the ensemble to start with
             # Pop it out the stack to prevent cloning
             #param = self.evolution_points.rotate()
@@ -110,8 +112,6 @@ class Sampler(object):
 #            param = self.evolution_points[np.random.randint(self.poolsize)]
 #            self.evolution_points.remove(param)
             param = self.evolution_points.popleft()
-            if logLmin.value==np.inf:
-                break
             
             outParam = self.metropolis_hastings(param,logLmin.value)
            
