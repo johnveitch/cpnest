@@ -59,6 +59,7 @@ class Sampler(object):
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
         self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output
+
         
     def reset(self):
         """
@@ -103,6 +104,7 @@ class Sampler(object):
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
         self.ACLs.append(self.Nmcmc)
+
         return self.Nmcmc
 
     def produce_sample(self, queue, logLmin ):
@@ -124,6 +126,7 @@ class Sampler(object):
 
             self.metropolis_hastings(logLmin.value, queue=queue)
             outParam = self.evolution_points[np.random.randint(self.poolsize)]
+
             # Push the sample onto the queue
 #            queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
@@ -143,6 +146,7 @@ class Sampler(object):
         return 0
 
     def metropolis_hastings(self, logLmin, queue=None):
+
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
