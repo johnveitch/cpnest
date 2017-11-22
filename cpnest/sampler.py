@@ -140,13 +140,13 @@ class Sampler(object):
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
         accepted = 0
-        
+
         for j in range(self.poolsize):
 
             oldparam = self.evolution_points.popleft()
             logp_old = self.user.log_prior(oldparam)
 
-            for _ in range(self.Nmcmc):
+            for n in range(self.Nmcmc):
 
                 newparam = self.proposals.get_sample(oldparam.copy())
                 newparam.logP = self.user.log_prior(newparam)
@@ -156,6 +156,7 @@ class Sampler(object):
                       oldparam = newparam
                       logp_old = newparam.logP
                       accepted+=1
+
             # Put sample back in the stack
             self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
