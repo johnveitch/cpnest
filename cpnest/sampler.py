@@ -59,7 +59,6 @@ class Sampler(object):
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
         self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output
-
         
     def reset(self):
         """
@@ -136,13 +135,14 @@ class Sampler(object):
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
-        thinning = 5*int(np.ceil(np.mean(self.ACLs)))
+
+        thinning = int(np.ceil(np.mean(self.ACLs)))
         for e in self.evolution_points: self.samples.append(e)
-        sys.stderr.write("Sampler process {0!s}: Mean ACL measured (suggested thinning) = {1:d}\n".format(os.getpid(),thinning))
+        sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
-        self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
-        np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
-        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
+        self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples),thinning)],usemask=False)
+        np.savetxt(os.path.join('mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
+        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples)//thinning,'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
 
@@ -153,7 +153,6 @@ class Sampler(object):
         accepted = 0
         counter = 0
         for j in range(self.poolsize):
-
             sub_counter = 0
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
@@ -165,7 +164,6 @@ class Sampler(object):
                 if newparam.logP-logp_old + self.proposals.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
                     if newparam.logL > logLmin:
-
                         oldparam = newparam
                         logp_old = newparam.logP
                         sub_accepted+=1
