@@ -125,11 +125,12 @@ class Sampler(object):
                 break
 
             self.metropolis_hastings(logLmin.value, queue=queue)
-            outParam = self.evolution_points[np.random.randint(self.poolsize)]
 
+            outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
 #            queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
+
             if (self.counter%(self.poolsize/10))==0 or self.acceptance < 1.0/float(self.poolsize):
                 self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
@@ -146,7 +147,6 @@ class Sampler(object):
         return 0
 
     def metropolis_hastings(self, logLmin, queue=None):
-
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
@@ -165,6 +165,7 @@ class Sampler(object):
                 if newparam.logP-logp_old + self.proposals.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
                     if newparam.logL > logLmin:
+
                         oldparam = newparam
                         logp_old = newparam.logP
                         sub_accepted+=1
