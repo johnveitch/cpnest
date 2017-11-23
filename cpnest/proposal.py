@@ -105,7 +105,7 @@ class EnsembleStretch(EnsembleProposal):
         x = uniform(-1,1)*log(scale)
         Z = exp(x)
         out = a + (old - a)*Z
-        # Jacobean
+        # Jacobian
         self.log_J = out.dimension * x
         return out
 
