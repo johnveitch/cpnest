@@ -114,17 +114,14 @@ class Sampler(object):
         while True:
             if logLmin.value==np.inf:
                 break
-        
-        
+
             self.metropolis_hastings(logLmin.value)
-
             outParam = self.evolution_points[np.random.randint(self.poolsize)]
-
             # Push the sample onto the queue
             queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.001:
-                self.proposal.set_ensemble(self.evolution_points)
+            if (self.counter%(self.poolsize/10))==0 or self.acceptance<1.0/float(self.poolsize):
+                self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
 
         print "MCMC samples accumulated = ",len(self.samples)
@@ -135,7 +132,7 @@ class Sampler(object):
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
         return 0
 
-    def metropolis_hastings(self,logLmin):
+    def metropolis_hastings(self, logLmin):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
@@ -156,7 +153,6 @@ class Sampler(object):
                       oldparam = newparam
                       logp_old = newparam.logP
                       accepted+=1
-
             # Put sample back in the stack
             self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
