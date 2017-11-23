@@ -52,8 +52,10 @@ class Sampler(object):
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
         self.acceptance=0.0
+        self.sub_acceptance=0.0
         self.initialised=False
         self.samples = [] # the list of samples from the mcmc chain
+        self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output
         
     def reset(self):
         """
@@ -90,14 +92,14 @@ class Sampler(object):
         """
         if tau is None: tau = self.poolsize
 
-        if self.acceptance == 0.0:
+        if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
-            self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.acceptance - 1.0)
+            self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.sub_acceptance - 1.0)
         
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
-
+        self.ACLs.append(self.Nmcmc)
         return self.Nmcmc
 
     def produce_sample(self, queue, logLmin ):
@@ -124,12 +126,14 @@ class Sampler(object):
                 self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
 
-        print "MCMC samples accumulated = ",len(self.samples)
+        sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
+        thinning = int(np.ceil(np.mean(self.ACLs)))
+        sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
-        self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(len(self.samples))],usemask=False)
+        self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples),thinning)],usemask=False)
         np.savetxt(os.path.join('mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
-        sys.stderr.write("Sampler process {0!s}, saved chain in {1!s}\n".format(os.getpid(),'mcmc_chain_%s.dat'%os.getpid()))
-        sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
+        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples)//thinning,'mcmc_chain_%s.dat'%os.getpid()))
+        sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
 
     def metropolis_hastings(self, logLmin):
@@ -140,6 +144,7 @@ class Sampler(object):
 
         for j in range(self.poolsize):
 
+            sub_accepted = 0
             oldparam = self.evolution_points.popleft()
             logp_old = self.user.log_prior(oldparam)
 
@@ -152,10 +157,12 @@ class Sampler(object):
                     if newparam.logL > logLmin:
                       oldparam = newparam
                       logp_old = newparam.logP
-                      accepted+=1
+                      sub_accepted+=1
             # Put sample back in the stack
             self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
+            self.sub_acceptance = float(sub_accepted)/float(self.Nmcmc)
+            self.estimate_nmcmc()
+            accepted += sub_accepted
 
         self.acceptance = float(accepted)/float(self.poolsize*self.Nmcmc)
-        self.estimate_nmcmc()
