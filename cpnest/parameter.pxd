@@ -1,4 +1,5 @@
 from cpython cimport array
+cimport numpy as np
 
 cdef class LivePoint:
     cdef public double logL
@@ -7,5 +8,5 @@ cdef class LivePoint:
     cdef public array.array values
     cdef public list names
     cdef public list bounds
-    cpdef copy(LivePoint self)
-    cpdef asnparray(LivePoint self)
+    cpdef LivePoint copy(LivePoint self)
+    cpdef np.ndarray asnparray(LivePoint self)
