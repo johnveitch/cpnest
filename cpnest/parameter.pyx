@@ -8,8 +8,8 @@ from cpython cimport array
 cimport numpy as np
 import numpy as np
 
-def rebuild_livepoint(names):
-  lp=LivePoint(names)
+cpdef LivePoint rebuild_livepoint(names):
+  cdef LivePoint lp=LivePoint(names)
   return lp
 
 cdef class LivePoint:
@@ -128,20 +128,20 @@ cdef class LivePoint:
                 return
         raise KeyError
 
-    cpdef copy(LivePoint self):
+    cpdef LivePoint copy(LivePoint self):
         """
         Returns a copy of the current live point
         """
-        result = LivePoint(self.names)
+        cdef LivePoint result = LivePoint(self.names)
         result.__setstate__(self.__getstate__())
         return result
       
-    cpdef asnparray(LivePoint self):
+    cpdef np.ndarray asnparray(LivePoint self):
         """
         Return the sample as a numpy record array
         """
-        names = self.names+['logL','logPrior']
-        x = np.zeros(1, dtype = {'names':names, 'formats':['f8' for _ in names]})
+        cdef list names = self.names+['logL','logPrior']
+        cdef np.ndarray x = np.zeros(1, dtype = {'names':names, 'formats':['f8' for _ in names]})
         for n in self.names: x[n] = self[n]
         x['logL'] = self.logL
         x['logPrior'] = self.logP
