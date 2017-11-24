@@ -8,6 +8,7 @@ from random import random,randrange
 
 from . import parameter
 from .proposal import DefaultProposalCycle
+from . import proposal
 
 class Sampler(object):
     """
@@ -127,7 +128,7 @@ class Sampler(object):
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
-        thinning = int(np.ceil(np.mean(self.ACLs)))
+        thinning = 5*int(np.ceil(np.mean(self.ACLs)))
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples),thinning)],usemask=False)
