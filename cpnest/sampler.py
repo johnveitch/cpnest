@@ -38,8 +38,12 @@ class Sampler(object):
     JumpProposal class to use (defaults to proposals.DefaultProposalCycle)
     
     """
+<<<<<<< HEAD
     def __init__(self,usermodel,maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
 
+=======
+    def __init__(self,usermodel, maxmcmc, verbose=False, poolsize=1000):
+>>>>>>> final touches in mcmc
         self.user = usermodel
         self.initial_mcmc = maxmcmc//2
         self.maxmcmc = maxmcmc
@@ -137,7 +141,6 @@ class Sampler(object):
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
-
         thinning = int(np.ceil(np.mean(self.ACLs)))
         for e in self.evolution_points: self.samples.append(e)
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
@@ -159,6 +162,7 @@ class Sampler(object):
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
             logp_old = self.user.log_prior(oldparam)
+
             while True:
                 sub_counter += 1
                 newparam = self.proposals.get_sample(oldparam.copy())
