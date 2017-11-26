@@ -36,7 +36,9 @@ class Sampler(object):
     JumpProposal class to use (defaults to proposals.DefaultProposalCycle)
     
     """
+
     def __init__(self,usermodel,maxmcmc,seed=None, verbose=False, poolsize=1000, proposal=None):
+
         self.user = usermodel
         self.initial_mcmc = maxmcmc//2
         self.maxmcmc = maxmcmc
@@ -129,6 +131,7 @@ class Sampler(object):
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
         thinning = 5*int(np.ceil(np.mean(self.ACLs)))
+        for e in self.evolution_points: self.samples.append(e)
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples),thinning)],usemask=False)
@@ -142,15 +145,16 @@ class Sampler(object):
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
         accepted = 0
-
+        counter = 0
         for j in range(self.poolsize):
 
+            sub_counter = 0
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
             logp_old = self.user.log_prior(oldparam)
 
-            for n in range(self.Nmcmc):
-
+            while True:
+                sub_counter += 1
                 newparam = self.proposals.get_sample(oldparam.copy())
                 newparam.logP = self.user.log_prior(newparam)
                 if newparam.logP-logp_old + self.proposals.log_J > log(random()):
@@ -159,11 +163,15 @@ class Sampler(object):
                       oldparam = newparam
                       logp_old = newparam.logP
                       sub_accepted+=1
+                if (sub_counter > self.Nmcmc and sub_accepted > 0 and oldparam.logL > logLmin) or sub_counter > self.maxmcmc:
+                    break
+
+            counter += sub_counter
             # Put sample back in the stack
             self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
-            self.sub_acceptance = float(sub_accepted)/float(self.Nmcmc)
+            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
             accepted += sub_accepted
 
-        self.acceptance = float(accepted)/float(self.poolsize*self.Nmcmc)
+        self.acceptance = float(accepted)/float(counter)
