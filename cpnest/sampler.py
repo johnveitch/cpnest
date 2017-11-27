@@ -36,8 +36,7 @@ class Sampler(object):
     JumpProposal class to use (defaults to proposals.DefaultProposalCycle)
     
     """
-
-    def __init__(self,usermodel,maxmcmc,seed=None, verbose=False, poolsize=1000, proposal=None):
+    def __init__(self,usermodel,maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
 
         self.user = usermodel
         self.initial_mcmc = maxmcmc//2
@@ -57,6 +56,7 @@ class Sampler(object):
         self.acceptance=0.0
         self.sub_acceptance=0.0
         self.initialised=False
+        self.output = output
         self.samples = [] # the list of samples from the mcmc chain
         self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output
         
@@ -125,7 +125,7 @@ class Sampler(object):
             # Push the sample onto the queue
             queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize/10))==0 or self.acceptance<1.0/float(self.poolsize):
+            if (self.counter%(self.poolsize/10))==0 or self.acceptance < 1.0/float(self.poolsize):
                 self.proposals.set_ensemble(self.evolution_points)
             self.counter += 1
 
@@ -135,7 +135,7 @@ class Sampler(object):
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples),thinning)],usemask=False)
-        np.savetxt(os.path.join('mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
+        np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
         sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples)//thinning,'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
