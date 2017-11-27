@@ -11,7 +11,7 @@ class Proposal(object):
     Base class for jump proposals
     """
     __metaclass__ = ABCMeta
-    log_J = 0.0 # Jacobean of this jump proposal
+    log_J = 0.0 # Jacobian of this jump proposal
     @abstractmethod
     def get_sample(self,old):
         """
