@@ -38,12 +38,9 @@ class Sampler(object):
     JumpProposal class to use (defaults to proposals.DefaultProposalCycle)
     
     """
-<<<<<<< HEAD
-    def __init__(self,usermodel,maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
 
-=======
-    def __init__(self,usermodel, maxmcmc, verbose=False, poolsize=1000):
->>>>>>> final touches in mcmc
+    def __init__(self,usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
+
         self.user = usermodel
         self.initial_mcmc = maxmcmc//2
         self.maxmcmc = maxmcmc
@@ -146,7 +143,7 @@ class Sampler(object):
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples),thinning)],usemask=False)
-        np.savetxt(os.path.join('mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
+        np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
         sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples)//thinning,'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
