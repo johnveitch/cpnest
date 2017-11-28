@@ -190,18 +190,11 @@ class LeapFrog(EnsembleProposal):
     inverse_mass_matrix=None
     
     def set_ensemble(self,ensemble):
-        """
-            Over-ride default set_ensemble so that the
-            eigenvectors are recomputed when it is updated
-            """
         super(LeapFrog,self).set_ensemble(ensemble)
         self.update_mass_matrices()
     
     def update_mass_matrices(self):
-        """
-            Recompute the eigenvectors of the covariance matrix
-            from the ensemble
-            """
+
         n=len(self.ensemble)
         dim = self.ensemble[0].dimension
         cov_array = np.zeros((dim,n))
