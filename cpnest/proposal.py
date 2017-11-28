@@ -183,31 +183,3 @@ class DefaultProposalCycle(ProposalCycle):
         weights = [1.0,1.0,1.0,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
-class LeapFrog(EnsembleProposal):
-
-    log_J = 0.0
-    mass_matrix=None
-    inverse_mass_matrix=None
-    
-    def set_ensemble(self,ensemble):
-        super(LeapFrog,self).set_ensemble(ensemble)
-        self.update_mass_matrices()
-    
-    def update_mass_matrices(self):
-
-        n=len(self.ensemble)
-        dim = self.ensemble[0].dimension
-        cov_array = np.zeros((dim,n))
-        if dim == 1:
-            name=self.ensemble[0].names[0]
-            self.inverse_mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
-            self.mass_matrix=1.0/self.inverse_mass_matrix
-        else:
-            for i,name in enumerate(self.ensemble[0].names):
-                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
-            covariance = np.cov(cov_array)
-            self.mass_matrix=np.linalg.inv(covariance)
-            self.inverse_mass_matrix=covariance
-
-    def get_sample(self,old):
-        pass
