@@ -9,9 +9,7 @@ from random import random,randrange
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
-"""
-    hamilton equations collisional gas in a box whose side is shrinking
-"""
+
 class Sampler(object):
     """
     Sampler class.
