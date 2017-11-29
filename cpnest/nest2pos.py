@@ -84,8 +84,8 @@ def draw_posterior_many(datas, Nlives, verbose=False):
     for post,frac in zip(posts,fracs):
       mask = uniform(size=len(post))<frac
       bigpos.append(post[mask])
-    result = vstack(bigpos)
-    if verbose: print('Samples produced: {0:d}'.format(result.shape[1]))
+    result = vstack(bigpos).flatten()
+    if verbose: print('Samples produced: {0:d}'.format(result.shape[0]))
     return result
     
 def draw_N_posterior(data,log_wts, N, verbose=False):
@@ -117,5 +117,5 @@ def draw_N_posterior_many(datas, Nlives, Npost, verbose=False):
     log_total_evidence=reduce(logaddexp, log_evs)
     Ns=[int(round(Npost*np.exp(log_ev-log_total_evidence))) for log_ev in log_evs]
     posts=[draw_N_posterior(data,logwt,N) for (data,logwt,N) in zip(datas,log_wts,Ns)]
-    return vstack(posts)
+    return vstack(posts).flatten()
 
