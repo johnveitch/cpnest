@@ -142,7 +142,7 @@ class Sampler(object):
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
         np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
-        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples)//thinning,'mcmc_chain_%s.dat'%os.getpid()))
+        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
 
@@ -170,7 +170,9 @@ class Sampler(object):
                         sub_accepted+=1
                 if (sub_counter > self.Nmcmc and sub_accepted > 0 and oldparam.logL > logLmin) or sub_counter > self.maxmcmc:
                     break
+
             if queue is not None and oldparam.logL > logLmin: queue.put((float(sub_accepted)/float(sub_counter),sub_counter,oldparam))
+
             counter += sub_counter
 
             # Put sample back in the stack
