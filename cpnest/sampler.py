@@ -120,10 +120,10 @@ class Sampler(object):
             if logLmin.value==np.inf:
                 break
 
-            self.metropolis_hastings(logLmin.value)
+            self.metropolis_hastings(logLmin.value, queue=queue)
             outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
-            queue.put((self.acceptance,self.Nmcmc,outParam))
+#            queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize/10))==0 or self.acceptance < 1.0/float(self.poolsize):
                 self.proposals.set_ensemble(self.evolution_points)
@@ -136,11 +136,11 @@ class Sampler(object):
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
         np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),newline='\n',delimiter=' ')
-        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples)//thinning,'mcmc_chain_%s.dat'%os.getpid()))
+        sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
 
-    def metropolis_hastings(self, logLmin):
+    def metropolis_hastings(self, logLmin, queue=None):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
@@ -160,12 +160,12 @@ class Sampler(object):
                 if newparam.logP-logp_old + self.proposals.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
                     if newparam.logL > logLmin:
-                      oldparam = newparam
-                      logp_old = newparam.logP
-                      sub_accepted+=1
+                        oldparam = newparam
+                        logp_old = newparam.logP
+                        sub_accepted+=1
                 if (sub_counter > self.Nmcmc and sub_accepted > 0 and oldparam.logL > logLmin) or sub_counter > self.maxmcmc:
                     break
-
+            if queue is not None: queue.put((float(sub_accepted)/float(sub_counter),sub_counter,oldparam))
             counter += sub_counter
             # Put sample back in the stack
             self.samples.append(oldparam)
