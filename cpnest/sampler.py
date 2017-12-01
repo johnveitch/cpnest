@@ -109,11 +109,13 @@ class Sampler(object):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
+        self.seed = seed
+        np.random.seed(seed=self.seed)
         if not self.initialised:
           self.reset()
         # Prevent process from zombification if consumer thread exits
         queue.cancel_join_thread()
-        
+
         self.counter=0
         
         while True:
