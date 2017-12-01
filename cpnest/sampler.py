@@ -117,7 +117,6 @@ class Sampler(object):
           self.reset()
         # Prevent process from zombification if consumer thread exits
         queue.cancel_join_thread()
-
         self.counter=0
         
         while True:
