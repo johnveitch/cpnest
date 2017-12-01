@@ -38,9 +38,6 @@ class CPNest(object):
             self.seed=seed
         
         self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
-        self.Evolver = Sampler(self.user,maxmcmc,output=output,verbose=verbose,poolsize=Poolsize)
-        self.NUMBER_OF_PRODUCER_PROCESSES = Nthreads
-        self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
         self.process_pool = []
         # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
@@ -50,7 +47,7 @@ class CPNest(object):
             self.queues = [mp.Queue(maxsize=Nlive)]
 
         for i in range(Nthreads):
-            sampler = Sampler(self.user,maxmcmc,verbose=verbose,poolsize=Poolsize,seed=self.seed+i )
+            sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
             if balance_samplers:
                 q=self.queues[i]
             else:
