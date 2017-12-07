@@ -13,4 +13,6 @@ Tests can be run with:
 For developers, local install with:
   python setup.py develop --user
 
+Documentation can be built in build/sphinx with
+  python setup.py build_sphinx -b html
 
