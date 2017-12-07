@@ -5,8 +5,14 @@ branches:
 before_install:
 - openssl aes-256-cbc -K $encrypted_88a0b20be284_key -iv $encrypted_88a0b20be284_iv
   -in publish-key.enc -out publish-key -d
+- echo "Host github.com" >> ~/.ssh/config
+- echo "  IdentityFile publish-key" >> ~/.ssh/config
+- git --version
+- git remote set-url origin git@github.com:johnveitch/cpnest.git
 install:
-- pip install cpnest
+- pip install cpnest ghp-import
 script:
-- python setup.py build_sphinx -b html
+- cd docs
+- make html
+- ghp _build/html/ -p
 
