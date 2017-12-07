@@ -1,6 +1,10 @@
-# CPNest
-### Parallel nested sampling in python
----
+CPNest
+======
+
+Parallel nested sampling in python
+
+----
+
 © 2015-2017 Walter Del Pozzo, John Veitch
 
 .. image:: https://img.shields.io/badge/license-MIT-blue.svg
@@ -11,7 +15,7 @@ walter.delpozzo@ligo.org,
 john.veitch@ligo.org
 
 CPNest is a python module for performing Bayesian Inference.
-Documentation at `GitHub Pages <https://johnveitch.github.io/cpnest/>`.
+Documentation at `GitHub Pages <https://johnveitch.github.io/cpnest/>`_.
 
 
 If you use this software, please cite our DOI:
