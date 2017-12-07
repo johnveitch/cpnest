@@ -5,6 +5,7 @@ branches:
 before_install:
 - openssl aes-256-cbc -K $encrypted_88a0b20be284_key -iv $encrypted_88a0b20be284_iv
   -in publish-key.enc -out publish-key -d
+- chmod u=rw,og= publish-key
 - echo "Host github.com" >> ~/.ssh/config
 - echo "  IdentityFile publish-key" >> ~/.ssh/config
 - git --version
