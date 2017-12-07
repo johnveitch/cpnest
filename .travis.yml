@@ -10,9 +10,12 @@ before_install:
 - git --version
 - git remote set-url origin git@github.com:johnveitch/cpnest.git
 install:
-- pip install cpnest ghp-import
+- pip install cpnest ghp-import sphinx sphinx-rtd-theme
+cache:
+ directories:
+  - .env
 script:
 - cd docs
 - make html
-- ghp _build/html/ -p
+- ghp-import _build/html/ -p
 
