@@ -18,6 +18,7 @@ cache:
   - .cache/pip
 script:
 - cd docs
+- sphinx-apidoc ../cpnest -o .
 - make html
 - ghp-import _build/html/ -pf
 
