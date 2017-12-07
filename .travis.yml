@@ -18,5 +18,5 @@ cache:
 script:
 - cd docs
 - make html
-- ghp-import _build/html/ -p
+- ghp-import _build/html/ -pf
 
