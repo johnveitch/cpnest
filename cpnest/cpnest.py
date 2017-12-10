@@ -36,6 +36,11 @@ class CPNest(object):
         if seed is None: self.seed=1234
         else:
             self.seed=seed
+
+        self.port=5555
+        self.authkey = "12345"
+        self.ip = "0.0.0.0"
+
         self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
         self.Evolver = Sampler(self.user,maxmcmc,verbose=verbose,poolsize=Poolsize)
         self.NUMBER_OF_PRODUCER_PROCESSES = Nthreads
@@ -44,12 +49,18 @@ class CPNest(object):
         self.process_pool = []
         # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
         if balance_samplers:
-          self.queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
+            self.queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
         else:
-          self.queues = [mp.Queue(maxsize=Nlive)]
-        self.port=5555
-        self.authkey = "12345"
-        self.ip = "0.0.0.0"
+            self.queues = [mp.Queue(maxsize=Nlive)]
+
+        for i in range(self.NUMBER_OF_PRODUCER_PROCESSES):
+            if balance_samplers:
+                q=self.queues[i]
+            else:
+                q=self.queues[0]
+            p = mp.Process(target=self.Evolver.produce_sample, args=(q, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            self.process_pool.append(p)
+
 
 
     def run(self):
@@ -59,12 +70,7 @@ class CPNest(object):
         import numpy as np
         import os
         from .nest2pos import draw_posterior_many
-        for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.Evolver.produce_sample, args=(self.queues[i%len(self.queues)], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
-            self.process_pool.append(p)
-        #for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
-        #    np = mp.Process(target=self.NS.nested_sampling_loop, args=(self.sampler_lock, self.queue, self.port, self.authkey))
-        #    self.process_pool.append(np)
+
         for each in self.process_pool:
             each.start()
         self.NS.nested_sampling_loop(self.queues,self.port,self.authkey)
