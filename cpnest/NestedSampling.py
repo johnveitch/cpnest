@@ -184,7 +184,7 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self, queues, port, authkey):
+    def consume_sample(self, queues):
         """
         consumes a sample from the shared queues and updates the evidence
         """
@@ -221,7 +221,7 @@ class NestedSampler(object):
         self.logLmax = np.max(logL_array)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, queues, port, authkey):
+    def nested_sampling_loop(self, queues):
         """
         main nested sampling loop
         """
@@ -246,7 +246,7 @@ class NestedSampler(object):
         logLmin = self.get_worst_live_point()
 
         while self.condition > self.tolerance:
-            self.consume_sample(queues, port, authkey)
+            self.consume_sample(queues)
 
 	# Signal worker threads to exit
         self.logLmin.value = np.inf

@@ -27,11 +27,15 @@ class Sampler(object):
     poolsize:
     number of objects for the affine invariant sampling
     default: 1000
+    
+    seed:
+    Random seed
     """
-    def __init__(self,usermodel,maxmcmc,verbose=False,poolsize=1000):
+    def __init__(self,usermodel,maxmcmc,seed=None, verbose=False,poolsize=1000):
         self.user = usermodel
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
+        self.seed=seed
         self.Nmcmc_exact = float(maxmcmc)
         self.proposals = proposal.DefaultProposalCycle()
         self.poolsize = poolsize
@@ -44,6 +48,7 @@ class Sampler(object):
         """
         Initialise the sampler
         """
+        np.random.seed(seed=self.seed)
         for n in range(self.poolsize):
           while True:
             if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
@@ -80,7 +85,7 @@ class Sampler(object):
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
         return self.Nmcmc
 
-    def produce_sample(self, queue, logLmin, seed, ip, port, authkey):
+    def produce_sample(self, queue, logLmin ):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
@@ -88,8 +93,7 @@ class Sampler(object):
           self.reset()
         # Prevent process from zombification if consumer thread exits
         queue.cancel_join_thread()
-        self.seed = seed
-        np.random.seed(seed=self.seed)
+        
         self.counter=0
         while(1):
             # Pick a random point from the ensemble to start with

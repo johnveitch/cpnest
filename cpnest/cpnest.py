@@ -17,7 +17,7 @@ class CPNest(object):
     Poolsize: Number of objects in the sampler pool (100)
     output : output directory (./)
     verbose: Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
-    seed: random seed
+    seed: random seed (default: 1234)
     maxmcmc: maximum MCMC points for sampling chains (100)
     Nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
     balance_samplers: If False, more samples will come from threads sampling "fast" parts of parameter space.
@@ -36,15 +36,8 @@ class CPNest(object):
         if seed is None: self.seed=1234
         else:
             self.seed=seed
-
-        self.port=5555
-        self.authkey = "12345"
-        self.ip = "0.0.0.0"
-
+        
         self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
-        self.Evolver = Sampler(self.user,maxmcmc,verbose=verbose,poolsize=Poolsize)
-        self.NUMBER_OF_PRODUCER_PROCESSES = Nthreads
-        self.NUMBER_OF_CONSUMER_PROCESSES = 1
 
         self.process_pool = []
         # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
@@ -53,14 +46,14 @@ class CPNest(object):
         else:
             self.queues = [mp.Queue(maxsize=Nlive)]
 
-        for i in range(self.NUMBER_OF_PRODUCER_PROCESSES):
+        for i in range(Nthreads):
+            sampler = Sampler(self.user,maxmcmc,verbose=verbose,poolsize=Poolsize,seed=self.seed+i )
             if balance_samplers:
                 q=self.queues[i]
             else:
                 q=self.queues[0]
-            p = mp.Process(target=self.Evolver.produce_sample, args=(q, self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            p = mp.Process(target=sampler.produce_sample, args=(q, self.NS.logLmin, ))
             self.process_pool.append(p)
-
 
 
     def run(self):
@@ -73,7 +66,7 @@ class CPNest(object):
 
         for each in self.process_pool:
             each.start()
-        self.NS.nested_sampling_loop(self.queues,self.port,self.authkey)
+        self.NS.nested_sampling_loop(self.queues)
         for each in self.process_pool:
             each.join()
 
@@ -105,7 +98,7 @@ class CPNest(object):
 
     def profile(self):
         for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.worker_sampler, args=(self.queues[i%len(self.queues)], self.NS.logLmin, self.seed+i, self.ip, self.port, self.authkey ))
+            p = mp.Process(target=self.worker_sampler, args=(self.queues[i%len(self.queues)], self.NS.logLmin ))
             self.process_pool.append(p)
         for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
             p = mp.Process(target=self.worker_ns, args=(self.queues, self.port, self.authkey))
