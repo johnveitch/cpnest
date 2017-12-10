@@ -7,7 +7,7 @@ from collections import deque
 from random import random,randrange
 
 from . import parameter
-from . import proposal
+from .proposal import DefaultProposalCycle
 
 class Sampler(object):
     """
@@ -30,14 +30,21 @@ class Sampler(object):
     
     seed:
     Random seed
+    
+    proposal:
+    JumpProposal class to use (defaults to proposals.DefaultProposalCycle)
+    
     """
-    def __init__(self,usermodel,maxmcmc,seed=None, verbose=False,poolsize=1000):
+    def __init__(self,usermodel,maxmcmc,seed=None, verbose=False,poolsize=1000, proposal=None):
         self.user = usermodel
         self.maxmcmc = maxmcmc
         self.Nmcmc = maxmcmc
         self.seed=seed
         self.Nmcmc_exact = float(maxmcmc)
-        self.proposals = proposal.DefaultProposalCycle()
+        if proposal is None:
+            self.proposal = DefaultProposalCycle()
+        else:
+            self.proposal = proposal
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize + 1) # +1 for the point to evolve
         self.verbose=verbose
@@ -58,12 +65,12 @@ class Sampler(object):
           p.logL=self.user.log_likelihood(p)
           self.evolution_points.append(p)
         if self.verbose > 2: sys.stderr.write("\n")
-        self.proposals.set_ensemble(self.evolution_points)
+        self.proposal.set_ensemble(self.evolution_points)
         for _ in range(len(self.evolution_points)):
           s = self.evolution_points.popleft()
           s = self.metropolis_hastings(s,-np.inf)
           self.evolution_points.append(s)
-        self.proposals.set_ensemble(self.evolution_points)
+        self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
     def estimate_nmcmc(self, safety=5, tau=None):
@@ -117,7 +124,7 @@ class Sampler(object):
             queue.put((self.acceptance,self.Nmcmc,outParam))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize/10))==0 or self.acceptance<0.001:
-                self.proposals.set_ensemble(self.evolution_points)
+                self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
         sys.stderr.write("Sampler process {0!s}, exiting\n".format(os.getpid()))
         return 0
@@ -130,9 +137,9 @@ class Sampler(object):
         oldparam = inParam.copy()
         logp_old = self.user.log_prior(oldparam)
         for jumps in range(self.Nmcmc):
-            newparam = self.proposals.get_sample(oldparam.copy())
+            newparam = self.proposal.get_sample(oldparam.copy())
             newparam.logP = self.user.log_prior(newparam)
-            if newparam.logP-logp_old + self.proposals.log_J > log(random()):
+            if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                 newparam.logL = self.user.log_likelihood(newparam)
                 if newparam.logL > logLmin:
                   oldparam = newparam
