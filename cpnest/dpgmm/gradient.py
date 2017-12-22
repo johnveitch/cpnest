@@ -48,14 +48,11 @@ class Potential(DPGMM):
         return -self.logprob(x)
 
 if __name__=="__main__":
-    w1 = 0.5
-    w2 = 0.1
+    w = 0.3
     s = []
-    for _ in range(5000):
-        if np.random.uniform() < w1:
+    for _ in range(1000):
+        if np.random.uniform() < w:
             s.append(np.random.normal(0,1))
-        elif np.random.uniform() < w2:
-            s.append(np.random.normal(2,0.5))
         else:
             s.append(np.random.normal(-5,0.1))
     c = Potential(1, s)
