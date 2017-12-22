@@ -79,7 +79,6 @@ class Sampler(object):
         if self.verbose > 2: sys.stderr.write("\n")
 
         self.proposal.set_ensemble(self.evolution_points)
-
         self.metropolis_hastings(-np.inf)
         
         if self.verbose > 2: sys.stderr.write("\n")

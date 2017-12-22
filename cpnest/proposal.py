@@ -25,6 +25,8 @@ class EnsembleProposal(Proposal):
     Base class for ensemble proposals
     """
     ensemble=None
+    mass_matrix = None
+    inverse_mass_matrix = None
     def set_ensemble(self,ensemble):
         """
         Set the ensemble of points to use
@@ -154,11 +156,15 @@ class EnsembleEigenVector(EnsembleProposal):
             name=self.ensemble[0].names[0]
             self.eigen_values = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
             self.eigen_vectors = np.eye(1)
+            self.mass_matrix = self.eigen_values
+            self.inverse_mass_matrix = 1./self.eigen_values
         else:	 
             for i,name in enumerate(self.ensemble[0].names):
                 for j in range(n): cov_array[i,j] = self.ensemble[j][name]
             covariance = np.cov(cov_array)
             self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
+            self.mass_matrix = covariance
+            self.inverse_mass_matrix = np.linalg.inv(self.mass_matrix)
 
     def get_sample(self,old):
         """

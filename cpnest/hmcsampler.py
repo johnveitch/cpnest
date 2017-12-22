@@ -12,6 +12,7 @@ from scipy.stats import multivariate_normal
 from . import parameter
 from . import proposal
 from sampler import Sampler
+from . import dpgmm
 
 class HMCSampler(Sampler):
     """
@@ -32,13 +33,12 @@ class HMCSampler(Sampler):
     number of objects for the gradients estimation
     default: 1000
     """
-    def __init__(self, *args, l=1.0, **kwargs):
+    def __init__(self, *args, **kwargs):
+        self.l              = kwargs.pop('l')
         super(HMCSampler,self).__init__(*args, **kwargs)
         self.step = self.constrained_leapfrog_step
-        self.gradients      = {}
         # step size choice from http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
         # which asks for the relation step_size = l * dims**(1/4)
-        self.l              = l
         self.step_size      = 1.0
         self.steps          = 20
         self.momenta_distribution = None
@@ -49,68 +49,35 @@ class HMCSampler(Sampler):
         Initialise the sampler
         """
         super(HMCSampler, self).reset()
-
-        self.momenta_distribution = multivariate_normal(cov=self.proposals.mass_matrix)
-        self.step_size = self.l * float(len(self.positions[0].names))**(0.25)
+        
+        self.step_size = self.l * float(len(self.evolution_points[0].names))**(0.25)
 
         # estimate the initial gradients
         if self.verbose > 2: sys.stderr.write("Computing initial gradients ...")
-        logProbs = np.array([-p.logP for p in self.positions])
-        self.estimate_gradient(logProbs, 'logprior')
-        logProbs = np.array([-p.logL for p in self.positions])
-        self.estimate_gradient(logProbs, 'loglikelihood')
-
+        self.potential  = self.estimate_gradient()
+        self.constraint = self.potential
+        
         if self.verbose > 2: sys.stderr.write("done\n")
         self.initialised=True
     
-    def estimate_gradient(self, logProbs, type):
-        
-        self.gradients[type] = []
+    def estimate_gradient(self):
+        # arrange the samples in a poolsize x dim data matrix
+        x = np.array([[self.evolution_points[i][key] for i in range(len(self.evolution_points))] for j,key in enumerate(self.evolution_points[0].names)])
+        dim = len(self.evolution_points[0].names)
+        self.mass_matrix = np.atleast_1d(np.cov(x))
+        if self.mass_matrix.shape[0] > 1:
+            self.inverse_mass_matrix = np.linalg.inv(self.mass_matrix)
+        else:
+            self.inverse_mass_matrix = np.atleast_2d(1./self.mass_matrix)
+        # estimate the potential
+        self.potential = dpgmm.gradient.Potential(dim, x.T)
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
+        return self.potential
 
-        # loop over the parameters, estimate the gradient numerically and spline interpolate
-
-#        import matplotlib.pyplot as plt
-
-        for j,key in enumerate(self.positions[0].names):
-
-            x = np.array([self.positions[i][key] for i in range(len(self.positions))])
-            idx = np.argsort(x)
-            lp = logProbs
-            # let's use numpy gradient to compute the finite difference partial derivative of logProbs
-            grad = np.gradient(lp,x)
-            # check for nans
-            w = np.isnan(grad)
-            # zero the nans
-            grad[w] = 0.
-            # approximate with a rolling median and standard deviation to average out all the small scale variations
-            window_size = 100
-            N = np.maximum(np.ceil(self.poolsize/window_size).astype(int),3)
-            bins = np.linspace(x.min(), x.max(),N)
-
-            idx  = np.digitize(x,bins)
-            running_median = np.array([np.nanmedian(grad[idx==k]) for k in range(N)])
-            running_std    = np.array([np.nanstd(grad[idx==k]) for k in range(N)])
-            weight = ~np.logical_or(np.isnan(running_median),np.isnan(running_std))
-            running_median[~weight] = 0.0
-            
-            if not(np.any(np.isnan(running_std))):
-                weight = weight.astype(float)/running_std
-            
-            # use now a linear spline interpolant to represent the partial derivative
-            self.gradients[type].append(UnivariateSpline(bins, running_median, ext=0, k=3, w=weight, s=self.poolsize))
-#            plt.figure()
-#            plt.plot(x,lp,'ro',alpha=0.5)
-#            plt.plot(x,grad,'g.',alpha=0.5)
-#            plt.errorbar(bins,running_median,yerr=running_std,lw=2)
-#            plt.plot(bins,self.gradients[type][j](bins),'k',lw=3)
-#            plt.xlabel(key)
-#            plt.ylim([-20,100])
-#            plt.savefig('grad_%s_%s_%04d.png'%(type,key,self.counter))
-#        plt.close('all')
-#        exit()
-
-    def gradient(self, inParam, gradients_list):
-        return np.array([g(inParam[n]) for g,n in zip(gradients_list,self.positions[0].names)])
+    def gradient(self, inParam):
+        x = inParam.asnparray()
+        x = x.view(dtype=np.float64)[:-2]
+        return self.potential.force(x)
 
     def kinetic_energy(self, momentum):
         """Kinetic energy of the current velocity (assuming a standard Gaussian)
@@ -126,7 +93,7 @@ class HMCSampler(Sampler):
         p = momentum.asnparray()
         p = p.view(dtype=np.float64)[:-2]
 
-        return 0.5 * np.dot(p,np.dot(self.proposals.inverse_mass_matrix,p))
+        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
 
     def potential_energy(self, position):
         """
@@ -154,22 +121,25 @@ class HMCSampler(Sampler):
         """
         return self.potential_energy(position) + self.kinetic_energy(momentum) #+position.logL
 
-    def constrained_leapfrog_step(self, position, momentum, logLmin):
+    def constrained_leapfrog_step(self, position):
         """
         https://arxiv.org/pdf/1005.0157.pdf
         https://arxiv.org/pdf/1206.1901.pdf
         """
-        # Updating the momentum a half-step
-        g = self.gradient(position, self.gradients['logprior'])
 
-        for j,k in enumerate(self.positions[0].names):
-            momentum[k] += - 0.5 * self.step_size * g[j]
+        momentum = self.user.new_point()
+        v = np.atleast_1d(self.momenta_distribution.rvs())
+        g = self.gradient(position)
+
+        # Updating the momentum a half-step
+        for j,k in enumerate(self.evolution_points[0].names):
+            momentum[k] = v[j]-0.5 * self.step_size * g[j]
 
         for i in xrange(self.steps):
             
             # do a step
-            for j,k in enumerate(self.positions[0].names):
-                position[k] += self.step_size * momentum[k] * self.proposals.inverse_mass_matrix[j,j]
+            for j,k in enumerate(self.evolution_points[0].names):
+                position[k] += self.step_size * momentum[k] * self.inverse_mass_matrix[j,j]
         
             # if the trajectory brings us outside the prior boundary, bounce back and forth
             # see https://arxiv.org/pdf/1206.1901.pdf pag. 37
@@ -178,7 +148,7 @@ class HMCSampler(Sampler):
             
             if not(np.isfinite(position.logP)):
                 return position, momentum
-                for j,k in enumerate(self.positions[0].names):
+                for j,k in enumerate(self.evolution_points[0].names):
                     while position[k] > self.user.bounds[j][1]:
                         position[k] = self.user.bounds[j][1] - (position[k] - self.user.bounds[j][1])
                         momentum[k] = -momentum[k]
@@ -187,38 +157,30 @@ class HMCSampler(Sampler):
                         momentum[k] = -momentum[k]
 
             # Update gradient
-            g = self.gradient(position, self.gradients['logprior'])
-
+            g = self.gradient(position)
+#            take a full momentum step
+            for j,k in enumerate(self.evolution_points[0].names):
+                momentum[k] += - self.step_size * g[j]
             # compute the constraint
             position.logL = self.user.log_likelihood(position)
 
-            # check on the constraint
-            if position.logL > logLmin:
-                # take a full momentum step
-                for j,k in enumerate(self.positions[0].names):
-                    momentum[k] += - self.step_size * g[j]
-            else:
-                # compute the normal to the constraint
-                gL = self.gradient(position, self.gradients['loglikelihood'])
-                n = gL/np.abs(np.sum(gL))
-                
-                # bounce on the constraint
-                for j,k in enumerate(self.positions[0].names):
-                    momentum[k] += - 2 * (momentum[k]*n[j]) * n[j]
-
-#        # Update the position
-#        for j,k in enumerate(self.positions[0].names):
-#            position[k] += self.step_size * momentum[k]
+#            # check on the constraint
+#            if position.logL > logLmin:
+#                # take a full momentum step
+#                for j,k in enumerate(self.evolution_points[0].names):
+#                    momentum[k] += - self.step_size * g[j]
+#            else:
+#                # compute the normal to the constraint
+#                gL = self.constrain(position)
+#                n = gL/np.sqrt(np.sum(gL**2))
+#
+#                # bounce on the constraint
+#                for j,k in enumerate(self.evolution_points[0].names):
+#                    momentum[k] += - 2 * (momentum[k]*n[j]) * n[j]
 
         # Do a final update of the momentum for a half step
-        g = self.gradient(position, self.gradients['logprior'])
-        for j,k in enumerate(self.positions[0].names):
+        g = self.gradient(position)
+        for j,k in enumerate(self.evolution_points[0].names):
             momentum[k] += - 0.5 * self.step_size * g[j]
-
-        return position, momentum
-    
-    def autotune(self, target = 0.654):
-        if self.acceptance < target: self.steps -= 1
-        if self.acceptance > target: self.steps += 1
-        if self.steps < 1: self.steps = 1
-
+        return position
+#    , momentum
