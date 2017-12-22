@@ -308,7 +308,8 @@ class HMCSampler(object):
     
     def hamiltonian_sampling(self, initial_position, logLmin):
         """
-        hamiltonian sampling loop to generate the new live point taking nmcmc steps
+        hamiltonian sampling loop to generate
+        the new live point taking nmcmc steps
         """
         self.jumps  = 0
         accepted    = 0
@@ -344,7 +345,8 @@ class HMCSampler(object):
 
     def metropolis_hastings(self, inParam, logLmin):
         """
-        metropolis-hastings loop to generate the new live point taking nmcmc steps
+        metropolis-hastings loop to generate
+        the new live point taking nmcmc steps
         """
         self.jumps  = 0
         accepted    = 0
