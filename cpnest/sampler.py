@@ -167,7 +167,7 @@ class Sampler(object):
                         sub_accepted+=1
                 if (sub_counter > self.Nmcmc and sub_accepted > 0 and oldparam.logL > logLmin) or sub_counter > self.maxmcmc:
                     break
-            if queue is not None: queue.put((float(sub_accepted)/float(sub_counter),sub_counter,oldparam))
+            if queue is not None and oldparam.logL > logLmin: queue.put((float(sub_accepted)/float(sub_counter),sub_counter,oldparam))
             counter += sub_counter
             # Put sample back in the stack
             self.samples.append(oldparam)
