@@ -5,12 +5,12 @@ import numpy as np
 from math import log
 from collections import deque
 from random import random,randrange
+from operator import attrgetter
+from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline, LSQUnivariateSpline
+from scipy.stats import multivariate_normal
 
 from . import parameter
 from . import proposal
-"""
-hamilton equations collisional gas in a box whose side is shrinking
-"""
 
 class HMCSampler(object):
     """
@@ -377,3 +377,4 @@ class HMCSampler(object):
         if self.acceptance < target: self.steps -= 1
         if self.acceptance > target: self.steps += 1
         if self.steps < 1: self.steps = 1
+
