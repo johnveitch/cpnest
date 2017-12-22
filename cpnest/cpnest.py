@@ -67,6 +67,9 @@ class CPNest(object):
         for each in self.process_pool:
             each.start()
         self.NS.nested_sampling_loop(self.queues)
+        for q in self.queues:
+            while not q.empty():
+                q.get(timeout=1)
         for each in self.process_pool:
             each.join()
 
