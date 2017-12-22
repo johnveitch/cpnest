@@ -39,6 +39,7 @@ class Sampler(object):
 
     def __init__(self,usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
 
+        self.seed = seed
         self.user = usermodel
         self.initial_mcmc = maxmcmc//2
         self.maxmcmc = maxmcmc
@@ -111,8 +112,7 @@ class Sampler(object):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
-        self.seed = seed
-        np.random.seed(seed=self.seed)
+
         if not self.initialised:
           self.reset()
         # Prevent process from zombification if consumer thread exits
