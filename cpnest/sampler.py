@@ -171,7 +171,6 @@ class Sampler(object):
                     break
 
             if queue is not None and oldparam.logL > logLmin: queue.put((float(sub_accepted)/float(sub_counter),sub_counter,oldparam))
-
             counter += sub_counter
 
             # Put sample back in the stack
