@@ -1,12 +1,12 @@
 from __future__ import division
 import numpy as np
 from dpgmm import *
-import copy
+#import copy
 from scipy.misc import logsumexp
-import copy_reg
-import types
-import cumulative
-from utils import *
+#import copy_reg
+#import types
+#import cumulative
+#from utils import *
 
 
 class Potential(DPGMM):
