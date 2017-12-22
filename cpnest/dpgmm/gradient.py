@@ -31,6 +31,7 @@ class Potential(DPGMM):
         then:
         dV/dxi = (1/p) \sum_c w_c p_c(x) \sum_l \Lambda^c_{il} (x^c_l-m^c_l)
         
+        return dV/dx = (dV/dxi for i in dimension)
         """
         x = np.atleast_1d(x)
         p = np.exp(self.logprob(x))
