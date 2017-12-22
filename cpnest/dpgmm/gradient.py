@@ -27,6 +27,17 @@ class Potential(DPGMM):
         return logsumexp([np.log(self.density[0][ind])+prob.logprob(x) for ind,prob in enumerate(self.density[1])])
     
     def force(self, x):
+        """
+        computes the force as -\partial V, with V the potential (-log density)
+        the derivative is computed analytically assuming from the gaussian mixture model that approximates the target distribution p
+        
+        if p = \sum_c w_c p_c(x)
+        and p_c(x) = exp(-0.5 \sum_{ij} \Lambda_{ij} (x_i-m_i) (x_j-m_j)
+        we have V = -log(\sum_c w_c p_c(x))
+        then:
+        dV/dxi = (1/p) \sum_c w_c p_c(x) \sum_l \Lambda^c_{il} (x^c_l-m^c_l)
+        
+        """
         x = np.atleast_1d(x)
         p = np.exp(self.logprob(x))
         grad = np.zeros(len(x))
@@ -40,11 +51,14 @@ class Potential(DPGMM):
         return -self.logprob(x)
 
 if __name__=="__main__":
-    w = 0.5
+    w1 = 0.5
+    w2 = 0.1
     s = []
-    for _ in range(1000):
-        if np.random.uniform() < w:
+    for _ in range(5000):
+        if np.random.uniform() < w1:
             s.append(np.random.normal(0,1))
+        elif np.random.uniform() < w2:
+            s.append(np.random.normal(2,0.5))
         else:
             s.append(np.random.normal(-5,0.1))
     c = Potential(1, s)
