@@ -33,6 +33,7 @@ class Potential(DPGMM):
         
         return dV/dx = (dV/dxi for i in dimension)
         """
+
         x = np.atleast_1d(x)
         p = np.exp(self.logprob(x))
         grad = np.zeros(len(x))
@@ -49,7 +50,7 @@ class Potential(DPGMM):
         return -self.logprob(x)
 
 if __name__=="__main__":
-    w = 0.3
+    w = 0.5
     s = []
     for _ in range(1000):
         if np.random.uniform() < w:
