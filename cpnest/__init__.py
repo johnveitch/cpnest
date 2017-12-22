@@ -1,2 +1,2 @@
-__all__=['model','NestedSampling','parameter','sampler','hmcsampler','cpnest','nest2pos','proposal','plot']
+__all__=['model','NestedSampling','parameter','sampler','cpnest','nest2pos','proposal','plot']
 from .cpnest import CPNest
