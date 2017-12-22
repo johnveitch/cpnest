@@ -77,13 +77,13 @@ class Sampler(object):
           self.evolution_points.append(p)
         if self.verbose > 2: sys.stderr.write("\n")
 
-        self.proposals.set_ensemble(self.evolution_points)
+        self.proposal.set_ensemble(self.evolution_points)
 
         self.metropolis_hastings(-np.inf)
         
         if self.verbose > 2: sys.stderr.write("\n")
         if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
-        self.proposals.set_ensemble(self.evolution_points)
+        self.proposal.set_ensemble(self.evolution_points)
 
         self.initialised=True
 
@@ -131,7 +131,7 @@ class Sampler(object):
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or self.acceptance < 1.0/float(self.poolsize):
-                self.proposals.set_ensemble(self.evolution_points)
+                self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
@@ -159,9 +159,9 @@ class Sampler(object):
 
             while True:
                 sub_counter += 1
-                newparam = self.proposals.get_sample(oldparam.copy())
+                newparam = self.proposal.get_sample(oldparam.copy())
                 newparam.logP = self.user.log_prior(newparam)
-                if newparam.logP-logp_old + self.proposals.log_J > log(random()):
+                if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
                     if newparam.logL > logLmin:
                         oldparam = newparam
