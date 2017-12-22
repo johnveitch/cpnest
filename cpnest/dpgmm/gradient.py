@@ -46,13 +46,17 @@ if __name__=="__main__":
         if np.random.uniform() < w:
             s.append(np.random.normal(0,1))
         else:
-            s.append(np.random.normal(-5,0.01))
+            s.append(np.random.normal(-5,0.1))
     c = Potential(1, s)
 
     from pylab import *
+    n, dx = np.histogram(s, bins=64, normed=True)
+    x = 0.5*(dx[1:]+dx[:-1])
+    plot(x,-np.log(n), label = 'samples')
     x = np.linspace(-10,10,1000)
-    plot(x,[c(xi) for xi in x], label='potential')
+    plot(x,[c(xi) for xi in x], label ='potential')
     plot(x,[c.force(xi) for xi in x], label='force')
+
     axhline(0.0,color='k')
     legend()
     show()
