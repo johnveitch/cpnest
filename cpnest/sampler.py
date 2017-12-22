@@ -124,14 +124,14 @@ class Sampler(object):
                 queue.close()
                 break
 
-            self.metropolis_hastings(logLmin.value, queue=queue)
+            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value, queue=queue))
 
-            outParam = self.evolution_points[np.random.randint(self.poolsize)]
+            #outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
-#            queue.put((self.acceptance,self.Nmcmc,outParam))
+            queue.put((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
-            if (self.counter%(self.poolsize/10))==0 or self.acceptance < 1.0/float(self.poolsize):
+            if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
@@ -168,11 +168,8 @@ class Sampler(object):
                         oldparam = newparam
                         logp_old = newparam.logP
                         sub_accepted+=1
-                if (sub_counter > self.Nmcmc and sub_accepted > 0 and oldparam.logL > logLmin) or sub_counter > self.maxmcmc:
+                if (sub_counter > self.Nmcmc and sub_accepted > 0 ) or sub_counter > self.maxmcmc:
                     break
-
-            if queue is not None and oldparam.logL > logLmin: queue.put((float(sub_accepted)/float(sub_counter),sub_counter,oldparam))
-            counter += sub_counter
 
             # Put sample back in the stack
             self.samples.append(oldparam)
@@ -180,5 +177,9 @@ class Sampler(object):
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
             accepted += sub_accepted
+            
+            # Yield the new sample
+            if queue is not None and oldparam.logL > logLmin:
+                yield (float(self.sub_acceptance),sub_counter,oldparam)
 
         self.acceptance = float(accepted)/float(counter)
