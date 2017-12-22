@@ -121,6 +121,7 @@ class Sampler(object):
         
         while True:
             if logLmin.value==np.inf:
+                queue.close()
                 break
 
             self.metropolis_hastings(logLmin.value, queue=queue)
