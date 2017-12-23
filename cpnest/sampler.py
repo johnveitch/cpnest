@@ -49,6 +49,7 @@ class Sampler(object):
         else:
             self.proposal = proposal
 
+        self.step = self.proposal.get_sample
         self.Nmcmc = self.initial_mcmc
         self.Nmcmc_exact = float(self.initial_mcmc)
 
@@ -78,7 +79,6 @@ class Sampler(object):
         if self.verbose > 2: sys.stderr.write("\n")
 
         self.proposal.set_ensemble(self.evolution_points)
-
         self.metropolis_hastings(-np.inf)
         
         if self.verbose > 2: sys.stderr.write("\n")
@@ -163,7 +163,7 @@ class Sampler(object):
 
             while True:
                 sub_counter += 1
-                newparam = self.proposal.get_sample(oldparam.copy())
+                newparam = self.step(oldparam.copy())
                 newparam.logP = self.user.log_prior(newparam)
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
