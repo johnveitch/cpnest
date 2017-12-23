@@ -6,6 +6,7 @@ from abc import ABCMeta,abstractmethod
 import random
 from random import sample,gauss,randrange,uniform
 from scipy.stats import multivariate_normal
+import dpgmm.gradient as dg
 
 class Proposal(object):
     """
@@ -185,8 +186,8 @@ class DefaultProposalCycle(ProposalCycle):
     and Eigenvector proposals
     """
     def __init__(self,*args,**kwargs):
-        proposals = [EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
-        weights = [1.0,1.0,1.0,1.0]
+        proposals = [LeapFrog()]#EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
+        weights = [1.0]#,1.0,1.0,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 
@@ -194,20 +195,21 @@ class HamiltonianProposal(EnsembleProposal):
 	"""
 	Base class for hamiltonian proposals
 	"""
-	import dpgmm
-	L = 20
-	dt	= 0.3
+	L = 10
+	dt	= 0.03
 	mass_matrix = None
 	inverse_mass_matrix = None
 	momenta_distribution = None
     
 	def __init__(self, *args, **kwargs):
-		
+		"""
+		Sets the Initial conditions as a free particle at infinity (V=0)
+		"""
 		super(HamiltonianProposal, self).__init__(*args, **kwargs)
 		self.T  = self.kinetic_energy
-		self.V  = None
-		self.dV = None
-    
+		self.V  = lambda x: np.zeros(x.shape[0])
+		self.dV = lambda x: np.zeros(x.shape[0])
+				
 	def set_ensemble(self, ensemble):
 		"""
 		override the set ensemble method 
@@ -215,44 +217,45 @@ class HamiltonianProposal(EnsembleProposal):
 		and potential
 		"""
 		super(HamiltonianProposal,self).set_ensemble(ensemble)
-		self.update_mass(self.ensemble)
-		self.update_momenta_distribution(self.mass_matrix)
+		self.update_mass()
+		self.update_momenta_distribution()
 		    
 	def update_potential_energy(self, tracers_array):
 		"""
 		update the potential energy function
 		"""
-		dpgmm =  dpgmm.gradient.Potential(tracers_array.shape[0], tracers_array)
-		self.V  = dpgmm
-		seld.dV = dpgmm.force
-		
-	
-	def update_momenta_distribution(self, mass_tensor):
+		self.V  = dg.Potential(tracers_array.shape[0], tracers_array.T)
+		self.dV = self.V.force
+			
+	def update_momenta_distribution(self):
 		"""
 		update the momenta distribution
 		"""
-		self.momenta_distribution = multivariate_normal(cov=mass_tensor)
+		self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
 		
-	def update_mass(self, ensemble):
+	def update_mass(self):
 		"""
 		Recompute the mass matrix (covariance matrix)
 		from the ensemble
 		"""
-		n   = len(ensemble)
-		dim = ensemble[0].dimension
+		n   = len(self.ensemble)
+		dim = self.ensemble[0].dimension
 		cov_array = np.zeros((dim,n))
-        
+				
 		if dim == 1:
-			name=ensemble[0].names[0]
-			self.mass_matrix = np.atleast_1d(np.var([ensemble[j][name] for j in range(n)]))
+			name=self.ensemble[0].names[0]
+			cov_array = np.atleast_2d([self.ensemble[j][name] for j in range(n)])
+			self.mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
 			self.inverse_mass_matrix = 1./self.mass_matrix
 		else:	 
-			for i,name in enumerate(ensemble[0].names):
-				for j in range(n): cov_array[i,j] = ensemble[j][name]
+			for i,name in enumerate(self.ensemble[0].names):
+				for j in range(n): cov_array[i,j] = self.ensemble[j][name]
 			covariance = np.cov(cov_array)
 			self.mass_matrix = covariance
 			self.inverse_mass_matrix = np.linalg.inv(self.mass_matrix)
-			self.update_potential_energy(cov_array)
+
+		# update the potential energy estimate
+		self.update_potential_energy(cov_array)
             
 	def kinetic_energy(self,p):
 		"""
@@ -266,9 +269,8 @@ class LeapFrog(HamiltonianProposal):
 	Leap frog integrator proposal for an uncostrained 
 	Hamiltonian Monte Carlo step
 	"""
-	def __init__(self, *args, **kwargs):
-		super(LeapFrog,self).__init__(*args, **kwargs)
-	
+	# symmetric proposal
+	log_J = 0.0
 	def get_sample(self, old):
 		# transform into a numpy array for flexibility
 		q = old.asnparray()
@@ -276,13 +278,13 @@ class LeapFrog(HamiltonianProposal):
 		# generate a canonical momentum
 		p0 = np.atleast_1d(self.momenta_distribution.rvs())
 		# evolve along the trajectory
-		self.evolve_trajectory(p0, q0)
+		q, p = self.evolve_trajectory(p0, q0)
 		
 		initial_energy = self.T(p0) + self.V(q0)
 		final_energy   = self.T(p)  + self.V(q)
 		
 		dE = min(0.0, initial_energy - final_energy)
-		if dE > log(uniform()):
+		if dE > log(np.random.uniform()):
 			# accept
 			for j,k in enumerate(old.names):
 				old[k] = q[j]
@@ -296,15 +298,16 @@ class LeapFrog(HamiltonianProposal):
 
 		# Updating the momentum a half-step
 		p = p0-0.5 * self.dt * self.dV(q0)
+		q = q0
 
 		for i in xrange(self.L):
             
 			# do a step
-			q += self.dt * p * np.diag(self.inverse_mass_matrix)
-        
-			# Update gradient
-			g = self.dV(q)
+			q += self.dt * p * np.squeeze(np.diag(self.inverse_mass_matrix))
+
 			# take a full momentum step
-			p += - self.dt * g
-            
+			p += - self.dt * self.dV(q)
+		        # Do a final update of the momentum for a half step
+		
+		p += - 0.5 * self.dt * self.dV(q)
 		return q, -p
