@@ -126,6 +126,8 @@ class Sampler(object):
 
             (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value, queue=queue))
 
+            # Push the sample onto the queue
+            queue.put((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
@@ -168,7 +170,7 @@ class Sampler(object):
                         oldparam = newparam
                         logp_old = newparam.logP
                         sub_accepted+=1
-                if (sub_counter > self.Nmcmc and sub_accepted > 0 ) or sub_counter > self.maxmcmc:
+                if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
 
             # Put sample back in the stack
