@@ -29,7 +29,6 @@ class CPNest(object):
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
         from .sampler import Sampler
-        from .hmcsampler import HMCSampler
         from .NestedSampling import NestedSampler
         self.user=usermodel
         self.verbose=verbose
@@ -48,7 +47,7 @@ class CPNest(object):
             self.queues = [mp.Queue(maxsize=Nlive)]
 
         for i in range(Nthreads):
-            sampler = HMCSampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i, l =1 )
+            sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i)
             if balance_samplers:
                 q=self.queues[i]
             else:

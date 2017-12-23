@@ -73,7 +73,7 @@ setup(
 
         keywords='nested sampling bayesian inference',
         #packages=find_packages(exclude=['contrib','docs','tests*','examples']),
-        packages=['cpnest'],
+        packages=['cpnest','cpnest.dpgmm'],
         install_requires=['numpy','scipy'],
         setup_requires=['numpy'],
         tests_require=['corner'],
