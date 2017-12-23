@@ -126,7 +126,6 @@ class Sampler(object):
 
             (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value, queue=queue))
 
-            #outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
             queue.put((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
