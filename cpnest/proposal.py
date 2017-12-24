@@ -295,11 +295,11 @@ class LeapFrog(HamiltonianProposal):
 		https://arxiv.org/pdf/1005.0157.pdf
 		https://arxiv.org/pdf/1206.1901.pdf
 		"""
-		f = open('trajectory.txt','a')
+		#f = open('trajectory.txt','a')
 		# Updating the momentum a half-step
 		p = p0-0.5 * self.dt * self.dV(q0)
 		q = q0
-		f.write("%e %e %e %e\n"%(q0,p,self.V(q0),self.dV(q0)))
+		#f.write("%e %e %e %e\n"%(q0,p,self.V(q0),self.dV(q0)))
 		for i in xrange(self.L):
             
 			# do a step
@@ -307,10 +307,10 @@ class LeapFrog(HamiltonianProposal):
 			dV = self.dV(q)
 			# take a full momentum step
 			p += - self.dt * dV
-			f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
+		#	f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
 		# Do a final update of the momentum for a half step
 		p += - 0.5 * self.dt * dV
-		f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
-		f.close()
+		#f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
+		#f.close()
 		#exit()
 		return q, -p
