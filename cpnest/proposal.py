@@ -251,8 +251,8 @@ class HamiltonianProposal(EnsembleProposal):
 			for i,name in enumerate(self.ensemble[0].names):
 				for j in range(n): cov_array[i,j] = self.ensemble[j][name]
 			covariance = np.cov(cov_array)
-			self.mass_matrix = covariance
-			self.inverse_mass_matrix = np.linalg.inv(self.mass_matrix)
+			self.mass_matrix = np.linalg.inv(covariance)
+			self.inverse_mass_matrix = covariance 
 
 		# update the potential energy estimate
 		self.update_potential_energy(cov_array)
@@ -295,11 +295,11 @@ class LeapFrog(HamiltonianProposal):
 		https://arxiv.org/pdf/1005.0157.pdf
 		https://arxiv.org/pdf/1206.1901.pdf
 		"""
-		#f = open('trajectory.txt','w')
+		#f = open('trajectory.txt','a')
 		# Updating the momentum a half-step
 		p = p0-0.5 * self.dt * self.dV(q0)
 		q = q0
-		#f.write("%e %e %e %e %e\n"%(self.dt,q0,p,self.V(q0),self.dV(q0)))
+		#f.write("%e %e %e %e\n"%(q0,p,self.V(q0),self.dV(q0)))
 		for i in xrange(self.L):
             
 			# do a step
@@ -307,10 +307,10 @@ class LeapFrog(HamiltonianProposal):
 			dV = self.dV(q)
 			# take a full momentum step
 			p += - self.dt * dV
-			#f.write("%e %e %e %e %e\n"%(i*self.dt,q,p,self.V(q),dV))
+		#	f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
 		# Do a final update of the momentum for a half step
 		p += - 0.5 * self.dt * dV
-		#f.write("%e %e %e %e %e\n"%((i+1)*self.dt,q,p,self.V(q),dV))
+		#f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
 		#f.close()
 		#exit()
 		return q, -p
