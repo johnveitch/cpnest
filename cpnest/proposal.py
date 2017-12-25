@@ -187,7 +187,7 @@ class DefaultProposalCycle(ProposalCycle):
     """
     def __init__(self,*args,**kwargs):
         proposals = [LeapFrog(),EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
-        weights = [0.5,0.3,0.2,0.1,1.0]
+        weights = [0.05,0.3,0.2,0.1,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 

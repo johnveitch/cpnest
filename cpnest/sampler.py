@@ -130,7 +130,7 @@ class Sampler(object):
             queue.put((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
-            if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
+            if (self.counter%(self.poolsize/4))==0 or acceptance < 1.0/float(self.poolsize):
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
