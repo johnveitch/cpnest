@@ -195,7 +195,7 @@ class HamiltonianProposal(EnsembleProposal):
 	"""
 	Base class for hamiltonian proposals
 	"""
-	L = 20
+	L   = 20
 	dt	= 0.3
 	mass_matrix = None
 	inverse_mass_matrix = None
