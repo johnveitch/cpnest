@@ -15,9 +15,7 @@ import numpy
 import numpy.linalg
 import numpy.random
 
-
-
-class Gaussian:
+class Gaussian(object):
   """A basic multivariate Gaussian class. Has caching to avoid duplicate calculation."""
   def __init__(self, dims):
     """dims is the number of dimensions. Initialises with mu at the origin and the identity matrix for the precision/covariance. dims can also be another Gaussian object, in which case it acts as a copy constructor."""
@@ -74,10 +72,9 @@ class Gaussian:
       self.covariance = numpy.linalg.inv(self.precision)
     return self.covariance
 
-
   def getNorm(self):
     """Returns the normalising constant of the distribution. Typically for internal use only."""
-    if self.norm==None:
+    if self.norm is None:
       self.norm = math.pow(2.0*math.pi,-0.5*self.mean.shape[0]) * math.sqrt(numpy.linalg.det(self.getPrecision()))
     return self.norm
 
