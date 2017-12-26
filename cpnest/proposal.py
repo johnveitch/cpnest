@@ -203,7 +203,7 @@ class HamiltonianProposal(EnsembleProposal):
     
 	def __init__(self, *args, **kwargs):
 		"""
-		Sets the Initial conditions as a free particle at infinity (V=0)
+		Sets the buondary conditions as a free particle at infinity (V=0)
 		"""
 		super(HamiltonianProposal, self).__init__(*args, **kwargs)
 		self.T  = self.kinetic_energy
@@ -273,8 +273,8 @@ class LeapFrog(HamiltonianProposal):
 	log_J = 0.0
 	def get_sample(self, old):
 		# transform into a numpy array for flexibility
-		q = old.asnparray()
-		q0 = q.view(dtype=np.float64)[:-2]
+		old_arr = old.asnparray()
+		q0 = old_arr.view(dtype=np.float64)[:-2]
 		# generate a canonical momentum
 		p0 = np.atleast_1d(self.momenta_distribution.rvs())
 		# evolve along the trajectory

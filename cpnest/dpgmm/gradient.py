@@ -25,7 +25,8 @@ class Potential(DPGMM):
     def force(self, x):
         """
         computes the force as -\partial V, with V the potential (-log density)
-        the derivative is computed analytically assuming from the gaussian mixture model that approximates the target distribution p
+        the derivative is computed analytically assuming from the gaussian mixture model
+        that approximates the target distribution p
 
         if p = \sum_c w_c p_c(x)
         and p_c(x) = exp(-0.5 \sum_{ij} \Lambda_{ij} (x_i-m_i) (x_j-m_j)
