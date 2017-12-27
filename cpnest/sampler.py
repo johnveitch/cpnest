@@ -137,7 +137,7 @@ class Sampler(object):
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
         thinning = int(np.ceil(np.mean(self.ACLs)))
-        for e in self.evolution_points: self.samples.append(e)
+        self.samples.extend(self.evolution_points)
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured (suggested thinning) = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
