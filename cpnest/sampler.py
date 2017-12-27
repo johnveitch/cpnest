@@ -124,7 +124,7 @@ class Sampler(object):
                 queue.close()
                 break
 
-            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value, queue=queue))
+            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
             # Push the sample onto the queue
             queue.put((acceptance,Nmcmc,outParam))
@@ -136,7 +136,7 @@ class Sampler(object):
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
         thinning = int(np.ceil(np.mean(self.ACLs)))
-        for e in self.evolution_points: self.samples.append(e)
+        self.samples.extend(self.evolution_points)
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured (suggested thinning) = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
         self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
@@ -148,7 +148,7 @@ class Sampler(object):
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
 
-    def metropolis_hastings(self, logLmin, queue=None):
+    def metropolis_hastings(self, logLmin):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
@@ -181,7 +181,7 @@ class Sampler(object):
             accepted += sub_accepted
             
             # Yield the new sample
-            if queue is not None and oldparam.logL > logLmin:
+            if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
 
         self.acceptance = float(accepted)/float(counter)
