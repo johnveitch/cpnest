@@ -25,7 +25,8 @@ else:
 
 # set extension
 if have_cython: # convert the pyx file to a .c file if cython is available
-    ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.pyx"], include_dirs=['cpnest/'], libraries=['m']) ]
+    ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.pyx"], include_dirs=['cpnest/'], libraries=['m']),
+                   Extension("cpnest.dpgmm.gaussian", sources =[ "cpnest/dpgmm/gaussian.pyx"], include_dirs=['cpnest/','cpnest/dpgmmm/'], libraries=['m']) ]
 else: # just compile the included parameter.c (already converted from parameter.pyx) file
     ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.c"], include_dirs=['cpnest/'], libraries=['m']) ]
 

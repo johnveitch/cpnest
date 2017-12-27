@@ -49,9 +49,9 @@ class DPGMM(object):
       self.prior = GaussianPrior(self.dims) # The prior over the mixture components.
       self.priorT = None
       self.n = map(lambda _: GaussianPrior(self.dims), xrange(self.stickCap)) # The mixture components, one for each stick.
-      self.beta = numpy.ones(2, dtype=numpy.float32) # The two parameters (Typically named alpha & beta) for the Gamma distribution prior over alpha.
-      self.alpha = numpy.ones(2, dtype=numpy.float32) # The parameters for the Gamma distribution that represents the current distribution over alpha - basically beta updated with the current stick configuration.
-      self.v = numpy.ones((self.stickCap,2), dtype=numpy.float32) # Each [i,:] of this array represents the two parameters of the beta distribution over the strick breaking weight for the relevant mixture component.
+      self.beta = numpy.ones(2, dtype=numpy.float64) # The two parameters (Typically named alpha & beta) for the Gamma distribution prior over alpha.
+      self.alpha = numpy.ones(2, dtype=numpy.float64) # The parameters for the Gamma distribution that represents the current distribution over alpha - basically beta updated with the current stick configuration.
+      self.v = numpy.ones((self.stickCap,2), dtype=numpy.float64) # Each [i,:] of this array represents the two parameters of the beta distribution over the strick breaking weight for the relevant mixture component.
       self.z = None # The matrix of multinomials over stick-assignment for each sample, aligned with the data matrix. In the case of incrimental use will not necessarily be complete.
 
       self.skip = 0 # Number of samples at the start of the data matrix to not bother updating - useful to speed things up with incrimental learning.
@@ -59,8 +59,8 @@ class DPGMM(object):
 
       # The cache of stuff kept around for speed...
       self.nT = [None]*self.stickCap # The student T distribution associated with each Gaussian.
-      self.vExpLog = numpy.empty(self.stickCap, dtype=numpy.float32) # The expected value of the logorithm of each v.
-      self.vExpNegLog = numpy.empty(self.stickCap, dtype=numpy.float32) # The expected value of the logarithm of 1 minus each v.
+      self.vExpLog = numpy.empty(self.stickCap, dtype=numpy.float64) # The expected value of the logorithm of each v.
+      self.vExpNegLog = numpy.empty(self.stickCap, dtype=numpy.float64) # The expected value of the logarithm of 1 minus each v.
 
       self.vExpLog[:] = -1.0    # Need these to always be correct - this matches initialisation of v.
       self.vExpNegLog[:] = -1.0 # As above.
@@ -69,7 +69,7 @@ class DPGMM(object):
     """Increases the stick cap by the given number of entrys. Can be used in collaboration with nllData to increase the number of sticks until insufficient improvement, indicating the right number has been found."""
     self.stickCap += inc
     self.n += map(lambda _: GaussianPrior(self.dims), xrange(inc))
-    self.v = numpy.append(self.v,numpy.ones((inc,2), dtype=numpy.float32),0)
+    self.v = numpy.append(self.v,numpy.ones((inc,2), dtype=numpy.float64),0)
     
     if self.z is not None:
       self.z = numpy.append(self.z, numpy.random.mtrand.dirichlet(32.0*numpy.ones(inc), size=self.z.shape[0]), 1)
@@ -78,8 +78,8 @@ class DPGMM(object):
       self.z[:,self.stickCap-inc:] *= weight[:,1].reshape((self.z.shape[0],1))
     
     self.nT += [None] * inc
-    self.vExpLog = numpy.append(self.vExpLog,-1.0*numpy.ones(inc, dtype=numpy.float32))
-    self.vExpNegLog = numpy.append(self.vExpNegLog,-1.0*numpy.ones(inc, dtype=numpy.float32))
+    self.vExpLog = numpy.append(self.vExpLog,-1.0*numpy.ones(inc, dtype=numpy.float64))
+    self.vExpNegLog = numpy.append(self.vExpNegLog,-1.0*numpy.ones(inc, dtype=numpy.float64))
 
   def getStickCap(self):
     """Returns the current stick cap."""
@@ -118,7 +118,7 @@ class DPGMM(object):
 
   def add(self, sample):
     """Adds either a single sample or several samples - either give a single sample as a 1D array or a 2D array as a data matrix, where each sample is [i,:]. (Sample = feature. I refer to them as samples as that more effectivly matches the concept of this modeling the probability distribution from which the features are drawn.)"""
-    sample = numpy.asarray(sample, dtype=numpy.float32)
+    sample = numpy.asarray(sample, dtype=numpy.float64)
     if len(sample.shape)==1:
       self.data.append(numpy.reshape(sample, (1,self.dims)))
     else:
@@ -151,7 +151,7 @@ class DPGMM(object):
     # Deal with the z array being incomplete - enlarge/create as needed. Random initialisation is used...
     dm = self.getDM()
     if self.z is None or self.z.shape[0]<dm.shape[0]:
-      newZ = numpy.empty((dm.shape[0],self.stickCap), dtype=numpy.float32)
+      newZ = numpy.empty((dm.shape[0],self.stickCap), dtype=numpy.float64)
       
       if self.z is None: offset = 0
       else:
@@ -249,7 +249,7 @@ class DPGMM(object):
 
   def sampleMixture(self):
     """Once solve has been called and a distribution over models determined this allows you to draw a specific model. Returns a 2-tuple, where the first entry is an array of weights and the second entry a list of Gaussian distributions - they line up, to give a specific Gaussian mixture model. For density estimation the probability of a specific point is then the sum of each weight multiplied by the probability of it comming from the associated Gaussian. For clustering the probability of a specific point belonging to a cluster is the weight multiplied by the probability of it comming from a specific Gaussian, normalised for all clusters. Note that this includes an additional term to cover the infinite number of terms that follow, which is really an approximation, but tends to be such a small amount as to not matter. Be warned that if doing clustering a point could be assigned to this 'null cluster', indicating that the model thinks the point belongs to an unknown cluster (i.e. one that it doesn't have enough information, or possibly sticks, to instanciate.)."""
-    weight = numpy.empty(self.stickCap+1, dtype=numpy.float32)
+    weight = numpy.empty(self.stickCap+1, dtype=numpy.float64)
     stick = 1.0
     for i in xrange(self.stickCap):
       val = random.betavariate(self.v[i,0], self.v[i,1])
@@ -264,7 +264,7 @@ class DPGMM(object):
 
   def intMixture(self):
     """Returns the details needed to calculate the probability of a point given the model (density estimation), or its probability of belonging to each stick (clustering), but with the actual draw of a mixture model from the model integrated out. It is an apprximation, though not a bad one. Basically you get a 2-tuple - the first entry is an array of weights, the second a list of student-t distributions. The weights and distributions align, such that for density estimation the probability for a point is the sum over all entrys of the weight multiplied by the probability of the sample comming from the student-t distribution. The prob method of this class calculates the use of this for a sample directly. For clustering the probability of belonging to each cluster is calculated as the weight multiplied by the probability of comming from the associated student-t, noting that you will need to normalise. stickProb allows you to get this assesment directly. Do not edit the returned value; also, it will not persist if solve is called again. This must only be called after solve is called at least once. Note that an extra element is included to cover the remainder of the infinite number of elements - be warned that a sample could have the highest probability of belonging to this dummy element, indicating that it probably belongs to something for which there is not enough data to infer a reasonable model."""
-    weights = numpy.empty(self.stickCap+1, dtype=numpy.float32)
+    weights = numpy.empty(self.stickCap+1, dtype=numpy.float64)
     
     stick = 1.0
     for i in xrange(self.stickCap):
@@ -305,7 +305,7 @@ class DPGMM(object):
     """Given a sample this returns its probability of belonging to each of the components, as a 1D array, including a dummy element at the end to cover the infinite number of sticks not being explicitly modeled. This is the probability of belonging to each cluster if using the model for clustering. Must not be called until after solve has been called. Will also accept a data matrix, in which case it will return a matrix with a row for each vector in the input data matrix."""
     x = numpy.asarray(x)
     if len(x.shape)==1:
-      ret = numpy.empty(self.stickCap+1, dtype=numpy.float32)
+      ret = numpy.empty(self.stickCap+1, dtype=numpy.float64)
       stick = 1.0
       for i in xrange(self.stickCap):
         bp = self.nT[i].prob(x)
@@ -317,7 +317,7 @@ class DPGMM(object):
       ret /= ret.sum()
       return ret
     else:
-      ret = numpy.empty((x.shape[0],self.stickCap+1), dtype=numpy.float32)
+      ret = numpy.empty((x.shape[0],self.stickCap+1), dtype=numpy.float64)
       stick = 1.0
       for i in xrange(self.stickCap):
         bp = self.nT[i].batchProb(x)
@@ -348,7 +348,7 @@ class DPGMM(object):
     dm = self.getDM()
     model = self.intMixture()
 
-    probs = numpy.empty((dm.shape[0],model[0].shape[0]), dtype=numpy.float32)
+    probs = numpy.empty((dm.shape[0],model[0].shape[0]), dtype=numpy.float64)
     for i, st in enumerate(model[1]):
       probs[:,i] = st.batchLogProb(dm) + math.log(model[0][i])
 

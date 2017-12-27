@@ -186,8 +186,8 @@ class DefaultProposalCycle(ProposalCycle):
     and Eigenvector proposals
     """
     def __init__(self,*args,**kwargs):
-        proposals = [LeapFrog(),EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
-        weights = [0.05,0.3,0.2,0.1,1.0]
+        proposals = [LeapFrog()]#,EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
+        weights = [0.05]#,0.3,0.2,0.1,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 
