@@ -124,7 +124,7 @@ class Sampler(object):
                 queue.close()
                 break
 
-            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value, queue=queue))
+            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
             #outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
@@ -149,7 +149,7 @@ class Sampler(object):
         sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
         return 0
 
-    def metropolis_hastings(self, logLmin, queue=None):
+    def metropolis_hastings(self, logLmin):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
@@ -182,7 +182,7 @@ class Sampler(object):
             accepted += sub_accepted
             
             # Yield the new sample
-            if queue is not None and oldparam.logL > logLmin:
+            if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
 
         self.acceptance = float(accepted)/float(counter)
