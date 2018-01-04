@@ -26,7 +26,7 @@ class RingTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=RingModel()
-        self.work=cpnest.CPNest(self.model,verbose=1,Nthreads=4,Nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(self.model,verbose=0,Nthreads=4,Nlive=1000,maxmcmc=1000)
         self.work.run()
 
 
