@@ -186,8 +186,8 @@ class DefaultProposalCycle(ProposalCycle):
     and Eigenvector proposals
     """
     def __init__(self,*args,**kwargs):
-        proposals = [LeapFrog(),EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
-        weights = [0.05,0.3,0.2,0.1,1.0]
+        proposals = [LeapFrog()]#,EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
+        weights = [1.0]#5,0.3,0.2,0.1,1.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 
@@ -265,52 +265,55 @@ class HamiltonianProposal(EnsembleProposal):
 
 
 class LeapFrog(HamiltonianProposal):
-	"""
-	Leap frog integrator proposal for an uncostrained 
-	Hamiltonian Monte Carlo step
-	"""
-	# symmetric proposal
-	log_J = 0.0
-	def get_sample(self, old):
-		# transform into a numpy array for flexibility
-		old_arr = old.asnparray()
-		q0 = old_arr.view(dtype=np.float64)[:-2]
-		# generate a canonical momentum
-		p0 = np.atleast_1d(self.momenta_distribution.rvs())
-		# evolve along the trajectory
-		q, p = self.evolve_trajectory(p0, q0)
-		
-		initial_energy = self.T(p0) + self.V(q0)
-		final_energy   = self.T(p)  + self.V(q)
-		
-		dE = min(0.0, initial_energy - final_energy)
-		if dE > log(np.random.uniform()):
-			# accept
-			for j,k in enumerate(old.names):
-				old[k] = q[j]
-		return old
-	
-	def evolve_trajectory(self, p0, q0):
-		"""
-		https://arxiv.org/pdf/1005.0157.pdf
-		https://arxiv.org/pdf/1206.1901.pdf
-		"""
-		#f = open('trajectory.txt','a')
-		# Updating the momentum a half-step
-		p = p0-0.5 * self.dt * self.dV(q0)
-		q = q0
-		#f.write("%e %e %e %e\n"%(q0,p,self.V(q0),self.dV(q0)))
-		for i in xrange(self.L):
+    """
+    Leap frog integrator proposal for an uncostrained
+    Hamiltonian Monte Carlo step
+    """
+    # symmetric proposal
+    log_J = 0.0
+    def get_sample(self, old):
+        # transform into a numpy array for flexibility
+        old_arr = old.asnparray()
+        q0 = old_arr.view(dtype=np.float64)[:-2]
+        # generate a canonical momentum
+        p0 = np.atleast_1d(self.momenta_distribution.rvs())
+        # evolve along the trajectory
+        q, p = self.evolve_trajectory(p0, q0)
+        
+        initial_energy = self.T(p0) + self.V(q0)
+        final_energy   = self.T(p)  + self.V(q)
+        
+        dE = min(0.0, initial_energy - final_energy)
+        if dE > log(np.random.uniform()):
+            # accept
+            for j,k in enumerate(old.names):
+                old[k] = q[j]
+        return old
+        
+    def evolve_trajectory(self, p0, q0):
+        """
+        https://arxiv.org/pdf/1005.0157.pdf
+        https://arxiv.org/pdf/1206.1901.pdf
+        """
+        #f = open('trajectory.txt','a')
+        # Updating the momentum a half-step
+        p = p0-0.5 * self.dt * self.dV(q0)
+        q = q0
+        
+        invM = np.squeeze(np.diag(self.inverse_mass_matrix))
+        
+        #f.write("%e %e %e %e\n"%(q0,p,self.V(q0),self.dV(q0)))
+        for i in xrange(self.L):
             
-			# do a step
-			q += self.dt * p * np.squeeze(np.diag(self.inverse_mass_matrix))
-			dV = self.dV(q)
-			# take a full momentum step
-			p += - self.dt * dV
-		#	f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
-		# Do a final update of the momentum for a half step
-		p += - 0.5 * self.dt * dV
-		#f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
-		#f.close()
-		#exit()
-		return q, -p
+            # do a step
+            q += self.dt * p * invM
+            dV = self.dV(q)
+            # take a full momentum step
+            p += - self.dt * dV
+        #	f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
+        # Do a final update of the momentum for a half step
+        p += - 0.5 * self.dt * dV
+        #f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
+        #f.close()
+        #exit()
+        return q, -p
