@@ -175,7 +175,6 @@ class Sampler(object):
                     break
 
             # Put sample back in the stack
-            self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
