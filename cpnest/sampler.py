@@ -173,13 +173,13 @@ class Sampler(object):
                         sub_accepted+=1
                 if (sub_counter > self.Nmcmc and sub_accepted > 0 ) or sub_counter > self.maxmcmc:
                     break
-
+        
             # Put sample back in the stack
             self.evolution_points.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
             accepted += sub_accepted
-            
+            counter += sub_counter
             # Yield the new sample
             if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
