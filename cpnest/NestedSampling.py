@@ -171,10 +171,12 @@ class NestedSampler(object):
         self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         self.outputfile=open(os.path.join(output,self.outfilename),"w")
         self.outputfile.write('{0:s}\n'.format(self.model.header().rstrip()))
+        self.outputfile.flush()
         return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
 
     def output_sample(self,sample):
         self.outputfile.write('{0:s}\n'.format(self.model.strsample(sample).rstrip()))
+        self.outputfile.flush()
         self.nested_samples.append(sample)
 
     def setup_random_seed(self,seed):
@@ -207,9 +209,10 @@ class NestedSampler(object):
                 break
 
         if self.verbose:
-            print("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}"\
+            sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}"\
             .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
               logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
+            sys.stderr.flush()
 
     def get_worst_live_point(self):
         """
@@ -232,7 +235,8 @@ class NestedSampler(object):
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
                     break
             if self.verbose:
-              sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
+                sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
+                sys.stderr.flush()
         if self.verbose: sys.stderr.write("\n")
         if self.prior_sampling:
             for i in range(self.Nlive):
