@@ -13,7 +13,7 @@ class Potential(DPGMM):
             self.add(np.atleast_1d(point))
 
         self.setPrior()
-        self.setThreshold(1e-4)
+        self.setThreshold(1e-3)
         self.setConcGamma(1,1)
         self.solveGrow(**kwargs)
         self.w, self.components = self.sampleMixture()
@@ -72,4 +72,7 @@ if __name__=="__main__":
 
     axhline(0.0,color='k')
     legend()
+    
+    s = np.random.multivariate_normal(np.ones(50),np.identity(50),size=1000)
+    c = Potential(50, s)
     show()

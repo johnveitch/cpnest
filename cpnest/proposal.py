@@ -194,76 +194,83 @@ class DefaultProposalCycle(ProposalCycle):
 
 
 class HamiltonianProposal(EnsembleProposal):
-	"""
-	Base class for hamiltonian proposals
-	"""
-	L   = 20
-	dt	= 0.3
-	mass_matrix = None
-	inverse_mass_matrix = None
-	momenta_distribution = None
+    """
+    Base class for hamiltonian proposals
+    """
+    L   = 20
+    dt	= 0.3
+    mass_matrix = None
+    inverse_mass_matrix = None
+    momenta_distribution = None
     
-	def __init__(self, *args, **kwargs):
-		"""
-		Sets the buondary conditions as a free particle at infinity (V=0)
-		"""
-		super(HamiltonianProposal, self).__init__(*args, **kwargs)
-		self.T  = self.kinetic_energy
-		self.V  = lambda x: np.zeros(x.shape[0])
-		self.dV = lambda x: np.zeros(x.shape[0])
-				
-	def set_ensemble(self, ensemble):
-		"""
-		override the set ensemble method 
-		to update masses, momenta distribution 
-		and potential
-		"""
-		super(HamiltonianProposal,self).set_ensemble(ensemble)
-		self.update_mass()
-		self.update_momenta_distribution()
-		    
-	def update_potential_energy(self, tracers_array):
-		"""
-		update the potential energy function
-		"""
-		self.V  = dg.Potential(tracers_array.shape[0], tracers_array.T)
-		self.dV = self.V.force
-			
-	def update_momenta_distribution(self):
-		"""
-		update the momenta distribution
-		"""
-		self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
-		
-	def update_mass(self):
-		"""
-		Recompute the mass matrix (covariance matrix)
-		from the ensemble
-		"""
-		n   = len(self.ensemble)
-		dim = self.ensemble[0].dimension
-		cov_array = np.zeros((dim,n))
-				
-		if dim == 1:
-			name=self.ensemble[0].names[0]
-			cov_array = np.atleast_2d([self.ensemble[j][name] for j in range(n)])
-			self.mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
-			self.inverse_mass_matrix = 1./self.mass_matrix
-		else:	 
-			for i,name in enumerate(self.ensemble[0].names):
-				for j in range(n): cov_array[i,j] = self.ensemble[j][name]
-			covariance = np.cov(cov_array)
-			self.mass_matrix = np.linalg.inv(covariance)
-			self.inverse_mass_matrix = covariance 
+    def __init__(self, *args, **kwargs):
+        """
+        Sets the buondary conditions as a free particle at infinity (V=0)
+        """
+        super(HamiltonianProposal, self).__init__(*args, **kwargs)
+        self.T  = self.kinetic_energy
+        self.V  = lambda x: np.zeros(x.shape[0])
+        self.dV = lambda x: np.zeros(x.shape[0])
+        try:
+            self.V = kwargs['potential']
+            self.dV = kwargs['force']
+            self.estimate_potential = False
+        except:
+            print("Using empirical potential estimator\n")
+            self.estimate_potential = True
+        
+    def set_ensemble(self, ensemble):
+        """
+        override the set ensemble method
+        to update masses, momenta distribution
+        and potential
+        """
+        super(HamiltonianProposal,self).set_ensemble(ensemble)
+        self.update_mass()
+        self.update_momenta_distribution()
 
-		# update the potential energy estimate
-		self.update_potential_energy(cov_array)
-            
-	def kinetic_energy(self,p):
-		"""
-		kinetic energy part for the Hamiltonian
-		"""
-		return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
+    def update_potential_energy(self, tracers_array):
+        """
+        update the potential energy function
+        """
+        self.V  = dg.Potential(tracers_array.shape[0], tracers_array.T)
+        self.dV = self.V.force
+    
+    def update_momenta_distribution(self):
+        """
+        update the momenta distribution
+        """
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
+    
+    def update_mass(self):
+        """
+        Recompute the mass matrix (covariance matrix)
+        from the ensemble
+        """
+        n   = len(self.ensemble)
+        dim = self.ensemble[0].dimension
+        cov_array = np.zeros((dim,n))
+        
+        if dim == 1:
+            name=self.ensemble[0].names[0]
+            cov_array = np.atleast_2d([self.ensemble[j][name] for j in range(n)])
+            self.mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.inverse_mass_matrix = 1./self.mass_matrix
+        else:
+            for i,name in enumerate(self.ensemble[0].names):
+                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
+                covariance = np.cov(cov_array)
+                self.mass_matrix = np.linalg.inv(covariance)
+                self.inverse_mass_matrix = covariance
+
+        # update the potential energy estimate
+        if self.estimate_potential: self.update_potential_energy(cov_array)
+    
+    def kinetic_energy(self,p):
+        """
+        kinetic energy part for the Hamiltonian
+        """
+        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
 
 
 class LeapFrog(HamiltonianProposal):
