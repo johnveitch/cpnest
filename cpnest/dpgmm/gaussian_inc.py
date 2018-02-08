@@ -27,8 +27,8 @@ class GaussianInc:
       self.scatter = dims.scatter.copy()
     else:
       self.n = 0
-      self.mean = numpy.zeros(dims, dtype=numpy.float32)
-      self.scatter = numpy.zeros((dims,dims), dtype=numpy.float32)
+      self.mean = numpy.zeros(dims, dtype=numpy.float64)
+      self.scatter = numpy.zeros((dims,dims), dtype=numpy.float64)
 
   def add(self, sample, weight=1.0):
     """Updates the state given a new sample - sample can have a weight, which obviously defaults to 1, but can be set to other values to indicate repetition of a single point, including fractional."""

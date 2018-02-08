@@ -32,9 +32,9 @@ class GaussianPrior:
       self.n = dims.n
       self.k = dims.k
     else:
-      self.invShape = numpy.zeros((dims,dims), dtype=numpy.float32) # The inverse of lambda in the equations.
+      self.invShape = numpy.zeros((dims,dims), dtype=numpy.float64) # The inverse of lambda in the equations.
       self.shape = None # Cached value - inverse is considered primary.
-      self.mu = numpy.zeros(dims, dtype=numpy.float32)
+      self.mu = numpy.zeros(dims, dtype=numpy.float64)
       self.n = 0.0
       self.k = 0.0
 
@@ -60,7 +60,7 @@ class GaussianPrior:
 
   def addSample(self, sample, weight=1.0):
     """Updates the prior given a single sample drawn from the Gaussian being estimated. Can have a weight provided, in which case it will be equivalent to repetition of that data point, where the repetition count can be fractional."""
-    sample = numpy.asarray(sample, dtype=numpy.float32)
+    sample = numpy.asarray(sample, dtype=numpy.float64)
     if len(sample.shape)==0: sample.shape = (1,)
     delta = sample - self.mu
 
@@ -72,7 +72,7 @@ class GaussianPrior:
 
   def remSample(self, sample):
     """Does the inverse of addSample, to in effect remove a previously added sample. Note that the issues of floating point (in-)accuracy mean its not perfect, and removing all samples is bad if there is no prior. Does not support weighting - effectvily removes a sample of weight 1."""
-    sample = numpy.asarray(sample, dtype=numpy.float32)
+    sample = numpy.asarray(sample, dtype=numpy.float64)
     if len(sample.shape)==0: sample.shape = (1,)
     delta = sample - self.mu
 
@@ -84,7 +84,7 @@ class GaussianPrior:
 
   def addSamples(self, samples, weight = None):
     """Updates the prior given multiple samples drawn from the Gaussian being estimated. Expects a data matrix ([sample, position in sample]), or an object that numpy.asarray will interpret as such. Note that if you have only a few samples it might be faster to repeatedly call addSample, as this is designed to be efficient for hundreds+ of samples. You can optionally weight the samples, by providing an array to the weight parameter."""
-    samples = numpy.asarray(samples, dtype=numpy.float32)
+    samples = numpy.asarray(samples, dtype=numpy.float64)
 
     # Calculate the mean and scatter matrices...
     if weight is None:
@@ -143,7 +143,7 @@ class GaussianPrior:
     det = math.fabs(numpy.linalg.det(self.invShape))
     
     if det<1e-3:
-      self.invShape = numpy.identity(dims, dtype=numpy.float32)
+      self.invShape = numpy.identity(dims, dtype=numpy.float64)
     if self.n<dims: self.n = dims
     if self.k<1e-3: self.k = 1e-3
     

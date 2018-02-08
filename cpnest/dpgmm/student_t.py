@@ -27,8 +27,8 @@ class StudentT:
       self.norm = dims.norm.copy() if dims.norm!=None else None
     else:
       self.dof = 1.0
-      self.loc = numpy.zeros(dims, dtype=numpy.float32)
-      self.scale = numpy.identity(dims, dtype=numpy.float32)
+      self.loc = numpy.zeros(dims, dtype=numpy.float64)
+      self.scale = numpy.identity(dims, dtype=numpy.float64)
       self.invScale = None
       self.norm = None # Actually the log of the normalising constant.
 
@@ -39,13 +39,13 @@ class StudentT:
 
   def setLoc(self, loc):
     """Sets the location vector."""
-    l = numpy.array(loc, dtype=numpy.float32)
+    l = numpy.array(loc, dtype=numpy.float64)
     assert(l.shape==self.loc.shape)
     self.loc = l
 
   def setScale(self, scale):
     """Sets the scale matrix."""
-    s = numpy.array(scale, dtype=numpy.float32)
+    s = numpy.array(scale, dtype=numpy.float64)
     assert(s.shape==(self.loc.shape[0],self.loc.shape[0]))
     self.scale = s
     self.invScale = None
@@ -53,7 +53,7 @@ class StudentT:
 
   def setInvScale(self, invScale):
     """Sets the scale matrix by providing its inverse."""
-    i = numpy.array(invScale, dtype=numpy.float32)
+    i = numpy.array(invScale, dtype=numpy.float64)
     assert(i.shape==(self.loc.shape[0],self.loc.shape[0]))
     self.scale = None
     self.invScale = i

@@ -31,7 +31,7 @@ class Wishart:
       self.cholesky = dims.cholesky.copy() if dims.cholesky!=None else None
     else:
       self.dof = 1.0
-      self.scale = numpy.identity(dims, dtype=numpy.float32)
+      self.scale = numpy.identity(dims, dtype=numpy.float64)
       self.invScale = None
       self.norm = None
       self.cholesky = None
@@ -43,7 +43,7 @@ class Wishart:
 
   def setScale(self, scale):
     """Sets the scale matrix, must be symmetric positive definite"""
-    ns = numpy.array(scale, dtype=numpy.float32)
+    ns = numpy.array(scale, dtype=numpy.float64)
     assert(ns.shape==self.scale.shape)
     self.scale = ns
     self.invScale = None
@@ -89,7 +89,7 @@ class Wishart:
     if self.cholesky==None:
       self.cholesky = numpy.linalg.cholesky(self.scale)
     d = self.scale.shape[0]
-    a = numpy.zeros((d,d),dtype=numpy.float32)
+    a = numpy.zeros((d,d),dtype=numpy.float64)
     for r in xrange(d):
       if r!=0: a[r,:r] = numpy.random.normal(size=(r,))
       a[r,r] = math.sqrt(random.gammavariate(0.5*(self.dof-d+1),2.0))
