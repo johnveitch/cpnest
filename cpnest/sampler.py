@@ -183,6 +183,7 @@ class Sampler(object):
         
             # Put sample back in the stack
             self.evolution_points.append(oldparam)
+            if self.verbose >=3: self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
             accepted += sub_accepted
