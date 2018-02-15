@@ -180,6 +180,6 @@ class DefaultProposalCycle(ProposalCycle):
     """
     def __init__(self,*args,**kwargs):
         proposals = [EnsembleWalk(), EnsembleStretch(), DifferentialEvolution(), EnsembleEigenVector()]
-        weights = [1.0,1.0,1.0,1.0]
+        weights = [1.0,1.0,3.0,10.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
