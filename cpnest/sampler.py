@@ -111,7 +111,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def produce_sample(self, queue, logLmin ):
+    def produce_sample(self, job_queue, result_queue, logLmin ):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
@@ -119,19 +119,23 @@ class Sampler(object):
         if not self.initialised:
           self.reset()
         # Prevent process from zombification if consumer thread exits
-        queue.cancel_join_thread()
+        job_queue.cancel_join_thread()
         self.counter=0
         
         while True:
             if logLmin.value==np.inf:
-                queue.close()
+                job_queue.close()
                 break
 
+            p = job_queue.get()
+            if p is None:
+                break
+            self.evolution_points.append(p)
             (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
             #outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
-            queue.put((acceptance,Nmcmc,outParam))
+            result_queue.put((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):

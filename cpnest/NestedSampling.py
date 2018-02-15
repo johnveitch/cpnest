@@ -186,52 +186,56 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self, queues):
+    def consume_sample(self, result_queues, job_queues):
         """
         consumes a sample from the shared queues and updates the evidence
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_live_point()
-        self.state.increment(self.params[self.worst].logL)
+        logLmin = self.get_worst_n_live_points(len(job_queues))
+        for k in self.worst:
+            self.state.increment(self.params[k].logL)
+            job_queues[k].put(self.params[k])
+            self.output_sample(self.params[k])
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
-        self.output_sample(self.params[self.worst])
-        self.iteration+=1
         
-        # Replace the point we just consumed with the next acceptable one
-        loops = 0
-        while(True):
-            loops += 1
-            self.acceptance, self.jumps, proposed = queues[self.queue_counter].get()
-            self.queue_counter = (self.queue_counter + 1) % len(queues)
-            if proposed.logL>self.logLmin.value:
-                # replace worst point with new one
-                self.params[self.worst]=proposed
-                break
+        # Replace the points we just consumed with the next acceptable ones
+        for k in self.worst:
+            self.iteration+=1
+            loops = 0
+            while(True):
+                loops += 1
+                self.acceptance, self.jumps, proposed = result_queues[self.queue_counter].get()
+                self.queue_counter = (self.queue_counter + 1) % len(result_queues)
+                if proposed.logL>self.logLmin.value:
+                    # replace worst point with new one
+                    self.params[k]=proposed
+                    break
 
-        if self.verbose:
-            sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
-            .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
-              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
-            sys.stderr.flush()
+            if self.verbose:
+                sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
+                .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
+                  logLmin, self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
+                sys.stderr.flush()
 
-    def get_worst_live_point(self):
+    def get_worst_n_live_points(self, n):
         """
-        selects the lowest likelihood live point
+        selects the lowest likelihood N live points
         """
-        logL_array = np.array([p.logL for p in self.params])
-        self.worst = logL_array.argmin()
-        self.logLmin.value = np.float128(logL_array[self.worst])
-        self.logLmax = np.max(logL_array)
+        self.params.sort(key=attrgetter('logL'))
+        self.worst = np.arange(n)
+        self.logLmin.value = np.float128(self.params[n].logL)
+        self.logLmax = np.max(self.params[-1].logL)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, queues):
+    def nested_sampling_loop(self, result_queues, job_queues):
         """
         main nested sampling loop
         """
         for i in range(self.Nlive):
             while True:
-                self.acceptance,self.jumps,self.params[i] = queues[self.queue_counter].get()
-                self.queue_counter = (self.queue_counter + 1) % len(queues)
+                job_queues[self.queue_counter].put(self.model.new_point())
+                self.acceptance,self.jumps,self.params[i] = result_queues[self.queue_counter].get()
+                self.queue_counter = (self.queue_counter + 1) % len(result_queues)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
                     break
             if self.verbose:
@@ -250,13 +254,14 @@ class NestedSampler(object):
             return 0
 
         while self.condition > self.tolerance:
-            self.consume_sample(queues)
+            self.consume_sample(result_queues, job_queues)
 
-	# Signal worker threads to exit
+	    # Signal worker threads to exit
         self.logLmin.value = np.inf
-
+        for jq in job_queues:
+            jq.put(None)
         # Flush the queue so subsequent join can succeed
-        for q in queues:
+        for q in result_queues:
             while True:
               try:
                 _ = q.get_nowait()
