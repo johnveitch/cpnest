@@ -194,7 +194,7 @@ class NestedSampler(object):
         logLmin = self.get_worst_n_live_points(len(job_queues))
         for k in self.worst:
             self.state.increment(self.params[k].logL)
-            job_queues[k].put(self.params[k])
+            job_queues[k].put(self.params[k], False)
             self.output_sample(self.params[k])
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         

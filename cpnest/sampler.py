@@ -132,7 +132,7 @@ class Sampler(object):
 
             #outParam = self.evolution_points[np.random.randint(self.poolsize)]
             # Push the sample onto the queue
-            result_queue.put((acceptance,Nmcmc,outParam))
+            result_queue.put((acceptance,Nmcmc,outParam),False)
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
