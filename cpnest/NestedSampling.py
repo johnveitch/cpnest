@@ -231,13 +231,16 @@ class NestedSampler(object):
         """
         main nested sampling loop
         """
+        # send all live points to the samplers for start
+        for i in range(self.Nlive):
+            job_queues[(i + 1) % len(job_queues)].put(self.model.new_point())
         for i in range(self.Nlive):
             while True:
-                job_queues[self.queue_counter].put(self.model.new_point())
                 self.acceptance,self.jumps,self.params[i] = result_queues[self.queue_counter].get()
                 self.queue_counter = (self.queue_counter + 1) % len(result_queues)
                 if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
                     break
+
             if self.verbose:
                 sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
                 sys.stderr.flush()
