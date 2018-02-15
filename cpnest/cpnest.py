@@ -43,19 +43,18 @@ class CPNest(object):
         # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
         if balance_samplers:
             self.result_queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
-            self.job_queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
+            self.job_queues = [mp.Queue() for _ in range(Nthreads)]
         else:
             self.result_queues = [mp.Queue(maxsize=Nlive)]
-            self.job_queues = [mp.Queue(maxsize=Nlive)]
+            self.job_queues = [mp.Queue()]
             
         for i in range(Nthreads):
             sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
+            jq=self.job_queues[i]
             if balance_samplers:
                 rq=self.result_queues[i]
-                jq=self.job_queues[i]
             else:
                 rq=self.result_queues[0]
-                jq=self.job_queues[0]
             
             p = mp.Process(target=sampler.produce_sample, args=(jq, rq, self.NS.logLmin, ))
             self.process_pool.append(p)
