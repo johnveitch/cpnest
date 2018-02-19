@@ -40,25 +40,23 @@ class CPNest(object):
         self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
 
         self.process_pool = []
-        # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
-        if balance_samplers:
-            self.result_queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
-            self.job_queues = [mp.Queue() for _ in range(Nthreads)]
-        else:
-            self.result_queues = [mp.Queue(maxsize=Nlive)]
-            self.job_queues = [mp.Queue()]
-            
+        
+#        # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
+#        if balance_samplers:
+#            self.result_queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
+#            self.job_queues = [mp.Queue() for _ in range(Nthreads)]
+#        else:
+#            self.result_queues = [mp.Queue(maxsize=Nlive)]
+#            self.job_queues = [mp.Queue()]
+
+        self.consumer_pipes = []
         for i in range(Nthreads):
             sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
-            jq=self.job_queues[i]
-            if balance_samplers:
-                rq=self.result_queues[i]
-            else:
-                rq=self.result_queues[0]
-            
-            p = mp.Process(target=sampler.produce_sample, args=(jq, rq, self.NS.logLmin, ))
+            # We set up pipes between the nested sampling and the various sampler processes
+            consumer, producer = mp.Pipe(duplex=True)
+            self.consumer_pipes.append(consumer)
+            p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
             self.process_pool.append(p)
-
 
     def run(self):
         """
@@ -70,13 +68,14 @@ class CPNest(object):
 
         for each in self.process_pool:
             each.start()
-        self.NS.nested_sampling_loop(self.result_queues, self.job_queues)
-        for q in self.result_queues:
-            while not q.empty():
-                q.get(timeout=1)
-        for q in self.job_queues:
-            while not q.empty():
-                q.get(timeout=1)
+        
+        self.NS.nested_sampling_loop(self.consumer_pipes)
+#        for q in self.result_queues:
+#            while not q.empty():
+#                q.get(timeout=1)
+#        for q in self.job_queues:
+#            while not q.empty():
+#                q.get(timeout=1)
         for each in self.process_pool:
             each.join()
 

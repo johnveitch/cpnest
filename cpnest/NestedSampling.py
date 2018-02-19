@@ -186,16 +186,17 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self, result_queues, job_queues):
+    def consume_sample(self, consumer_pipes):
         """
         consumes a sample from the shared queues and updates the evidence
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(job_queues))
+        logLmin = self.get_worst_n_live_points(len(consumer_pipes))
         for k in self.worst:
             self.state.increment(self.params[k].logL)
-            job_queues[k].put(self.params[k], False)
+            consumer_pipes[k].send(self.params[k])
             self.output_sample(self.params[k])
+
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
         # Replace the points we just consumed with the next acceptable ones
@@ -204,8 +205,8 @@ class NestedSampler(object):
             loops = 0
             while(True):
                 loops += 1
-                self.acceptance, self.jumps, proposed = result_queues[self.queue_counter].get()
-                self.queue_counter = (self.queue_counter + 1) % len(result_queues)
+                self.acceptance, self.jumps, proposed = consumer_pipes[self.queue_counter].recv()
+                self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
                 if proposed.logL>self.logLmin.value:
                     # replace worst point with new one
                     self.params[k]=proposed
@@ -227,18 +228,21 @@ class NestedSampler(object):
         self.logLmax = np.max(self.params[-1].logL)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, result_queues, job_queues):
+    def nested_sampling_loop(self, consumer_pipes):
         """
         main nested sampling loop
         """
         # send all live points to the samplers for start
         for i in range(self.Nlive):
-            job_queues[(i + 1) % len(job_queues)].put(self.model.new_point())
-        for i in range(self.Nlive):
+#            print("NS sending message",i,"to sampler",self.queue_counter)
+            consumer_pipes[self.queue_counter].send(self.model.new_point())
+#            print("NS sent message",i,"to sampler",(i + 1) % len(consumer_pipes))
             while True:
-                self.acceptance,self.jumps,self.params[i] = result_queues[self.queue_counter].get()
-                self.queue_counter = (self.queue_counter + 1) % len(result_queues)
-                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
+#                print("NS receiving from sampler",self.queue_counter)
+                self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
+#                print("NS received",self.params[i])
+                self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
+                if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
                     break
 
             if self.verbose:
@@ -257,19 +261,19 @@ class NestedSampler(object):
             return 0
 
         while self.condition > self.tolerance:
-            self.consume_sample(result_queues, job_queues)
+            self.consume_sample(consumer_pipes)
 
 	    # Signal worker threads to exit
         self.logLmin.value = np.inf
-        for jq in job_queues:
-            jq.put(None)
-        # Flush the queue so subsequent join can succeed
-        for q in result_queues:
-            while True:
-              try:
-                _ = q.get_nowait()
-              except Empty:
-                break
+        for c in consumer_pipes:
+            c.send(None)
+#        # Flush the queue so subsequent join can succeed
+#        for q in result_queues:
+#            while True:
+#              try:
+#                _ = q.get_nowait()
+#              except Empty:
+#                break
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
