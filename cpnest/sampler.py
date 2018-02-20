@@ -41,7 +41,7 @@ class Sampler(object):
 
         self.seed = seed
         self.user = usermodel
-        self.initial_mcmc = maxmcmc//2
+        self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
 
         if proposal is None:
@@ -124,7 +124,7 @@ class Sampler(object):
                 break
 
             p = producer_pipe.recv()
-#            print ("sampler received",p)
+
             if p is None:
                 break
             self.evolution_points.append(p)

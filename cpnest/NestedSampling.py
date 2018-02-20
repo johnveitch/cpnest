@@ -192,11 +192,12 @@ class NestedSampler(object):
         """
         # Increment the state of the evidence integration
         logLmin = self.get_worst_n_live_points(len(consumer_pipes))
+        logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
             consumer_pipes[k].send(self.params[k])
             self.output_sample(self.params[k])
-
+            logLtmp.append(self.params[k].logL)
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
         # Replace the points we just consumed with the next acceptable ones
@@ -215,7 +216,7 @@ class NestedSampler(object):
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
                 .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
-                  logLmin, self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
+                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
                 sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
@@ -233,17 +234,21 @@ class NestedSampler(object):
         main nested sampling loop
         """
         # send all live points to the samplers for start
-        for i in range(self.Nlive):
-#            print("NS sending message",i,"to sampler",self.queue_counter)
-            consumer_pipes[self.queue_counter].send(self.model.new_point())
-#            print("NS sent message",i,"to sampler",(i + 1) % len(consumer_pipes))
-            while True:
-#                print("NS receiving from sampler",self.queue_counter)
-                self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
-#                print("NS received",self.params[i])
-                self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
-                if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
-                    break
+        i = 0
+        while i < self.Nlive:
+            for j in range(len(consumer_pipes)):
+#                print("NS sending message",i,"to sampler",j)
+                consumer_pipes[j].send(self.model.new_point())
+            for j in range(len(consumer_pipes)):
+                while True:
+#                    print("NS receiving from sampler",self.queue_counter)
+                    self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
+#                    print("NS received",self.params[i])
+                    self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
+                    if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
+                        i+=1
+                        break
+
 
             if self.verbose:
                 sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
