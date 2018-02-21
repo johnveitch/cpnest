@@ -40,14 +40,6 @@ class CPNest(object):
         self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
 
         self.process_pool = []
-        
-#        # We set the queues to be no longer than Nlive, so the samplers cannot too far ahead of each other
-#        if balance_samplers:
-#            self.result_queues = [mp.Queue(maxsize=Nlive) for _ in range(Nthreads)]
-#            self.job_queues = [mp.Queue() for _ in range(Nthreads)]
-#        else:
-#            self.result_queues = [mp.Queue(maxsize=Nlive)]
-#            self.job_queues = [mp.Queue()]
 
         self.consumer_pipes = []
         for i in range(Nthreads):
@@ -70,12 +62,7 @@ class CPNest(object):
             each.start()
         
         self.NS.nested_sampling_loop(self.consumer_pipes)
-#        for q in self.result_queues:
-#            while not q.empty():
-#                q.get(timeout=1)
-#        for q in self.job_queues:
-#            while not q.empty():
-#                q.get(timeout=1)
+
         for each in self.process_pool:
             each.join()
 
