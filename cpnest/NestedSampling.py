@@ -236,14 +236,10 @@ class NestedSampler(object):
         # send all live points to the samplers for start
         i = 0
         while i < self.Nlive:
-            for j in range(len(consumer_pipes)):
-#                print("NS sending message",i,"to sampler",j)
-                consumer_pipes[j].send(self.model.new_point())
+            for j in range(len(consumer_pipes)): consumer_pipes[j].send(self.model.new_point())
             for j in range(len(consumer_pipes)):
                 while True:
-#                    print("NS receiving from sampler",self.queue_counter)
                     self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
-#                    print("NS received",self.params[i])
                     self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
                     if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
                         i+=1
@@ -272,13 +268,6 @@ class NestedSampler(object):
         self.logLmin.value = np.inf
         for c in consumer_pipes:
             c.send(None)
-#        # Flush the queue so subsequent join can succeed
-#        for q in result_queues:
-#            while True:
-#              try:
-#                _ = q.get_nowait()
-#              except Empty:
-#                break
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))

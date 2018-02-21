@@ -118,8 +118,7 @@ class Sampler(object):
 
         if not self.initialised:
           self.reset()
-#        # Prevent process from zombification if consumer thread exits
-#        job_queue.cancel_join_thread()
+
         self.counter=0
         
         while True:
@@ -130,13 +129,12 @@ class Sampler(object):
 
             if p is None:
                 break
+            
             self.evolution_points.append(p)
             (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
-            #outParam = self.evolution_points[np.random.randint(self.poolsize)]
-            # Push the sample onto the queue
+            # Send the sample to the Nested Sampler
             producer_pipe.send((acceptance,Nmcmc,outParam))
-#            print ("sampler sent",outParam)
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
