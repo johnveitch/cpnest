@@ -52,7 +52,7 @@ class DynamicNestedSampler(NestedSampler):
         self.condition = np.inf
         self.logLmax = -np.inf
         self.iteration = 0
-        self.nested_samples=None
+        self.nested_intervals=None
         self.state = _NSintegralState(self.Nlive)
         sys.stdout.flush()
         self.output_folder = output
@@ -64,15 +64,21 @@ class DynamicNestedSampler(NestedSampler):
         self.reset()
 
     def reset(self):
+        self.nested_intervals=Interval(-np.inf, np.inf)
+        
+        samples = []
+        
         for i in range(self.Ninit):
             tmp = self.model.new_point()
-            Ltmp= self.model.log_likelihood(tmp)
-            print(i,Ltmp)
-
-            if self.nested_samples is None:
-                self.nested_samples=Interval(-np.inf, Ltmp,  data={Ltmp:tmp})
-            else:
-                self.nested_samples.insert_interval(Interval(-np.inf, Ltmp, data={Ltmp:tmp}))
+            tmp.logL = self.model.log_likelihood(tmp)
+            samples.append(tmp)
+        
+        worst = np.argmin([p.logL for p in samples])
+        self.nested_intervals.insert_point(samples[worst].logL, data={samples[worst].logL:samples[worst]})
+        self.nested_intervals.find(-np.inf).n+=1
+        for i in range(self.Ninit):
+            if i!=worst:
+                self.nested_intervals.insert_interval(Interval(-np.inf,samples[i].logL, data={samples[i].logL:samples[i]}))
 
     def terminate(self):
         """
@@ -117,7 +123,7 @@ class Interval(object):
     
     def logt(self):
         if self.n==0:
-            return 0
+            return 0.0
         else:
             return -1.0/(self.n)
     
@@ -125,7 +131,7 @@ class Interval(object):
         """
         Returns logX,logL
         """
-        logX=[0]
+        logX=[0.0]
         logL=[self.a]
         for i in self:
             logX.append(logX[-1]+i.logt())
@@ -137,7 +143,7 @@ class Interval(object):
         Return integral
         """
         logX,logL = self.readout()
-        return log_integrate_log_trap(logL[:-1], logX[:-1])
+        return log_integrate_log_trap(logL[1:-1], logX[1:-1])
 
     def get_data(self, key):
         """
@@ -173,7 +179,14 @@ class Interval(object):
         if self.children:
             for c in self.children:
                 c.print_tree(pref=pref+'\t')
-    
+
+    def print_leaves(self,pref=''):
+        if self.children:
+            for c in self.children:
+                c.print_leaves(pref=pref+'\t')
+        else:
+            print(pref+str(self))
+
     def __iter__(self):
         return next(self)
     
@@ -224,7 +237,7 @@ class Interval(object):
         else:
             return [self]
     
-    def insert_point(self,x, data=None):
+    def insert_point(self, x, data=None):
         """
         Insert a point into this interval tree
         """

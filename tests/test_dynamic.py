@@ -60,8 +60,15 @@ class GaussianModel(cpnest.model.Model):
         #return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
 
 
-d = DynamicNestedSampler(GaussianModel())
+d = DynamicNestedSampler(GaussianModel(), Ninit = 1000)
 
+print len([p for p in d.nested_intervals.points()])
+print d.nested_intervals.print_leaves()
+print d.nested_intervals.readout()
+print d.nested_intervals.logZ()
+plt.figure()
+plt.plot(*d.nested_intervals.readout())
+plt.savefig('readout.png')
 
 """
 
