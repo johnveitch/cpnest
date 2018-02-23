@@ -6,6 +6,7 @@ import multiprocessing as mp
 from multiprocessing import Lock
 from numpy import logaddexp, exp
 from numpy import inf
+from math import isnan
 try:
     from queue import Empty
 except ImportError:
@@ -64,8 +65,10 @@ class _NSintegralState(object):
     Wt = self.logw + logL + logsubexp(0,logt)
     self.logZ = logaddexp(self.logZ,Wt)
     # Update information estimate
-    if np.isfinite(oldZ) and np.isfinite(self.logZ):
-      self.info = exp(Wt - self.logZ)*logL + exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
+    if np.isfinite(oldZ) and np.isfinite(self.logZ) and np.isfinite(logL):
+        self.info = np.exp(Wt - self.logZ)*logL + np.exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
+        if isnan(self.info):
+            self.info=0
     
     # Update history
     self.logw += logt
@@ -238,7 +241,7 @@ class NestedSampler(object):
         while i < self.Nlive:
             for j in range(len(consumer_pipes)): consumer_pipes[j].send(self.model.new_point())
             for j in range(len(consumer_pipes)):
-                while True:
+                while i<self.Nlive:
                     self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
                     self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
                     if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
