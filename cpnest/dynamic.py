@@ -5,6 +5,7 @@ import numpy as np
 from numpy import logaddexp, exp, array, log, log1p
 from numpy import inf
 from . import nest2pos
+from .NestedSampling import NestedSampler, _NSintegralState
 from .nest2pos import logsubexp, log_integrate_log_trap
 from functools import reduce
 import itertools as it
@@ -31,9 +32,7 @@ class DynamicNestedSampler(NestedSampler):
     From Higson, Handley, Hobson, Lazenby 2017
     https://arxiv.org/pdf/1704.03459.pdf
     """
-    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,output=None,verbose=1,seed=1,prior_sampling=False,stopping=0.1):
-
-    def __init__(self,usermodel, Ninit=100, output=None, verbose=1, seed=1, G=0.25, stopping=0.1):
+    def __init__(self,usermodel, Ninit=100, output='.', verbose=1, seed=1, G=0.25, stopping=0.1):
         """
         G:      Goal parameter between 0 and 1.
                 0: Optimise for evidence calculation
@@ -43,7 +42,6 @@ class DynamicNestedSampler(NestedSampler):
         self.model=usermodel
         self.G = G
         self.Ninit = Ninit
-        self.nest = Interval(logLtest(-50),np.inf)
         self.setup_random_seed(seed)
         self.verbose = verbose
         self.accepted = 0
@@ -63,9 +61,18 @@ class DynamicNestedSampler(NestedSampler):
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
+        self.reset()
 
     def reset(self):
-        queues[self.queue_counter].get()
+        for i in range(self.Ninit):
+            tmp = self.model.new_point()
+            Ltmp= self.model.log_likelihood(tmp)
+            print(i,Ltmp)
+
+            if self.nested_samples is None:
+                self.nested_samples=Interval(-np.inf, Ltmp,  data={Ltmp:tmp})
+            else:
+                self.nested_samples.insert_interval(Interval(-np.inf, Ltmp, data={Ltmp:tmp}))
 
     def terminate(self):
         """
@@ -89,19 +96,24 @@ class DynamicNestedSampler(NestedSampler):
             Lmin = min( self.logLs[importance>importance_frac*maxI] )
             self.sample_between(Lmin, Lmax)
 
+class Sample(object):
+    logL=0
+    params=None
 
 class Interval(object):
     """
     Represents an interval
     """
-    def __init__(self,a,b,n=0,parent=None):
+    def __init__(self,a,b,n=0,parent=None,data=None):
         if b<a: a,b = b,a
         self.a=a
         self.b=b
         self.children=None
         self.parent=parent
         self.n=n
-        self.data=(None,None)
+        self.data={}
+        if data is not None:
+            self.data=data
     
     def logt(self):
         if self.n==0:
@@ -127,6 +139,18 @@ class Interval(object):
         logX,logL = self.readout()
         return log_integrate_log_trap(logL[:-1], logX[:-1])
 
+    def get_data(self, key):
+        """
+        Get data from tree with given key
+        """
+        if key not in self:
+            return None
+        if self.children is not None:
+            for c in self.children:
+                if key in c:
+                    return c.get_data(key)
+        else:
+            return self.data.get(key)
     
     def integrate(self,func):
         """
@@ -189,13 +213,18 @@ class Interval(object):
         else:
             return self
     
-    def split(self,x):
+    def split(self,x,data=None):
+        """
+        Split the interval at x, recording data if given
+        """
         if x in self:
-            return [Interval(self.a,x,n=self.n,parent=self),Interval(x,self.b,n=self.n,parent=self)]
+            ldata = {self.a:self.get_data(self.a), x:data}
+            rdata = {x:data, self.b:self.get_data(self.b)}
+            return [Interval(self.a,x,n=self.n,parent=self,data=ldata),Interval(x,self.b,n=self.n,parent=self,data=rdata)]
         else:
             return [self]
     
-    def insert_point(self,x):
+    def insert_point(self,x, data=None):
         """
         Insert a point into this interval tree
         """
@@ -205,17 +234,17 @@ class Interval(object):
         if self.children is not None:
             for c in self.children:
                 if x in c:
-                    c.insert_point(x)
+                    c.insert_point(x, data=data)
         else:
-            self.children=self.split(x)
+            self.children=self.split(x,data=data)
 
     def insert_interval(self,i):
         """
         Add an interval into the tree
         """
         # Subdivide left and right intervals with beginning and end of i
-        self.insert_point(i.a)
-        self.insert_point(i.b)
+        self.insert_point(i.a, data=i.get_data(i.a))
+        self.insert_point(i.b, data=i.get_data(i.b))
         # Find all intervals intersecting i and increase their multiplicity
         cur = self.find(i.a)
         for cur in self:

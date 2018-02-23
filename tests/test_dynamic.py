@@ -43,6 +43,29 @@ def logLX(logX):
 
 print('logZ true: {0}'.format(analytic_log_Z))
 
+from cpnest.dynamic import DynamicNestedSampler
+
+class GaussianModel(cpnest.model.Model):
+    """
+    A simple gaussian model with parameters mean and sigma
+    """
+    def __init__(self):
+        self.distr = stats.norm(loc=0,scale=1.0)
+    names=['x']
+    bounds=[[-10,10]]
+    analytic_log_Z=0.0 - np.log(bounds[0][1] - bounds[0][0])
+
+    def log_likelihood(self,p):
+        return self.distr.logpdf(p['x'])
+        #return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
+
+
+d = DynamicNestedSampler(GaussianModel())
+
+
+"""
+
+
 i = Interval(logLtest(-50),np.inf)
 for x in xs[1:]:
     logL=logLtest(x)
@@ -77,3 +100,4 @@ while it<10000:
 ps=[p for p in i.points()]
 M=[x.logt() for x in i]
 plt.plot(np.log(M),ps[1:])
+"""
