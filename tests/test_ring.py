@@ -36,7 +36,7 @@ class RingTestCase(unittest.TestCase):
         print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
         print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
         print('Estimated logZ {0}'.format(self.work.NS.logZ))
-        self.assertTrue(np.abs(self.work.NS.logZ - RingModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,RingModel.analytic_log_Z ))
+        self.assertTrue(np.abs(self.work.NS.logZ - RingModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} +/ {2:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,RingModel.analytic_log_Z,tolerance ))
 
 def test_all():
     unittest.main(verbosity=2)
