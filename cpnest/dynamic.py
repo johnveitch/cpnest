@@ -25,22 +25,47 @@ def timeit(method):
 
     return timed
 
-class DynamicNestedSampler(object):
+class DynamicNestedSampler(NestedSampler):
     """
     Dynamic nested sampling algorithm
     From Higson, Handley, Hobson, Lazenby 2017
     https://arxiv.org/pdf/1704.03459.pdf
     """
-    def __init__(self,G=0.25,Ninit=1000):
+    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,output=None,verbose=1,seed=1,prior_sampling=False,stopping=0.1):
+
+    def __init__(self,usermodel, Ninit=100, output=None, verbose=1, seed=1, G=0.25, stopping=0.1):
         """
         G:      Goal parameter between 0 and 1.
                 0: Optimise for evidence calculation
                 1: Optimise for posterior sampling
         Ninit:  Initial number of live points
         """
+        self.model=usermodel
         self.G = G
         self.Ninit = Ninit
-        self.nest=Contour()
+        self.nest = Interval(logLtest(-50),np.inf)
+        self.setup_random_seed(seed)
+        self.verbose = verbose
+        self.accepted = 0
+        self.rejected = 1
+        self.queue_counter = 0
+        self.Nlive=Ninit
+        self.tolerance = stopping
+        self.condition = np.inf
+        self.logLmax = -np.inf
+        self.iteration = 0
+        self.nested_samples=None
+        self.state = _NSintegralState(self.Nlive)
+        sys.stdout.flush()
+        self.output_folder = output
+        self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
+        header = open(os.path.join(output,'header.txt'),'w')
+        header.write('\t'.join(self.model.names))
+        header.write('\tlogL\n')
+        header.close()
+
+    def reset(self):
+        queues[self.queue_counter].get()
 
     def terminate(self):
         """
@@ -66,6 +91,9 @@ class DynamicNestedSampler(object):
 
 
 class Interval(object):
+    """
+    Represents an interval
+    """
     def __init__(self,a,b,n=0,parent=None):
         if b<a: a,b = b,a
         self.a=a
