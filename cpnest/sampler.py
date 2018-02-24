@@ -61,6 +61,7 @@ class Sampler(object):
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
         self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output
+        self.reset()
         
     def reset(self):
         """

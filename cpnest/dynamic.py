@@ -12,6 +12,12 @@ import itertools as it
 from bisect import bisect_left
 import time
 from scipy.misc import logsumexp
+from ctypes import c_int, c_double
+import types
+import multiprocessing as mp
+from multiprocessing.sharedctypes import Value
+from multiprocessing import Lock
+
 
 def timeit(method):
 
@@ -26,19 +32,67 @@ def timeit(method):
 
     return timed
 
+class DyNest(object):
+    """
+    Self-contained class for dynamic nested sampling
+    on a single machine
+    """
+    def __init__(self,usermodel, output='./',Nthreads=None, Ninit=100, maxmcmc=1000, verbose=1, Poolsize=100, seed=1):
+        self.process_pool=[]
+        self.seed=seed
+        if Nthreads is None:
+            Nthreads = mp.cpu_count()
+        print('Running with {0} parallel threads'.format(Nthreads))
+        from .sampler import Sampler
+        self.dnest = DynamicNestedSampler(usermodel, output=output, verbose=1, seed=1, Ninit=Ninit)
+        
+        for i in range(Nthreads):
+            print('Initialised sampler')
+            sampler = Sampler(usermodel,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
+            consumer, producer = mp.Pipe(duplex=True)
+            p = mp.Process(target=sampler.produce_sample, args=(producer, self.dnest.logLmin, ))
+            self.dnest.connect_sampler(consumer)
+            self.process_pool.append(p)
+            
+    def run(self):
+        """
+        Run the sampler
+        """
+        import numpy as np
+        import os
+        from .nest2pos import draw_posterior_many
+
+        for each in self.process_pool:
+            each.start()
+        
+        self.dnest.nested_sampling_loop()
+
+        for each in self.process_pool:
+            each.join()
+
+        import numpy.lib.recfunctions as rfn
+        #self.nested_samples = rfn.stack_arrays([self.NS.nested_samples[j].asnparray() for j in range(len(self.NS.nested_samples))],usemask=False)
+        #self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        #np.savetxt(os.path.join(self.NS.output_folder,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
+        #if self.verbose>1: self.plot()
+
 class DynamicNestedSampler(NestedSampler):
     """
     Dynamic nested sampling algorithm
     From Higson, Handley, Hobson, Lazenby 2017
     https://arxiv.org/pdf/1704.03459.pdf
     """
-    def __init__(self,usermodel, Ninit=100, output='.', verbose=1, seed=1, G=0.25, stopping=0.1):
+    def __init__(self,usermodel, pipes=None, Ninit=100, output='.', verbose=1, seed=1, G=0.25, stopping=0.1):
         """
         G:      Goal parameter between 0 and 1.
                 0: Optimise for evidence calculation
                 1: Optimise for posterior sampling
         Ninit:  Initial number of live points
         """
+        if pipes is None:
+            self.pipes = []
+        else:
+            self.pipes = pipes
         self.model=usermodel
         self.G = G
         self.Ninit = Ninit
@@ -61,7 +115,17 @@ class DynamicNestedSampler(NestedSampler):
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
+        self.logLmin = Value(c_double,-np.inf,lock=Lock())
+        self.blocked=False
         self.reset()
+
+    def connect_sampler(self,conn):
+        """
+        Connect to sampler on given connection
+        """
+        if self.verbose >1: print('Incoming connection from {0}'.format(str(conn)))
+        self.push_points(self.params,conn)
+        self.pipes.append(conn)
 
     def reset(self):
         self.nested_intervals=Interval(-np.inf, np.inf)
@@ -74,11 +138,17 @@ class DynamicNestedSampler(NestedSampler):
             samples.append(tmp)
         
         worst = np.argmin([p.logL for p in samples])
-        self.nested_intervals.insert_point(samples[worst].logL, data={samples[worst].logL:samples[worst]})
+        self.nested_intervals.insert_point(samples[worst].logL, data=samples[worst])
         self.nested_intervals.find(-np.inf).n+=1
         for i in range(self.Ninit):
             if i!=worst:
+                if self.verbose:
+                    sys.stderr.write("Initial sampling --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Ninit))))
+                    sys.stderr.flush()
                 self.nested_intervals.insert_interval(Interval(-np.inf,samples[i].logL, data={samples[i].logL:samples[i]}))
+        if self.verbose:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
 
     def terminate(self):
         """
@@ -86,6 +156,98 @@ class DynamicNestedSampler(NestedSampler):
         """
         pass
 
+    @property
+    def params(self):
+        params=[]
+        for p in list(self.nested_intervals.points()):
+            params.append(self.nested_intervals.get_data(p))
+        return params
+
+    def push_points(self,points, conn=None):
+        """
+        Push points to connected samplers
+        If conn is None, will push to all known
+        """
+        if conn is None:
+            conns = self.pipes
+        else:
+            conns = [conn]
+        for c in conns:
+            for p in points:
+                c.send(p)
+
+    def recv_point(self):
+        """
+        Return a point from the next thread in the round-robin
+        """
+
+        point = None
+        
+        while point is None and self.pipes:
+            self.queue_counter = (self.queue_counter + 1) % len(self.pipes)
+            try:
+                conn = self.pipes[self.queue_counter]
+                point = conn.recv()
+                if point is None:
+                    # This sampler seems to have stopped
+                    print('Connection {0} closed'.format(str(conn)))
+                    conn.close()
+                    self.pipes.remove(conn)
+                break
+            except ConnectionResetError:
+                self.pipes.remove(conn)
+    
+        return point
+
+    def nested_sampling_loop(self):
+        """
+        main nested sampling loop
+        """
+        # send all live points to the samplers for start
+        i = 0
+        self.push_points(self.params)
+        
+        if self.verbose:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
+        
+        # Run main loop
+        logLmin=-np.inf
+        while not self.done():
+            self.evolve_classic(logLmin=logLmin)
+            logLmin = self.params[i].logL
+            
+
+	    # Signal worker threads to exit
+        self.logLmin.value = np.inf
+        for c in self.pipes:
+            c.send(None)
+
+    def evolve_classic(self, logLmin=-np.inf):
+        """
+        Perform an iteration of the classic nested sampling algorithm
+        Draw a point above logLmin and add it to the set
+        """
+        # Find next point above logLmin
+        i = self.nested_intervals.find(logLmin)
+        oldpoint = self.nested_intervals.get_data(i.b)
+        self.logLmin.value = np.float128(oldpoint.logL)        
+        self.push_points([oldpoint])
+        data = self.recv_point()
+        if data is not None:
+            self.acceptance,self.jumps,newpoint = data
+            self.nested_intervals.insert_interval(Interval(oldpoint.logL, newpoint.logL, data={oldpoint.logL:oldpoint, newpoint.logL:newpoint}))
+
+        else:
+            self.blocked=True
+
+    def done(self):
+        if self.blocked:
+            return True
+        if len(list(self.nested_intervals.points()))<1000:
+            return False
+        else:
+            return True
 
     def run(self):
         """
@@ -101,10 +263,6 @@ class DynamicNestedSampler(NestedSampler):
             Lmax = self.logLs[maxI_idx]
             Lmin = min( self.logLs[importance>importance_frac*maxI] )
             self.sample_between(Lmin, Lmax)
-
-class Sample(object):
-    logL=0
-    params=None
 
 class Interval(object):
     """
@@ -174,16 +332,26 @@ class Interval(object):
     def __str__(self):
         return "({0}, {1}): n={2}".format(self.a,self.b,self.n)
     
-    def print_tree(self,pref=''):
-        print(pref+str(self))
-        if self.children:
+    def leaves(self):
+        if self.children is not None:
+            yield self
+        else:
             for c in self.children:
-                c.print_tree(pref=pref+'\t')
+                yield c.leaves()
+    
+    def print_tree(self,pref=''):
+        
+        if self.children:
+            print(pref+str(self))
+            self.children[0].print_tree(pref=pref+u' ')
+            self.children[1].print_tree(pref=pref+u' ')
+        else:
+            print(pref+str(self))
 
     def print_leaves(self,pref=''):
         if self.children:
             for c in self.children:
-                c.print_leaves(pref=pref+'\t')
+                c.print_leaves(pref=pref+'  ')
         else:
             print(pref+str(self))
 
@@ -270,6 +438,12 @@ class Interval(object):
         else: raise Exception("Cannot add non-contiguous intervals ({0},{1}), ({2},{3})".format(self.a,self.b,other.a,other.b))
 
     def points(self):
-        yield self.a
+        #yield self.a
         for i in self:
             yield i.b
+
+    def data(self):
+        """
+        Read out data from leaves
+        """
+        

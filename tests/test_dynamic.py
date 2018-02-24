@@ -43,7 +43,7 @@ def logLX(logX):
 
 print('logZ true: {0}'.format(analytic_log_Z))
 
-from cpnest.dynamic import DynamicNestedSampler
+from cpnest.dynamic import DynamicNestedSampler, DyNest
 
 class GaussianModel(cpnest.model.Model):
     """
@@ -59,15 +59,14 @@ class GaussianModel(cpnest.model.Model):
         return self.distr.logpdf(p['x'])
         #return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
 
+d = DyNest(GaussianModel(), Ninit = 10, Nthreads=1)
+d.run()
 
-d = DynamicNestedSampler(GaussianModel(), Ninit = 1000)
-
-print len([p for p in d.nested_intervals.points()])
-print d.nested_intervals.print_leaves()
-print d.nested_intervals.readout()
-print d.nested_intervals.logZ()
+print(len([p for p in d.dnest.nested_intervals.points()]))
+print(d.dnest.nested_intervals.print_leaves())
+print(d.dnest.nested_intervals.logZ())
 plt.figure()
-plt.plot(*d.nested_intervals.readout())
+plt.plot(*d.dnest.nested_intervals.readout())
 plt.savefig('readout.png')
 
 """
