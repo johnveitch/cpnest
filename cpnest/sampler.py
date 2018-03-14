@@ -57,6 +57,8 @@ class Sampler(object):
         self.verbose=verbose
         self.acceptance=0.0
         self.sub_acceptance=0.0
+        self.mcmc_accepted = 0
+        self.mcmc_counter = 0
         self.initialised=False
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
@@ -152,15 +154,13 @@ class Sampler(object):
                        self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
             sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
-        sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
+        sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0
 
     def metropolis_hastings(self, logLmin):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
-        accepted = 0
-        counter = 0
         for j in range(self.poolsize):
             sub_counter = 0
             sub_accepted = 0
@@ -185,10 +185,8 @@ class Sampler(object):
             if self.verbose >=3: self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
-            accepted += sub_accepted
-            counter += sub_counter
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter += sub_counter
             # Yield the new sample
             if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
-
-        self.acceptance = float(accepted)/float(counter)
