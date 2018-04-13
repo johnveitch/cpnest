@@ -91,7 +91,7 @@ class Sampler(object):
 
         self.initialised=True
 
-    def estimate_nmcmc(self, safety=1, tau=None):
+    def estimate_nmcmc(self, safety=5, tau=None):
         """
         Estimate autocorrelation length of chain using acceptance fraction
         ACL = (2/acc) - 1
