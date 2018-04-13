@@ -55,7 +55,6 @@ class Sampler(object):
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
-        self.acceptance=0.0
         self.sub_acceptance=0.0
         self.mcmc_accepted = 0
         self.mcmc_counter = 0
