@@ -59,15 +59,16 @@ class GaussianModel(cpnest.model.Model):
         return self.distr.logpdf(p['x'])
         #return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
 
-d = DyNest(GaussianModel(), Ninit = 10, Nthreads=1)
-d.run()
+if __name__=='__main__':
 
-print(len([p for p in d.dnest.nested_intervals.points()]))
-print(d.dnest.nested_intervals.print_leaves())
-print(d.dnest.nested_intervals.logZ())
-plt.figure()
-plt.plot(*d.dnest.nested_intervals.readout())
-plt.savefig('readout.png')
+    d = DyNest(GaussianModel(), Ninit = 1000, Nthreads=1, verbose=2, seed=0)
+    d.run()
+    print(len([p for p in d.dnest.nested_intervals.points()]))
+    #print(d.dnest.nested_intervals.print_leaves())
+    print(d.dnest.nested_intervals.logZ())
+    plt.figure()
+    plt.plot(*d.dnest.nested_intervals.readout())
+    plt.savefig('readout.png')
 
 """
 

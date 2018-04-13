@@ -5,6 +5,7 @@ import numpy as np
 from math import log
 from collections import deque
 from random import random,randrange
+import multiprocessing as mp
 
 from . import parameter
 from .proposal import DefaultProposalCycle
@@ -87,6 +88,7 @@ class Sampler(object):
         self.proposal.set_ensemble(self.evolution_points)
 
         self.initialised=True
+        self.exit=False
 
     def estimate_nmcmc(self, safety=1, tau=None):
         """
@@ -119,27 +121,40 @@ class Sampler(object):
 
         self.counter=0
         
-        while True:
+        while not self.exit:
             if logLmin.value==np.inf:
                 break
 
-            p = producer_pipe.recv()
+            if producer_pipe.poll():
+                try:
+                    data = producer_pipe.recv()
+                    print('Received ',str(data))
+                    if data is None:
+                        print(__name__, 'Sampler received None')
+                        self.exit=True
+                        break
+                    else:
+                        self.evolution_points.append(data)
 
-            if p is None:
+                except (EOFError,ConnectionResetError,BrokenPipeError):
+                    p.close()
+                    self.exit=True
+                    break
+
+            try:
+                (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
+            except StopIteration:
                 break
-            
-            self.evolution_points.append(p)
-            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
             # Send the sample to the Nested Sampler
-            producer_pipe.send((acceptance,Nmcmc,outParam))
+            if not self.exit: producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
-        sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
+        sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.evolution_points)))
         thinning = int(np.ceil(np.mean(self.ACLs)))
         self.samples.extend(self.evolution_points)
         sys.stderr.write("Sampler process {0!s}: Mean ACL measured (suggested thinning) = {1:d}\n".format(os.getpid(),thinning))

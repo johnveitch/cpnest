@@ -44,15 +44,18 @@ class DyNest(object):
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
         from .sampler import Sampler
-        self.dnest = DynamicNestedSampler(usermodel, output=output, verbose=1, seed=1, Ninit=Ninit)
+        self.dnest = DynamicNestedSampler(usermodel, output=output, verbose=verbose, seed=seed, Ninit=Ninit)
         
         for i in range(Nthreads):
             print('Initialised sampler')
             sampler = Sampler(usermodel,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
             consumer, producer = mp.Pipe(duplex=True)
             p = mp.Process(target=sampler.produce_sample, args=(producer, self.dnest.logLmin, ))
+            print('Connecting sampler {0}'.format(i))
             self.dnest.connect_sampler(consumer)
+            #producer.close()
             self.process_pool.append(p)
+            
             
     def run(self):
         """
@@ -63,6 +66,7 @@ class DyNest(object):
         from .nest2pos import draw_posterior_many
 
         for each in self.process_pool:
+            print('Starting sampler {0}'.format(each))
             each.start()
         
         self.dnest.nested_sampling_loop()
@@ -82,7 +86,7 @@ class DynamicNestedSampler(NestedSampler):
     From Higson, Handley, Hobson, Lazenby 2017
     https://arxiv.org/pdf/1704.03459.pdf
     """
-    def __init__(self,usermodel, pipes=None, Ninit=100, output='.', verbose=1, seed=1, G=0.25, stopping=0.1):
+    def __init__(self,usermodel, pipes=None, Ninit=10, output='.', verbose=1, seed=1, G=0.25, stopping=0.1):
         """
         G:      Goal parameter between 0 and 1.
                 0: Optimise for evidence calculation
@@ -124,7 +128,8 @@ class DynamicNestedSampler(NestedSampler):
         Connect to sampler on given connection
         """
         if self.verbose >1: print('Incoming connection from {0}'.format(str(conn)))
-        self.push_points(self.params,conn)
+        #self.push_points(self.params,conn)
+        #if self.verbose >1: print('Pushed {0} points to new connection'.format(len(self.params)))
         self.pipes.append(conn)
 
     def reset(self):
@@ -168,13 +173,18 @@ class DynamicNestedSampler(NestedSampler):
         Push points to connected samplers
         If conn is None, will push to all known
         """
+        print('Pushing ',str(points))
         if conn is None:
             conns = self.pipes
         else:
             conns = [conn]
         for c in conns:
             for p in points:
-                c.send(p)
+                try:
+                    c.send(p)
+                except (BrokenPipeError, ConnectionResetError):
+                    print('Cannot push points to broken pipe')
+                    self.blocked=True
 
     def recv_point(self):
         """
@@ -182,30 +192,27 @@ class DynamicNestedSampler(NestedSampler):
         """
 
         point = None
-        
-        while point is None and self.pipes:
-            self.queue_counter = (self.queue_counter + 1) % len(self.pipes)
-            try:
-                conn = self.pipes[self.queue_counter]
-                point = conn.recv()
-                if point is None:
-                    # This sampler seems to have stopped
-                    print('Connection {0} closed'.format(str(conn)))
-                    conn.close()
-                    self.pipes.remove(conn)
-                break
-            except ConnectionResetError:
-                self.pipes.remove(conn)
-    
-        return point
+        while self.pipes:
+            for r in mp.connection.wait(self.pipes):
+                try:
+                    data = r.recv()
+                except (EOFError,ConnectionResetError,BrokenPipeError):
+                    r.close()
+                    self.pipes.remove(r)                    
+                else:
+                    if data is None:
+                        self.pipes.remove(r)
+                    else:
+                        yield data
+                    
+        raise StopIteration
 
     def nested_sampling_loop(self):
         """
         main nested sampling loop
         """
         # send all live points to the samplers for start
-        i = 0
-        self.push_points(self.params)
+        #self.push_points(self.params)
         
         if self.verbose:
             sys.stderr.write("\n")
@@ -215,13 +222,14 @@ class DynamicNestedSampler(NestedSampler):
         logLmin=-np.inf
         while not self.done():
             self.evolve_classic(logLmin=logLmin)
-            logLmin = self.params[i].logL
+            logLmin = self.params[self.iteration].logL
+            self.iteration+=1
             
 
 	    # Signal worker threads to exit
         self.logLmin.value = np.inf
-        for c in self.pipes:
-            c.send(None)
+        self.push_points([None])
+
 
     def evolve_classic(self, logLmin=-np.inf):
         """
@@ -233,21 +241,27 @@ class DynamicNestedSampler(NestedSampler):
         oldpoint = self.nested_intervals.get_data(i.b)
         self.logLmin.value = np.float128(oldpoint.logL)        
         self.push_points([oldpoint])
-        data = self.recv_point()
-        if data is not None:
-            self.acceptance,self.jumps,newpoint = data
-            self.nested_intervals.insert_interval(Interval(oldpoint.logL, newpoint.logL, data={oldpoint.logL:oldpoint, newpoint.logL:newpoint}))
-
-        else:
+        try:
+            data = next(self.recv_point())
+            print(__name__,' received ',str(data))
+            if data is not None:
+                self.acceptance,self.jumps, newpoint = data
+                self.nested_intervals.insert_interval(Interval(oldpoint.logL, newpoint.logL, data={oldpoint.logL:oldpoint, newpoint.logL:newpoint}))
+                if newpoint.logL > self.logLmax: self.logLmax = newpoint.logL
+        except StopIteration:
             self.blocked=True
+        
+        logZ=self.nested_intervals.logZ()
+        
+        self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.Ninit))) - logZ
+
 
     def done(self):
         if self.blocked:
             return True
-        if len(list(self.nested_intervals.points()))<1000:
+        if self.condition > self.tolerance:
             return False
-        else:
-            return True
+        return True
 
     def run(self):
         """
@@ -442,8 +456,3 @@ class Interval(object):
         for i in self:
             yield i.b
 
-    def data(self):
-        """
-        Read out data from leaves
-        """
-        
