@@ -74,6 +74,9 @@ class Sampler(object):
             p.logP = self.user.log_prior(p)
             if np.isfinite(p.logP): break
           p.logL=self.user.log_likelihood(p)
+          if p.logL is None or not np.isfinite(p.logL):
+              print("Warning: received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
+              print("You may want to check your likelihood function to impove sampling")
           self.evolution_points.append(p)
         if self.verbose > 2: sys.stderr.write("\n")
 
