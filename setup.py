@@ -74,7 +74,7 @@ setup(
         keywords='nested sampling bayesian inference',
         #packages=find_packages(exclude=['contrib','docs','tests*','examples']),
         packages=['cpnest'],
-        install_requires=['numpy','scipy'],
+        install_requires=['numpy','scipy','corner'],
         setup_requires=['numpy'],
         tests_require=['corner'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
