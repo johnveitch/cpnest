@@ -198,7 +198,7 @@ class HamiltonianProposal(EnsembleProposal):
     Base class for hamiltonian proposals
     """
     L   = 20
-    dt	= 0.3
+    dt	= 1e-2
     mass_matrix = None
     inverse_mass_matrix = None
     momenta_distribution = None
@@ -265,13 +265,12 @@ class HamiltonianProposal(EnsembleProposal):
 
         # update the potential energy estimate
         if self.estimate_potential: self.update_potential_energy(cov_array)
-    
+
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian
         """
         return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
-
 
 class LeapFrog(HamiltonianProposal):
     """
@@ -304,6 +303,10 @@ class LeapFrog(HamiltonianProposal):
         https://arxiv.org/pdf/1005.0157.pdf
         https://arxiv.org/pdf/1206.1901.pdf
         """
+        
+        self.dt = np.random.normal(1e-2,1e-3)
+        if self.dt < 0.0: self.dt = np.abs(self.dt)
+        self.L  = np.random.randint(20,50)
         #f = open('trajectory.txt','a')
         # Updating the momentum a half-step
         p = p0-0.5 * self.dt * self.dV(q0)
