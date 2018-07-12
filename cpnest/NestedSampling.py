@@ -6,6 +6,7 @@ import multiprocessing as mp
 from multiprocessing import Lock
 from numpy import logaddexp, exp
 from numpy import inf
+from math import isnan
 try:
     from queue import Empty
 except ImportError:
@@ -64,8 +65,10 @@ class _NSintegralState(object):
     Wt = self.logw + logL + logsubexp(0,logt)
     self.logZ = logaddexp(self.logZ,Wt)
     # Update information estimate
-    if np.isfinite(oldZ) and np.isfinite(self.logZ):
-      self.info = exp(Wt - self.logZ)*logL + exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
+    if np.isfinite(oldZ) and np.isfinite(self.logZ) and np.isfinite(logL):
+        self.info = np.exp(Wt - self.logZ)*logL + np.exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
+        if isnan(self.info):
+            self.info=0
     
     # Update history
     self.logw += logt
@@ -171,10 +174,12 @@ class NestedSampler(object):
         self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         self.outputfile=open(os.path.join(output,self.outfilename),"w")
         self.outputfile.write('{0:s}\n'.format(self.model.header().rstrip()))
+        self.outputfile.flush()
         return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
 
     def output_sample(self,sample):
         self.outputfile.write('{0:s}\n'.format(self.model.strsample(sample).rstrip()))
+        self.outputfile.flush()
         self.nested_samples.append(sample)
 
     def setup_random_seed(self,seed):
@@ -184,56 +189,72 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self, queues):
+    def consume_sample(self, consumer_pipes):
         """
         consumes a sample from the shared queues and updates the evidence
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_live_point()
-        self.state.increment(self.params[self.worst].logL)
+        logLmin = self.get_worst_n_live_points(len(consumer_pipes))
+        logLtmp = []
+        for k in self.worst:
+            self.state.increment(self.params[k].logL)
+            consumer_pipes[k].send(self.params[k])
+            self.output_sample(self.params[k])
+            logLtmp.append(self.params[k].logL)
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
-        self.output_sample(self.params[self.worst])
-        self.iteration+=1
         
-        # Replace the point we just consumed with the next acceptable one
-        loops = 0
-        while(True):
-            loops += 1
-            self.acceptance, self.jumps, proposed = queues[self.queue_counter].get()
-            self.queue_counter = (self.queue_counter + 1) % len(queues)
-            if proposed.logL>self.logLmin.value:
-                # replace worst point with new one
-                self.params[self.worst]=proposed
-                break
+        # Replace the points we just consumed with the next acceptable ones
+        for k in self.worst:
+            self.iteration+=1
+            loops = 0
+            while(True):
+                loops += 1
+                self.acceptance, self.jumps, proposed = consumer_pipes[self.queue_counter].recv()
+                self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
+                if proposed.logL>self.logLmin.value:
+                    # replace worst point with new one
+                    self.params[k]=proposed
+                    break
 
-        if self.verbose:
-            print("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}"\
-            .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
-              logLmin, self.params[self.worst].logL, self.condition, self.state.logZ, self.logLmax))
+            if self.verbose:
+                sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
+                .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
+                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
+                sys.stderr.flush()
 
-    def get_worst_live_point(self):
+    def get_worst_n_live_points(self, n):
         """
-        selects the lowest likelihood live point
+        selects the lowest likelihood N live points
         """
-        logL_array = np.array([p.logL for p in self.params])
-        self.worst = logL_array.argmin()
-        self.logLmin.value = np.float128(logL_array[self.worst])
-        self.logLmax = np.max(logL_array)
+        self.params.sort(key=attrgetter('logL'))
+        self.worst = np.arange(n)
+        self.logLmin.value = np.float128(self.params[n].logL)
+        self.logLmax = np.max(self.params[-1].logL)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, queues):
+    def nested_sampling_loop(self, consumer_pipes):
         """
         main nested sampling loop
         """
-        for i in range(self.Nlive):
-            while True:
-                self.acceptance,self.jumps,self.params[i] = queues[self.queue_counter].get()
-                self.queue_counter = (self.queue_counter + 1) % len(queues)
-                if self.params[i].logP!=-np.inf or self.params[i].logL!=-np.inf:
-                    break
+        # send all live points to the samplers for start
+        i = 0
+        while i < self.Nlive:
+            for j in range(len(consumer_pipes)): consumer_pipes[j].send(self.model.new_point())
+            for j in range(len(consumer_pipes)):
+                while i<self.Nlive:
+                    self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
+                    self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
+                    if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
+                        i+=1
+                        break
+
+
             if self.verbose:
-              sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
-        if self.verbose: sys.stderr.write("\n")
+                sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
+                sys.stderr.flush()
+        if self.verbose:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
         if self.prior_sampling:
             for i in range(self.Nlive):
                 self.output_sample(self.params[i])
@@ -244,18 +265,12 @@ class NestedSampler(object):
             return 0
 
         while self.condition > self.tolerance:
-            self.consume_sample(queues)
+            self.consume_sample(consumer_pipes)
 
-	# Signal worker threads to exit
+	    # Signal worker threads to exit
         self.logLmin.value = np.inf
-
-        # Flush the queue so subsequent join can succeed
-        for q in queues:
-            while True:
-              try:
-                _ = q.get_nowait()
-              except Empty:
-                break
+        for c in consumer_pipes:
+            c.send(None)
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))

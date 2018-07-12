@@ -1,19 +1,21 @@
 import unittest
 import numpy as np
 import cpnest.model
+from scipy import stats
 
 class GaussianModel(cpnest.model.Model):
     """
     An n-dimensional gaussian
     """
     def __init__(self,dim=50):
+        self.distr = stats.norm(loc=0,scale=1.0)
         self.dim=dim
         self.names=['{0}'.format(i) for i in range(self.dim)]
         self.bounds=[[-10,10] for _ in range(self.dim)]
         self.analytic_log_Z=0.0 - sum([np.log(self.bounds[i][1]-self.bounds[i][0]) for i in range(self.dim)])
 
     def log_likelihood(self,p):
-        return -0.5*(sum(x**2 for x in p.values)) - 0.5*self.dim*np.log(2.0*np.pi)
+        return np.sum([-0.5*p[n]**2-0.5*np.log(2.0*np.pi) for n in p.names])##np.sum([self.distr.logpdf(p[n]
 
 class GaussianTestCase(unittest.TestCase):
     """

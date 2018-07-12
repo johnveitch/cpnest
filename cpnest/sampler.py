@@ -41,7 +41,7 @@ class Sampler(object):
 
         self.seed = seed
         self.user = usermodel
-        self.initial_mcmc = maxmcmc//2
+        self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
 
         if proposal is None:
@@ -56,8 +56,9 @@ class Sampler(object):
         self.poolsize = poolsize
         self.evolution_points = deque(maxlen=self.poolsize)
         self.verbose=verbose
-        self.acceptance=0.0
         self.sub_acceptance=0.0
+        self.mcmc_accepted = 0
+        self.mcmc_counter = 0
         self.initialised=False
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
@@ -75,6 +76,9 @@ class Sampler(object):
             p.logP = self.user.log_prior(p)
             if np.isfinite(p.logP): break
           p.logL=self.user.log_likelihood(p)
+          if p.logL is None or not np.isfinite(p.logL):
+              print("Warning: received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
+              print("You may want to check your likelihood function to impove sampling")
           self.evolution_points.append(p)
         if self.verbose > 2: sys.stderr.write("\n")
 
@@ -87,7 +91,7 @@ class Sampler(object):
 
         self.initialised=True
 
-    def estimate_nmcmc(self, safety=1, tau=None):
+    def estimate_nmcmc(self, safety=5, tau=None):
         """
         Estimate autocorrelation length of chain using acceptance fraction
         ACL = (2/acc) - 1
@@ -108,26 +112,31 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def produce_sample(self, queue, logLmin ):
+    def produce_sample(self, producer_pipe, logLmin ):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
 
         if not self.initialised:
           self.reset()
-        # Prevent process from zombification if consumer thread exits
-        queue.cancel_join_thread()
+
         self.counter=0
         
         while True:
             if logLmin.value==np.inf:
-                queue.close()
                 break
 
+            p = producer_pipe.recv()
+
+            if p is None:
+                break
+            
+            self.evolution_points.append(p)
             (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
-            # Push the sample onto the queue
-            queue.put((acceptance,Nmcmc,outParam))
+            # Send the sample to the Nested Sampler
+            producer_pipe.send((acceptance,Nmcmc,outParam))
+
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/4))==0 or acceptance < 1.0/float(self.poolsize):
@@ -145,15 +154,13 @@ class Sampler(object):
                        self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
             sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
-        sys.stderr.write("Sampler process {0!s}: exiting\n".format(os.getpid()))
+        sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0
 
     def metropolis_hastings(self, logLmin):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
-        accepted = 0
-        counter = 0
         for j in range(self.poolsize):
             sub_counter = 0
             sub_accepted = 0
@@ -172,16 +179,14 @@ class Sampler(object):
                         sub_accepted+=1
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
-
+        
             # Put sample back in the stack
-            self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
+            if self.verbose >=3: self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
-            accepted += sub_accepted
-            
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter += sub_counter
             # Yield the new sample
             if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
-
-        self.acceptance = float(accepted)/float(counter)

@@ -19,21 +19,14 @@ class GaussianMixtureModel(cpnest.model.Model):
     @classmethod
     def log_likelihood(cls,x):
         w = x['weight']
-        m1 = x['mean1']
-        m2 = x['mean2']
-        s1 = x['sigma1']
-        s2 = x['sigma2']
-        logL = np.sum([np.logaddexp(np.log(w)-0.5*((d-m1)/s1)**2,np.log(1.0-w)-0.5*((d-m2)/s2)**2) for d in cls.data])
+        logL = np.sum([np.logaddexp(np.log(w/(sqrt(2*np.pi)*x['sigma1']))-0.5*((d-x['mean1'])/x['sigma1'])**2,
+                                    np.log((1.0-w)/(sqrt(2*np.pi)*x['sigma2']))-0.5*((d-x['mean2'])/x['sigma2'])**2) 
+                       for d in cls.data ] )
         return logL
 
     def log_prior(self,p):
         if not self.in_bounds(p): return -np.inf
         return -np.log(p['sigma1'])-np.log(p['sigma2'])
-
-def normal(x,m,s):
-    d = (x-m)/s
-    return np.exp(-0.5*d**2)/np.sqrt(2.0*np.pi*s*s)
-
 
 class GaussianMixtureTestCase(unittest.TestCase):
     """
