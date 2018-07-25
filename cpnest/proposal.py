@@ -183,3 +183,138 @@ class DefaultProposalCycle(ProposalCycle):
         weights = [1.0,1.0,3.0,10.0]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
+class HamiltonianProposal(EnsembleProposal):
+    """
+    Base class for hamiltonian proposals
+    """
+    L   = 20
+    dt	= 1e-2
+    mass_matrix = None
+    inverse_mass_matrix = None
+    momenta_distribution = None
+    
+    def __init__(self, *args, **kwargs):
+        """
+        Sets the boundary conditions as a free particle at infinity (V=0)
+        """
+        super(HamiltonianProposal, self).__init__(*args, **kwargs)
+        self.T  = self.kinetic_energy
+        self.V  = lambda x: np.zeros(x.shape[0])
+        self.dV = lambda x: np.zeros(x.shape[0])
+        try:
+            self.V = kwargs['potential']
+            self.dV = kwargs['force']
+            self.estimate_potential = False
+        except:
+            print("Using empirical potential estimator\n")
+            self.estimate_potential = True
+    
+    def set_ensemble(self, ensemble):
+        """
+        override the set ensemble method
+        to update masses, momenta distribution
+        and potential
+        """
+        super(HamiltonianProposal,self).set_ensemble(ensemble)
+        self.update_mass()
+        self.update_momenta_distribution()
+
+    def update_potential_energy(self, tracers_array):
+        """
+        update the potential energy function
+        """
+        self.V  = dg.Potential(tracers_array.shape[0], tracers_array.T)
+        self.dV = self.V.force
+
+    def update_momenta_distribution(self):
+        """
+        update the momenta distribution
+        """
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
+
+    def update_mass(self):
+        """
+        Recompute the mass matrix (covariance matrix)
+        from the ensemble
+        """
+        n   = len(self.ensemble)
+        dim = self.ensemble[0].dimension
+        cov_array = np.zeros((dim,n))
+        
+        if dim == 1:
+            name=self.ensemble[0].names[0]
+            cov_array = np.atleast_2d([self.ensemble[j][name] for j in range(n)])
+            self.mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.inverse_mass_matrix = 1./self.mass_matrix
+        else:
+            for i,name in enumerate(self.ensemble[0].names):
+                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
+                covariance = np.cov(cov_array)
+                self.mass_matrix = np.linalg.inv(covariance)
+                self.inverse_mass_matrix = covariance
+
+        # update the potential energy estimate
+        if self.estimate_potential: self.update_potential_energy(cov_array)
+
+    def kinetic_energy(self,p):
+        """
+        kinetic energy part for the Hamiltonian
+        """
+        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
+
+class LeapFrog(HamiltonianProposal):
+    """
+    Leap frog integrator proposal for an uncostrained
+    Hamiltonian Monte Carlo step
+    """
+    # symmetric proposal
+    log_J = 0.0
+    def get_sample(self, old):
+        # transform into a numpy array for flexibility
+        old_arr = old.asnparray()
+        q0 = old_arr.view(dtype=np.float64)[:-2]
+        # generate a canonical momentum
+        p0 = np.atleast_1d(self.momenta_distribution.rvs())
+        # evolve along the trajectory
+        q, p = self.evolve_trajectory(p0, q0)
+        
+        initial_energy = self.T(p0) + self.V(q0)
+        final_energy   = self.T(p)  + self.V(q)
+        
+        dE = min(0.0, initial_energy - final_energy)
+        if dE > log(np.random.uniform()):
+            # accept
+            for j,k in enumerate(old.names):
+                old[k] = q[j]
+        return old
+    
+    def evolve_trajectory(self, p0, q0):
+        """
+        https://arxiv.org/pdf/1005.0157.pdf
+        https://arxiv.org/pdf/1206.1901.pdf
+        """
+        
+        self.dt = np.abs(np.random.normal(1e-2,1e-3))
+        self.L  = np.random.randint(20,50)
+        #f = open('trajectory.txt','a')
+        # Updating the momentum a half-step
+        p = p0-0.5 * self.dt * self.dV(q0)
+        q = q0
+        
+        invM = np.squeeze(np.diag(self.inverse_mass_matrix))
+        
+        #f.write("%e %e %e %e\n"%(q0,p,self.V(q0),self.dV(q0)))
+        for i in xrange(self.L):
+            
+            # do a step
+            q += self.dt * p * invM
+            dV = self.dV(q)
+            # take a full momentum step
+            p += - self.dt * dV
+        #	f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
+        # Do a final update of the momentum for a half step
+        p += - 0.5 * self.dt * dV
+        #f.write("%e %e %e %e\n"%(q,p,self.V(q),dV))
+        #f.close()
+        #exit()
+        return q, -p
