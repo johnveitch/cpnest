@@ -12,17 +12,22 @@ class GaussianModel(cpnest.model.Model):
     bounds=[[-10,10],[-10,10]]
     analytic_log_Z=0.0 - np.log(bounds[0][1]-bounds[0][0]) - np.log(bounds[1][1]-bounds[1][0])
 
-    @classmethod
-    def log_likelihood(cls,p):
+    def log_likelihood(self,p):
         return -0.5*(p['x']**2 + p['y']**2) - np.log(2.0*np.pi)
 
+    def log_prior(self,p):
+        return super(GaussianModel,self).log_prior(p)
+    
+    def force(self, p):
+        f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
+        return f
 
 class GaussianTestCase(unittest.TestCase):
     """
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel(),verbose=0,Nthreads=4,Nlive=1000,maxmcmc=500,Poolsize=1000)
+        self.work=cpnest.CPNest(GaussianModel(),verbose=3,Nthreads=4,Nlive=1000,maxmcmc=1000,Poolsize=256)
 
     def test_run(self):
         self.work.run()

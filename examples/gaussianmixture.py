@@ -19,8 +19,8 @@ class GaussianMixtureModel(cpnest.model.Model):
     @classmethod
     def log_likelihood(cls,x):
         w = x['weight']
-        logL = np.sum([np.logaddexp(np.log(w/(sqrt(2*np.pi)*x['sigma1']))-0.5*((d-x['mean1'])/x['sigma1'])**2,
-                                    np.log((1.0-w)/(sqrt(2*np.pi)*x['sigma2']))-0.5*((d-x['mean2'])/x['sigma2'])**2) 
+        logL = np.sum([np.logaddexp(np.log(w/(np.sqrt(2*np.pi)*x['sigma1']))-0.5*((d-x['mean1'])/x['sigma1'])**2,
+                                    np.log((1.0-w)/(np.sqrt(2*np.pi)*x['sigma2']))-0.5*((d-x['mean2'])/x['sigma2'])**2) 
                        for d in cls.data ] )
         return logL
 

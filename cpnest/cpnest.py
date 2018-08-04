@@ -43,7 +43,16 @@ class CPNest(object):
 
         self.consumer_pipes = []
         for i in range(Nthreads):
-            sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
+            sampler = Sampler(self.user,
+                              maxmcmc,
+                              verbose=verbose,
+                              output=output,
+                              poolsize=Poolsize,
+                              seed=self.seed+i,
+                              potential=self.user.potential,
+                              force=self.user.force,
+                              barrier=self.user.log_likelihood,
+                              constraint=self.user.bounds)
             # We set up pipes between the nested sampling and the various sampler processes
             consumer, producer = mp.Pipe(duplex=True)
             self.consumer_pipes.append(consumer)

@@ -37,7 +37,7 @@ class Sampler(object):
     
     """
 
-    def __init__(self,usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
+    def __init__(self, usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None, **kwargs):
 
         self.seed = seed
         self.user = usermodel
@@ -45,7 +45,7 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
 
         if proposal is None:
-            self.proposal = DefaultProposalCycle()
+            self.proposal = DefaultProposalCycle(**kwargs)
         else:
             self.proposal = proposal
 
@@ -82,9 +82,8 @@ class Sampler(object):
         if self.verbose > 2: sys.stderr.write("\n")
 
         self.proposal.set_ensemble(self.evolution_points)
-
         self.metropolis_hastings(-np.inf)
-        
+
         if self.verbose > 2: sys.stderr.write("\n")
         if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
         self.proposal.set_ensemble(self.evolution_points)
@@ -99,7 +98,7 @@ class Sampler(object):
         Uses moving average with decay time tau iterations (default: self.poolsize)
         Taken from W. Farr's github.com/farr/Ensemble.jl
         """
-        if tau is None: tau = self.poolsize
+        if tau is None: tau = self.maxmcmc/safety#self.poolsize
 
         if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
@@ -112,7 +111,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def produce_sample(self, producer_pipe, logLmin ):
+    def produce_sample(self, producer_pipe, logLmin):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
@@ -120,12 +119,17 @@ class Sampler(object):
         if not self.initialised:
           self.reset()
 
-        self.counter=0
+        self.counter=1
         
         while True:
             if logLmin.value==np.inf:
                 break
-
+        
+            while not(producer_pipe.poll()):
+                # while the is no data to process, keep the chains running
+                (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
+                self.counter += 1
+                    
             p = producer_pipe.recv()
 
             if p is None:
@@ -138,7 +142,7 @@ class Sampler(object):
             producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
-            if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
+            if (self.counter%(self.poolsize/4))==0: # or acceptance < 1.0/float(self.poolsize)
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
@@ -168,8 +172,11 @@ class Sampler(object):
 
             while True:
                 sub_counter += 1
-                newparam = self.proposal.get_sample(oldparam.copy())
+                newparam = self.proposal.get_sample(oldparam.copy(),
+                                                    barrier = logLmin,
+                                                    constraint=self.user.bounds)
                 newparam.logP = self.user.log_prior(newparam)
+    
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
                     if newparam.logL > logLmin:

@@ -14,7 +14,9 @@ class RingModel(cpnest.model.Model):
     @staticmethod
     def log_likelihood(x):
         return log_ring(x['x'],x['y'])
-
+    def force(self, p):
+        f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
+        return f
 
 def log_ring(x, y, radius=1.0, thickness=0.1):
     r = np.sqrt(x**2+y**2)
@@ -26,7 +28,7 @@ class RingTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=RingModel()
-        self.work=cpnest.CPNest(self.model,verbose=0,Nthreads=4,Nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(self.model,verbose=2,Nthreads=4,Nlive=1000,maxmcmc=1000)
         self.work.run()
 
 

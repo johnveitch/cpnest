@@ -16,6 +16,13 @@ class GaussianModel(cpnest.model.Model):
 
     def log_likelihood(self,p):
         return np.sum([-0.5*p[n]**2-0.5*np.log(2.0*np.pi) for n in p.names])##np.sum([self.distr.logpdf(p[n]
+    
+    def log_prior(self,p):
+        return super(GaussianModel,self).log_prior(p)
+    
+    def force(self, p):
+        f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
+        return f
 
 class GaussianTestCase(unittest.TestCase):
     """
