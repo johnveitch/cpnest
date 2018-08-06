@@ -187,10 +187,10 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [1.0,
-                   1.0,
-                   2.0,
-                   1.0]
+        weights = [30.0,
+                   30.0,
+                   20.0,
+                   10.0]
         if kwargs is not None:
             # check if the user has defined a force function and a potential barrier
             if 'force' in kwargs and 'barrier' in kwargs:
@@ -199,8 +199,8 @@ class DefaultProposalCycle(ProposalCycle):
             elif 'force' in kwargs:
                 proposals.append(LeapFrog(**kwargs))
                 weights.append(1.0)
-#        proposals = [ConstrainedLeapFrog(**kwargs)]
-#        weights = [1]
+        proposals = [ConstrainedLeapFrog(**kwargs)]
+        weights = [1]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 class HamiltonianProposal(EnsembleProposal):
@@ -262,7 +262,8 @@ class HamiltonianProposal(EnsembleProposal):
         directional derivatives of the likelihood
         """
         v = np.array([self.normal[i](x[n]) for i,n in enumerate(x.names)])
-        return v/np.linalg.norm(v)
+        n = v/np.linalg.norm(v)
+        return n
 
     def gradient(self, x):
         """
@@ -301,7 +302,7 @@ class HamiltonianProposal(EnsembleProposal):
             self.mass_matrix = np.diag(np.diag(np.linalg.inv(covariance)))
             self.inverse_mass_matrix = np.diag(np.diag(covariance))
 
-#        # update the potential energy estimate
+        # update the potential energy estimate
         self.update_normal_vector(cov_array, pvals)
 
     def kinetic_energy(self,p):
@@ -335,8 +336,9 @@ class LeapFrog(HamiltonianProposal):
         https://arxiv.org/pdf/1206.1901.pdf
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        self.L  = np.random.randint(10,50)
-        self.dt = 1e-2*len(invM)**(-0.25)
+        self.L  = np.random.randint(1,50)
+        dt_mean = 1e-1*len(invM)**(-0.25)
+        self.dt = np.abs(gauss(dt_mean,1e-1*dt_mean))
         # Updating the momentum a half-step
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0
@@ -388,13 +390,22 @@ class ConstrainedLeapFrog(HamiltonianProposal):
         https://arxiv.org/pdf/1005.0157.pdf
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        self.L  = np.random.randint(10,50)
-        dt_mean = 1e-3*len(invM)**(-0.25)
-        self.dt = np.abs(gauss(dt_mean,dt_mean/3.0))
+        # generate the trajectory lengths from a scale invariant distribution
+        self.L  = 1+int(np.exp(np.random.uniform(0,np.log(20))))
+        self.dt = 1e-1*float(len(invM))**(-0.25)
+        f = open("trajectory.txt","w")
+        for j,k in enumerate(q0.names):
+            f.write("%s\t"%k)
+        f.write("\n")
         # Updating the momentum a half-step
+        for j,k in enumerate(q0.names):
+            f.write("%e\t"%q0[k])
+        f.write("\n")
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0
-
+        for j,k in enumerate(q.names):
+            f.write("%e\t"%q[k])
+        f.write("\n")
         for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
@@ -408,22 +419,26 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                 if q[k] < l:
                     q[k] = l + (l - q[k])
                 p[j] *= -1
-#
+
             dV = self.gradient(q)
             
             # if the trajectory led us to a lower likelihood,
             # reflect the momentum orthogonally to the surface
-            
             if np.isfinite(barrier):
                 logL = self.C(q)
                 q.logL = logL
+                
                 if logL < barrier:
                     normal = self.unit_normal(q)
                     p = p - 2.0*np.dot(p,normal)*normal
-            else:
-                # take a full momentum step
-                p += - self.dt * dV
-
+                else:
+                    # take a full momentum step
+                    p += - self.dt * dV
+    
+            for j,k in enumerate(q.names):
+                f.write("%e\t"%q[k])
+            f.write("\n")
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV
+        f.close()
         return q, -p

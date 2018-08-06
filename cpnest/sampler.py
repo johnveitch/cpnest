@@ -129,7 +129,7 @@ class Sampler(object):
                 # while the is no data to process, keep the chains running
                 (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
                 self.counter += 1
-                    
+                
             p = producer_pipe.recv()
 
             if p is None:
@@ -141,9 +141,11 @@ class Sampler(object):
             # Send the sample to the Nested Sampler
             producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
-
-            if (self.counter%(self.poolsize/4))==0: # or acceptance < 1.0/float(self.poolsize)
+            
+            
+            if (self.counter%(self.poolsize//4))==0: # or acceptance < 1.0/float(self.poolsize)
                 self.proposal.set_ensemble(self.evolution_points)
+                self.counter = 0
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
