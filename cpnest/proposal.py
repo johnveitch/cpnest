@@ -353,7 +353,7 @@ class LeapFrog(HamiltonianProposal):
                 if q[k] > u:
                     q[k] = u - (q[k] - u)
                     p[j] *= -1
-                elif q[k] < l:
+                if q[k] < l:
                     q[k] = l + (l - q[k])
                     p[j] *= -1
         
@@ -427,7 +427,7 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                 if q[k] > u:
                     q[k] = u - (q[k] - u)
                     p[j] *= -1
-                elif q[k] < l:
+                if q[k] < l:
                     q[k] = l + (l - q[k])
                     p[j] *= -1
 
