@@ -187,10 +187,10 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [30.0,
-                   30.0,
-                   20.0,
-                   10.0]
+        weights = [1.0,
+                   1.0,
+                   1.0,
+                   1.0]
         if kwargs is not None:
             # check if the user has defined a force function and a potential barrier
             if 'force' in kwargs and 'barrier' in kwargs:
@@ -199,8 +199,8 @@ class DefaultProposalCycle(ProposalCycle):
             elif 'force' in kwargs:
                 proposals.append(LeapFrog(**kwargs))
                 weights.append(1.0)
-        proposals = [ConstrainedLeapFrog(**kwargs)]
-        weights = [1]
+        #proposals = [ConstrainedLeapFrog(**kwargs)]
+        #weights = [1]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 class HamiltonianProposal(EnsembleProposal):
@@ -336,9 +336,10 @@ class LeapFrog(HamiltonianProposal):
         https://arxiv.org/pdf/1206.1901.pdf
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        self.L  = np.random.randint(1,50)
-        dt_mean = 1e-1*len(invM)**(-0.25)
-        self.dt = np.abs(gauss(dt_mean,1e-1*dt_mean))
+        # generate the trajectory lengths from a scale invariant distribution
+        self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
+        self.dt = 3e-2*float(len(invM))**(-0.25)
+        self.dt = np.abs(gauss(self.dt,self.dt))
         # Updating the momentum a half-step
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0
@@ -351,10 +352,10 @@ class LeapFrog(HamiltonianProposal):
                 # of the allowed parameter range
                 if q[k] > u:
                     q[k] = u - (q[k] - u)
-                p[j] *= -1
-                if q[k] < l:
+                    p[j] *= -1
+                elif q[k] < l:
                     q[k] = l + (l - q[k])
-                p[j] *= -1
+                    p[j] *= -1
         
             dV = self.gradient(q)
             # take a full momentum step
@@ -390,22 +391,32 @@ class ConstrainedLeapFrog(HamiltonianProposal):
         https://arxiv.org/pdf/1005.0157.pdf
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
+#        f = open("mass.txt","a")
+#        for M in invM: f.write("%e\t"%(1./M))
+#        f.write("\n")
+#        f.close()
         # generate the trajectory lengths from a scale invariant distribution
-        self.L  = 1+int(np.exp(np.random.uniform(0,np.log(20))))
-        self.dt = 1e-1*float(len(invM))**(-0.25)
-        f = open("trajectory.txt","w")
-        for j,k in enumerate(q0.names):
-            f.write("%s\t"%k)
-        f.write("\n")
+        self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
+        self.dt = 3e-2*float(len(invM))**(-0.25)
+        self.dt = np.abs(gauss(self.dt,self.dt))
+        #f = open("trajectory.txt","w")
+        #for j,k in enumerate(q0.names):
+        #    f.write("%s\t"%k)
+        #f.write("barrier\t")
+        #f.write("logL\n")
         # Updating the momentum a half-step
-        for j,k in enumerate(q0.names):
-            f.write("%e\t"%q0[k])
-        f.write("\n")
+        #for j,k in enumerate(q0.names):
+    	#	f.write("%e\t"%q0[k])
+        #f.write("%e\t"%barrier)
+    	#f.write("%e\n"%q0.logL)
+
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0
-        for j,k in enumerate(q.names):
-            f.write("%e\t"%q[k])
-        f.write("\n")
+        #for j,k in enumerate(q.names):
+    	#	f.write("%e\t"%q[k])
+        #f.write("%e\t"%barrier)
+        #f.write("%e\n"%q.logL)
+
         for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
@@ -415,10 +426,10 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                 # of the allowed parameter range
                 if q[k] > u:
                     q[k] = u - (q[k] - u)
-                p[j] *= -1
-                if q[k] < l:
+                    p[j] *= -1
+                elif q[k] < l:
                     q[k] = l + (l - q[k])
-                p[j] *= -1
+                    p[j] *= -1
 
             dV = self.gradient(q)
             
@@ -434,11 +445,12 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                 else:
                     # take a full momentum step
                     p += - self.dt * dV
-    
-            for j,k in enumerate(q.names):
-                f.write("%e\t"%q[k])
-            f.write("\n")
+
+            #for j,k in enumerate(q.names):
+            #    f.write("%e\t"%q[k])
+            #f.write("%e\t"%barrier)
+            #f.write("%e\n"%q.logL)
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV
-        f.close()
+        #f.close()
         return q, -p
