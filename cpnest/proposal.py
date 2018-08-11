@@ -6,6 +6,7 @@ from abc import ABCMeta,abstractmethod
 import random
 from random import sample,gauss,randrange,uniform
 from scipy.interpolate import LSQUnivariateSpline
+from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
 
 class Proposal(object):
@@ -187,20 +188,20 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [1.0,
-                   1.0,
-                   1.0,
-                   1.0]
+        weights = [0.3,
+                   0.3,
+                   0.2,
+                   0.1]
         if kwargs is not None:
             # check if the user has defined a force function and a potential barrier
             if 'force' in kwargs and 'barrier' in kwargs:
-                proposals.append(ConstrainedLeapFrog(**kwargs))
-                weights.append(1.0)
+                proposals.append(ConstrainedLeapFrog(**kwargs))#
+                weights.append(0.2)
+                proposals.append(LeapFrog(**kwargs))
+                weights.append(0.1)
             elif 'force' in kwargs:
                 proposals.append(LeapFrog(**kwargs))
-                weights.append(1.0)
-        #proposals = [ConstrainedLeapFrog(**kwargs)]
-        #weights = [1]
+                weights.append(0.1)
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 class HamiltonianProposal(EnsembleProposal):
@@ -248,12 +249,16 @@ class HamiltonianProposal(EnsembleProposal):
             # remove potential duplicate entries
             xs, ids = np.unique(xs, return_index = True)
             Vs = Vs[ids]
-            # pick fixed 5 knots for the spline from the percentiles
-            knots = np.percentile(xs,[5,25,50,75,95])
+            # pick only finite values
+            idx = np.isfinite(Vs)
+            # pick fixed n-dim knots for the spline from the percentiles
+            knots = np.percentile(xs[idx],np.linspace(1,99,tracers_array.shape[0]))
             # construct a LSQ spline interpolant, weighting potential nans as zeros (which should have been sorted out already
-            self.normal.append(LSQUnivariateSpline(xs, Vs, knots, w=np.isfinite(Vs), ext = 3, k = 3).derivative(1))#
-#            xx = np.linspace(xs[0],xs[-1],100)
-#            np.savetxt('potential_%d.txt'%i,np.column_stack((xs,self.normal[-1](xs),Vs)))
+            window_length = len(idx)//2+1
+            if window_length%2 == 0: window_length += 1
+            f = savgol_filter(Vs[idx], window_length, 5  , deriv=1, delta=0.01, mode='mirror')
+            self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
+#            np.savetxt('potential_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f,Vs[idx])))
 
     def unit_normal(self, x):
         """
@@ -262,6 +267,7 @@ class HamiltonianProposal(EnsembleProposal):
         directional derivatives of the likelihood
         """
         v = np.array([self.normal[i](x[n]) for i,n in enumerate(x.names)])
+        v[np.isnan(v)] = -1.0
         n = v/np.linalg.norm(v)
         return n
 
@@ -318,15 +324,13 @@ class LeapFrog(HamiltonianProposal):
     """
     # symmetric proposal
     log_J = 0.0
-    def get_sample(self, old, **kwargs):
-        # transform into a numpy array for flexibility
-        q0 = old.copy()
+    def get_sample(self, q0, **kwargs):
         # generate a canonical momentum
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, constraint=kwargs['constraint'])
         
-        initial_energy = self.T(p0) + self.V(old)
+        initial_energy = self.T(p0) + self.V(q0)
         final_energy   = self.T(p)  + self.V(q)
         log_J = min(0.0, initial_energy - final_energy)
         return q
@@ -373,15 +377,13 @@ class ConstrainedLeapFrog(HamiltonianProposal):
     """
     # symmetric proposal
     log_J = 0.0
-    def get_sample(self, old, **kwargs):
-        # transform into a numpy array for flexibility
-        q0 = old.copy()
+    def get_sample(self, q0, **kwargs):
         # generate a canonical momentum
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, barrier=kwargs['barrier'], constraint=kwargs['constraint'])
         
-        initial_energy = self.T(p0) + self.V(old)
+        initial_energy = self.T(p0) + self.V(q0)
         final_energy   = self.T(p)  + self.V(q)
         log_J = min(0.0, initial_energy - final_energy)
         return q
@@ -399,24 +401,23 @@ class ConstrainedLeapFrog(HamiltonianProposal):
         self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
         self.dt = 3e-2*float(len(invM))**(-0.25)
         self.dt = np.abs(gauss(self.dt,self.dt))
-        #f = open("trajectory.txt","w")
-        #for j,k in enumerate(q0.names):
-        #    f.write("%s\t"%k)
-        #f.write("barrier\t")
-        #f.write("logL\n")
-        # Updating the momentum a half-step
-        #for j,k in enumerate(q0.names):
-    	#	f.write("%e\t"%q0[k])
-        #f.write("%e\t"%barrier)
-    	#f.write("%e\n"%q0.logL)
+#        f = open("trajectory.txt","w")
+#        for j,k in enumerate(q0.names):
+#            f.write("%s\t"%k)
+#        f.write("barrier\t")
+#        f.write("logL\n")
+#        # Updating the momentum a half-step
+#        for j,k in enumerate(q0.names):
+#            f.write("%e\t"%q0[k])
+#        f.write("%e\t"%barrier)
+#        f.write("%e\n"%q0.logL)
 
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0
-        #for j,k in enumerate(q.names):
-    	#	f.write("%e\t"%q[k])
-        #f.write("%e\t"%barrier)
-        #f.write("%e\n"%q.logL)
-
+#        for j,k in enumerate(q.names):
+#            f.write("%e\t"%q[k])
+#        f.write("%e\t"%barrier)
+#        f.write("%e\n"%q.logL)
         for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
@@ -430,7 +431,6 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                 if q[k] < l:
                     q[k] = l + (l - q[k])
                     p[j] *= -1
-
             dV = self.gradient(q)
             
             # if the trajectory led us to a lower likelihood,
@@ -439,18 +439,18 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                 logL = self.C(q)
                 q.logL = logL
                 
-                if logL < barrier:
+                if (logL - barrier) <= 0:
                     normal = self.unit_normal(q)
                     p = p - 2.0*np.dot(p,normal)*normal
                 else:
                     # take a full momentum step
                     p += - self.dt * dV
 
-            #for j,k in enumerate(q.names):
-            #    f.write("%e\t"%q[k])
-            #f.write("%e\t"%barrier)
-            #f.write("%e\n"%q.logL)
+#            for j,k in enumerate(q.names):
+#                f.write("%e\t"%q[k])
+#            f.write("%e\t"%barrier)
+#            f.write("%e\n"%q.logL)
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV
-        #f.close()
+#        f.close()
         return q, -p

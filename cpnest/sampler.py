@@ -125,9 +125,9 @@ class Sampler(object):
             if logLmin.value==np.inf:
                 break
         
-            while not(producer_pipe.poll()):
-                # while the is no data to process, keep the chains running
-                (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
+#            while not(producer_pipe.poll(None)):
+#                # while the is no data to process, keep the chains running
+#                (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
 
                 
             p = producer_pipe.recv()
@@ -141,7 +141,8 @@ class Sampler(object):
             # Send the sample to the Nested Sampler
             producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize//4))==0.0 or acceptance < 1.0/float(self.poolsize):
+            if (self.counter%(self.poolsize//10))==0 or acceptance < 1.0/float(self.poolsize):
+                if self.verbose >=3: sys.stderr.write("Sampler process {0!s}: updated statistics\n".format(os.getpid()))
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
