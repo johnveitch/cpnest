@@ -22,7 +22,7 @@ def plot_hist(x,name=None,filename=None):
     Produce a histogram
     """
     fig=plt.figure(figsize=(4,3))
-    plt.hist(x,normed=True,bins=int(len(x)/4))
+    plt.hist(x,density=True,bins=int(len(x)/4))
     plt.ylabel('probability density')
     if name is not None:
         plt.xlabel(name)

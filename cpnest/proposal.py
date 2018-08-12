@@ -189,7 +189,7 @@ class DefaultProposalCycle(ProposalCycle):
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
         weights = [0.3,
-                   0.3,
+                   0.2,
                    0.2,
                    0.1]
         if kwargs is not None:
@@ -202,6 +202,8 @@ class DefaultProposalCycle(ProposalCycle):
             elif 'force' in kwargs:
                 proposals.append(LeapFrog(**kwargs))
                 weights.append(0.1)
+#        proposals = [ConstrainedLeapFrog(**kwargs)]
+#        weights = [1]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 class HamiltonianProposal(EnsembleProposal):
@@ -258,7 +260,7 @@ class HamiltonianProposal(EnsembleProposal):
             if window_length%2 == 0: window_length += 1
             f = savgol_filter(Vs[idx], window_length, 5  , deriv=1, delta=0.01, mode='mirror')
             self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
-#            np.savetxt('potential_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f,Vs[idx])))
+            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f)))
 
     def unit_normal(self, x):
         """
@@ -310,7 +312,7 @@ class HamiltonianProposal(EnsembleProposal):
 
         # update the potential energy estimate
         self.update_normal_vector(cov_array, pvals)
-
+        
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian
@@ -371,7 +373,7 @@ class LeapFrog(HamiltonianProposal):
 
 class ConstrainedLeapFrog(HamiltonianProposal):
     """
-    Leap frog integrator proposal for an costrained
+    Leap frog integrator proposal for a costrained
     (logLmin defines a reflective boundary)
     Hamiltonian Monte Carlo step
     """

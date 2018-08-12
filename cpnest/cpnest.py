@@ -33,6 +33,7 @@ class CPNest(object):
         self.user=usermodel
         self.verbose=verbose
         self.output=output
+        self.poolsize = Poolsize
         if seed is None: self.seed=1234
         else:
             self.seed=seed
@@ -42,6 +43,11 @@ class CPNest(object):
         self.process_pool = []
 
         self.consumer_pipes = []
+        try:
+            has_force = hasattr(self.user, 'force')
+        except AttributeError:
+            pass
+        
         for i in range(Nthreads):
             sampler = Sampler(self.user,
                               maxmcmc,
@@ -65,7 +71,7 @@ class CPNest(object):
         """
         import numpy as np
         import os
-        from .nest2pos import draw_posterior_many
+        from .nest2pos import draw_posterior_many, redraw_mcmc_chain
 
         for each in self.process_pool:
             each.start()
@@ -77,7 +83,15 @@ class CPNest(object):
 
         import numpy.lib.recfunctions as rfn
         self.nested_samples = rfn.stack_arrays([self.NS.nested_samples[j].asnparray() for j in range(len(self.NS.nested_samples))],usemask=False)
-        self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        if self.verbose>=3:
+            
+            chain = [redraw_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,'mcmc_chain_%d.dat'%each.pid), names=True),verbose=self.verbose) for each in self.process_pool]
+            self.posterior_samples = rfn.stack_arrays(chain)
+            nssamps = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+            self.posterior_samples = rfn.stack_arrays([self.posterior_samples,nssamps])
+        else:
+            self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        self.posterior_samples = np.array(self.posterior_samples)
         np.savetxt(os.path.join(self.NS.output_folder,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
         if self.verbose>1: self.plot()
 

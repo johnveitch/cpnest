@@ -119,3 +119,54 @@ def draw_N_posterior_many(datas, Nlives, Npost, verbose=False):
     posts=[draw_N_posterior(data,logwt,N) for (data,logwt,N) in zip(datas,log_wts,Ns)]
     return vstack(posts).flatten()
 
+def draw_posterior(data, log_wts, verbose=False):
+    """Draw points from the given data (of shape (Nsamples, Ndim))
+        with associated log(weight) (of shape (Nsamples,)). Draws uniquely so
+        there are no repeated samples"""
+    maxWt=max(log_wts)
+    normalised_wts=log_wts-maxWt
+    selection=[n > np.log(uniform()) for n in normalised_wts]
+    idx=list(filter(lambda i: selection[i], range(len(selection))))
+    return data[idx]
+
+def redraw_mcmc_chain(chain, verbose=False, burnin=True):
+    """
+    Draw samples from the mcmc chains posteriors by redrawing
+    each one of them against the Metropolis-Hastings rule
+    """
+    if verbose: print('Number of input samples: {0!s}'.format(chain.shape[0]))
+    if burnin: chain = chain[chain.shape[0]/2-1:]
+    ACL = []
+    for n in chain.dtype.names:
+        if n != 'logL' and n != 'logPrior':
+            acf = 2*np.cumsum(autocorrelation(chain[n]))-1
+            ACL.append(acl(acf))
+    ACL = int(np.round(np.max(ACL)))
+
+    if verbose: print('Measured autocorrelation length {0!s}'.format(str(ACL)))
+    chain = chain[::ACL]
+    logpost = chain['logL']+chain['logPrior']
+    # reweight using the MH rule
+    us = np.log(uniform(size=len(logpost)-1))
+    dlp = np.diff(logpost)
+    (idx,) = np.where(dlp > us)
+    chain = chain[idx+1]
+    if verbose: print('Returned number of samples {0!s}'.format(str(chain.shape[0])))
+
+    return chain
+
+def autocorrelation (x) :
+    """
+    Compute the autocorrelation of the signal, based on the properties of the
+    power spectral density of the signal.
+    """
+    xp = x-np.mean(x)
+    f = np.fft.fft(xp)
+    p = np.array([np.real(v)**2+np.imag(v)**2 for v in f])
+    pi = np.fft.ifft(p)
+    return np.real(pi)[:x.size/2]/np.sum(xp**2)
+
+def acl(acf):
+    for i in range(len(acf)/2):
+        if acf[i] < i/5.0:
+            return acf[i]+1

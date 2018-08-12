@@ -13,6 +13,9 @@ class EggboxModel(cpnest.model.Model):
     def log_likelihood(x):
         return log_eggbox(x)
 
+    def force(self,x):
+        f = np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
+        return f
 
 def log_eggbox(p):
     tmp = 1.0

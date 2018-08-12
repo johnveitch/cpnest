@@ -108,7 +108,18 @@ class Sampler(object):
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
         self.ACLs.append(self.Nmcmc)
-
+#        if self.verbose >=3:
+#            if self.counter%(self.poolsize) == 0:
+#                if len(self.samples) > 2*self.maxmcmc:
+#                    import numpy.lib.recfunctions as rfn
+#                    print("computing actual ACF\n")
+#                    mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
+#                    print mcmc_samples.dtype.names
+#                    for n in mcmc_samples.dtype.names:
+#                        if n!='logL' and n!='logPrior':
+#                            print mcmc_samples[n].dtype
+#                            acf = 2.0*autocorrelation(mcmc_samples[n]).cumsum()-1.0
+#                            print "n",acl(acf),self.Nmcmc
         return self.Nmcmc
 
     def produce_sample(self, producer_pipe, logLmin):
@@ -142,7 +153,7 @@ class Sampler(object):
             producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize//10))==0 or acceptance < 1.0/float(self.poolsize):
-                if self.verbose >=3: sys.stderr.write("Sampler process {0!s}: updated statistics\n".format(os.getpid()))
+#                if self.verbose >=3: sys.stderr.write("Sampler process {0!s}: updated statistics\n".format(os.getpid()))
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
@@ -176,19 +187,19 @@ class Sampler(object):
                                                     barrier = logLmin,
                                                     constraint=self.user.bounds)
                 newparam.logP = self.user.log_prior(newparam)
-    
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.user.log_likelihood(newparam)
                     if newparam.logL > logLmin:
                         oldparam = newparam
                         logp_old = newparam.logP
                         sub_accepted+=1
-                if (sub_counter > self.Nmcmc and sub_accepted > 0 ) or sub_counter > self.maxmcmc:
+                if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
         
             # Put sample back in the stack
             self.evolution_points.append(oldparam)
-            if self.verbose >=3: self.samples.append(oldparam)
+            if self.verbose >=3:
+                self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
             self.mcmc_accepted += sub_accepted
@@ -196,3 +207,19 @@ class Sampler(object):
             # Yield the new sample
             if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
+
+def autocorrelation (x) :
+    """
+    Compute the autocorrelation of the signal, based on the properties of the
+    power spectral density of the signal.
+    """
+    xp = x-np.mean(x)
+    f = np.fft.fft(xp)
+    p = np.array([np.real(v)**2+np.imag(v)**2 for v in f])
+    pi = np.fft.ifft(p)
+    return np.real(pi)[:x.shape[0]//2]/np.sum(xp**2)
+
+def acl(acf):
+    for i in range(len(acf)//2):
+        if acf[i] < i/5.0:
+            return acf[i]
