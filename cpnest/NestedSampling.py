@@ -215,7 +215,10 @@ class NestedSampler(object):
                     # replace worst point with new one
                     self.params[k]=proposed
                     break
-
+                else:
+                    # resend it to the producer
+                    consumer_pipes[k].send(self.params[k])
+                    
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
                 .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\

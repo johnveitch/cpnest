@@ -191,12 +191,11 @@ class Sampler(object):
                     oldparam = newparam
                     logp_old = newparam.logP
                     sub_accepted+=1
-
             if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                 break
     
-        # Put sample back in the stack
-        self.evolution_points.append(oldparam)
+        # Put sample back in the stack, unless that sample led to zero accepted points
+        if sub_accepted > 0: self.evolution_points.append(oldparam)
         if self.verbose >=3:
             self.samples.append(oldparam)
         self.sub_acceptance = float(sub_accepted)/float(sub_counter)
@@ -204,8 +203,8 @@ class Sampler(object):
         self.mcmc_accepted += sub_accepted
         self.mcmc_counter += sub_counter
         # Yield the new sample
-        if oldparam.logL > logLmin:
-            yield (float(self.sub_acceptance),sub_counter,oldparam)
+        # if oldparam.logL > logLmin:
+        yield (float(self.sub_acceptance),sub_counter,oldparam)
 
 def autocorrelation (x) :
     """

@@ -196,14 +196,14 @@ class DefaultProposalCycle(ProposalCycle):
             # check if the user has defined a force function and a potential barrier
             if 'force' in kwargs and 'barrier' in kwargs:
                 proposals.append(ConstrainedLeapFrog(**kwargs))#
-                weights.append(0.2)
+                weights.append(0.1)
                 proposals.append(LeapFrog(**kwargs))
                 weights.append(0.1)
             elif 'force' in kwargs:
                 proposals.append(LeapFrog(**kwargs))
                 weights.append(0.1)
-#        proposals = [ConstrainedLeapFrog(**kwargs)]
-#        weights = [1]
+#        proposals = [ConstrainedLeapFrog(**kwargs),LeapFrog(**kwargs)]
+#        weights = [1,1]
         super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
 
 class HamiltonianProposal(EnsembleProposal):
@@ -312,7 +312,7 @@ class HamiltonianProposal(EnsembleProposal):
 
         # update the potential energy estimate
         self.update_normal_vector(cov_array, pvals)
-        
+
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian
