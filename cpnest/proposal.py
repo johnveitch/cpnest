@@ -260,7 +260,7 @@ class HamiltonianProposal(EnsembleProposal):
             if window_length%2 == 0: window_length += 1
             f = savgol_filter(Vs[idx], window_length, 5  , deriv=1, delta=0.01, mode='mirror')
             self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
-            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f)))
+#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f)))
 
     def unit_normal(self, x):
         """
