@@ -152,8 +152,7 @@ class Sampler(object):
             # Send the sample to the Nested Sampler
             producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize//10))==0 or acceptance < 1.0/float(self.poolsize):
-#                if self.verbose >=3: sys.stderr.write("Sampler process {0!s}: updated statistics\n".format(os.getpid()))
+            if (self.counter%(self.poolsize//10))==0:
                 self.proposal.set_ensemble(self.evolution_points)
             self.counter += 1
 
@@ -175,38 +174,38 @@ class Sampler(object):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
-        for j in range(self.poolsize):
-            sub_counter = 0
-            sub_accepted = 0
-            oldparam = self.evolution_points.popleft()
-            logp_old = self.user.log_prior(oldparam)
+        sub_counter = 0
+        sub_accepted = 0
+        oldparam = self.evolution_points.popleft()
+        logp_old = self.user.log_prior(oldparam)
 
-            while True:
-                sub_counter += 1
-                newparam = self.proposal.get_sample(oldparam.copy(),
-                                                    barrier = logLmin,
-                                                    constraint=self.user.bounds)
-                newparam.logP = self.user.log_prior(newparam)
-                if newparam.logP-logp_old + self.proposal.log_J > log(random()):
-                    newparam.logL = self.user.log_likelihood(newparam)
-                    if newparam.logL > logLmin:
-                        oldparam = newparam
-                        logp_old = newparam.logP
-                        sub_accepted+=1
-                if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
-                    break
-        
-            # Put sample back in the stack
-            self.evolution_points.append(oldparam)
-            if self.verbose >=3:
-                self.samples.append(oldparam)
-            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.estimate_nmcmc()
-            self.mcmc_accepted += sub_accepted
-            self.mcmc_counter += sub_counter
-            # Yield the new sample
-            if oldparam.logL > logLmin:
-                yield (float(self.sub_acceptance),sub_counter,oldparam)
+        while True:
+            sub_counter += 1
+            newparam = self.proposal.get_sample(oldparam.copy(),
+                                                barrier = logLmin,
+                                                constraint=self.user.bounds)
+            newparam.logP = self.user.log_prior(newparam)
+            if newparam.logP-logp_old + self.proposal.log_J > log(random()):
+                newparam.logL = self.user.log_likelihood(newparam)
+                if newparam.logL > logLmin:
+                    oldparam = newparam
+                    logp_old = newparam.logP
+                    sub_accepted+=1
+
+            if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
+                break
+    
+        # Put sample back in the stack
+        self.evolution_points.append(oldparam)
+        if self.verbose >=3:
+            self.samples.append(oldparam)
+        self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+        self.estimate_nmcmc()
+        self.mcmc_accepted += sub_accepted
+        self.mcmc_counter += sub_counter
+        # Yield the new sample
+        if oldparam.logL > logLmin:
+            yield (float(self.sub_acceptance),sub_counter,oldparam)
 
 def autocorrelation (x) :
     """

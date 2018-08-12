@@ -43,10 +43,6 @@ class CPNest(object):
         self.process_pool = []
 
         self.consumer_pipes = []
-        try:
-            has_force = hasattr(self.user, 'force')
-        except AttributeError:
-            pass
         
         for i in range(Nthreads):
             sampler = Sampler(self.user,
