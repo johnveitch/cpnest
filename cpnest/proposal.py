@@ -188,7 +188,7 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [0.3,
+        weights = [0.2,
                    0.2,
                    0.2,
                    0.1]
@@ -196,7 +196,7 @@ class DefaultProposalCycle(ProposalCycle):
             # check if the user has defined a force function and a potential barrier
             if 'force' in kwargs and 'barrier' in kwargs:
                 proposals.append(ConstrainedLeapFrog(**kwargs))#
-                weights.append(0.1)
+                weights.append(0.2)
                 proposals.append(LeapFrog(**kwargs))
                 weights.append(0.1)
             elif 'force' in kwargs:
