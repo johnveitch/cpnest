@@ -210,10 +210,10 @@ class NestedSampler(object):
             while(True):
                 loops += 1
                 self.acceptance, self.jumps, proposed = consumer_pipes[self.queue_counter].recv()
-                self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
-                if proposed.logL>self.logLmin.value:
+                if proposed.logL > self.logLmin.value:
                     # replace worst point with new one
                     self.params[k]=proposed
+                    self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
                     break
                 else:
                     # resend it to the producer
