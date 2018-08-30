@@ -86,18 +86,15 @@ class CPNest(object):
         plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
         plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
 
-    def worker_sampler(self,*args):
-        cProfile.runctx('self.Evolver.produce_sample(*args)', globals(), locals(), 'prof_sampler.prof')
+    def worker_sampler(self, producer_pipe, logLmin):
+        cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
     
-    def worker_ns(self,*args):
-        cProfile.runctx('self.NS.nested_sampling_loop(*args)', globals(), locals(), 'prof_nested_sampling.prof')
+    def worker_ns(self):
+        cProfile.runctx('self.NS.nested_sampling_loop(self.consumer_pipes)', globals(), locals(), 'prof_nested_sampling.prof')
 
     def profile(self):
-        for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.worker_sampler, args=(self.queues[i%len(self.queues)], self.NS.logLmin ))
-            self.process_pool.append(p)
-        for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
-            p = mp.Process(target=self.worker_ns, args=(self.queues, self.port, self.authkey))
-            self.process_pool.append(p)
-        for each in self.process_pool:
-            each.start()
+        for i in range(0,self.Nthreads):
+            p = mp.Process(target=self.worker_sampler, args=(self.producer_pipes[i], self.NS.logLmin, ))
+            p.start()
+        p = mp.Process(target=self.worker_ns)
+        p.start()
