@@ -23,8 +23,9 @@ class CPNest(object):
     balance_samplers: If False, more samples will come from threads sampling "fast" parts of parameter space.
                       This may cause bias if parts of your parameter space are more expensive than others.
                       Default: True    
+    proposal: cpnest.proposal.ProposalCycle object to use while sampling.
     """
-    def __init__(self,usermodel,Nlive=100,Poolsize=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balance_samplers = True):
+    def __init__(self,usermodel,Nlive=100,Poolsize=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balance_samplers = True, proposal=None):
         if Nthreads is None:
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
@@ -43,7 +44,7 @@ class CPNest(object):
 
         self.consumer_pipes = []
         for i in range(Nthreads):
-            sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i )
+            sampler = Sampler(self.user,maxmcmc,verbose=verbose,output=output,poolsize=Poolsize,seed=self.seed+i, proposal=proposal)
             # We set up pipes between the nested sampling and the various sampler processes
             consumer, producer = mp.Pipe(duplex=True)
             self.consumer_pipes.append(consumer)
