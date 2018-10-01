@@ -199,10 +199,10 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [0.2,
-                   0.2,
-                   0.2,
-                   0.1]
+        weights = [2,
+                   2,
+                   5,
+                   1]
         super(DefaultProposalCycle,self).__init__(proposals, weights)
 
 class HamiltonianProposalCycle(ProposalCycle):
@@ -286,7 +286,7 @@ class HamiltonianProposal(EnsembleEigenVector):
                               )
             # construct a LSQ spline interpolant
             self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
-            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],Vs[idx],self.normal[-1](xs[idx]),f)))
+#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],Vs[idx],self.normal[-1](xs[idx]),f)))
 
     def unit_normal(self, x):
         """

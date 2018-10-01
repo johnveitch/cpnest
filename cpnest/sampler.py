@@ -109,7 +109,6 @@ class Sampler(object):
         
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
-        self.ACLs.append(self.Nmcmc)
 #        if self.verbose >=3:
 #            if self.counter%(self.poolsize) == 0:
 #                if len(self.samples) > 2*self.maxmcmc:
