@@ -37,7 +37,7 @@ class Sampler(object):
     
     """
 
-    def __init__(self, usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None, **kwargs):
+    def __init__(self, usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
 
         self.seed = seed
         self.user = usermodel
@@ -45,7 +45,7 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
 
         if proposal is None:
-            self.proposal = DefaultProposalCycle(**kwargs)
+            self.proposal = DefaultProposalCycle()
         else:
             self.proposal = proposal
 
@@ -69,25 +69,27 @@ class Sampler(object):
         """
         np.random.seed(seed=self.seed)
         for n in range(self.poolsize):
-          while True:
-            if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
-            p = self.user.new_point()
-            p.logP = self.user.log_prior(p)
-            if np.isfinite(p.logP): break
-          p.logL=self.user.log_likelihood(p)
-          if p.logL is None or not np.isfinite(p.logL):
-              print("Warning: received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
-              print("You may want to check your likelihood function to impove sampling")
-          self.evolution_points.append(p)
+            while True: # Generate an in-bounds sample
+                if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
+                p = self.user.new_point()
+                p.logP = self.user.log_prior(p)
+                if np.isfinite(p.logP): break
+            p.logL=self.user.log_likelihood(p)
+            if p.logL is None or not np.isfinite(p.logL):
+                print("Warning: received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
+                print("You may want to check your likelihood function to improve sampling")
+            self.evolution_points.append(p)
+
         if self.verbose > 2: sys.stderr.write("\n")
 
         self.proposal.set_ensemble(self.evolution_points)
-        self.metropolis_hastings(-np.inf)
+        # Now, run evolution so samples are drawn from actual prior
+        for _ in range(self.poolsize):
+            _, _, p = next(self.yield_sample(-np.inf))
 
         if self.verbose > 2: sys.stderr.write("\n")
         if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
         self.proposal.set_ensemble(self.evolution_points)
-
         self.initialised=True
 
     def estimate_nmcmc(self, safety=5, tau=None):
@@ -135,19 +137,14 @@ class Sampler(object):
         while True:
             if logLmin.value==np.inf:
                 break
-        
-#            while not(producer_pipe.poll(None)):
-#                # while the is no data to process, keep the chains running
-#                (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
-
-                
+            
             p = producer_pipe.recv()
 
             if p is None:
                 break
             
             self.evolution_points.append(p)
-            (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
+            (acceptance,Nmcmc,outParam) = next(self.yield_sample(logLmin.value))
 
             # Send the sample to the Nested Sampler
             producer_pipe.send((acceptance,Nmcmc,outParam))
@@ -170,43 +167,62 @@ class Sampler(object):
         sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0
 
-    def metropolis_hastings(self, logLmin):
+class MetropolisHastingsSampler(Sampler):
+    def yield_sample(self, logLmin):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
-        sub_counter = 0
-        sub_accepted = 0
-        oldparam = self.evolution_points.popleft()
-        logp_old = self.user.log_prior(oldparam)
+        for j in range(self.poolsize):
+            sub_counter = 0
+            sub_accepted = 0
+            oldparam = self.evolution_points.popleft()
+            logp_old = self.user.log_prior(oldparam)
 
-        while True:
-            sub_counter += 1
-            newparam = self.proposal.get_sample(oldparam.copy(),
-                                                barrier = logLmin,
-                                                constraint=self.user.bounds)
-            newparam.logP = self.user.log_prior(newparam)
-            if newparam.logP-logp_old + self.proposal.log_J > log(random()):
-                newparam.logL = self.user.log_likelihood(newparam)
-                if newparam.logL > logLmin:
-                    oldparam = newparam
-                    logp_old = newparam.logP
+            while True:
+                sub_counter += 1
+                newparam = self.proposal.get_sample(oldparam.copy())
+                newparam.logP = self.user.log_prior(newparam)
+                if newparam.logP-logp_old + self.proposal.log_J > log(random()):
+                    newparam.logL = self.user.log_likelihood(newparam)
+                    if newparam.logL > logLmin:
+                        oldparam = newparam
+                        logp_old = newparam.logP
+                        sub_accepted+=1
+                if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
+                    break
+        
+            # Put sample back in the stack, unless that sample led to zero accepted points
+            self.evolution_points.append(oldparam)
+            if self.verbose >=3:
+                self.samples.append(oldparam)
+            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+            self.estimate_nmcmc()
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter += sub_counter
+            # Yield the new sample
+            if oldparam.logL > logLmin:
+                yield (float(self.sub_acceptance),sub_counter,oldparam)
+
+class HamiltonianMonteCarloSampler(Sampler):
+    def yield_sample(self, logLmin):
+        for j in range(self.poolsize):
+            sub_accepted = 0
+            sub_counter = 0
+            while not sub_accepted:
+                oldparam = self.evolution_points.popleft()
+                newparam = self.proposal.get_sample(oldparam.copy(), logLmin)
+                sub_counter += 1
+                if self.proposal.log_J > np.log(random()):
                     sub_accepted+=1
-            if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
-                break
-    
-        # Put sample back in the stack, unless that sample led to zero accepted points
-        if sub_accepted > 0: self.evolution_points.append(oldparam)
-        if self.verbose >=3:
-            self.samples.append(oldparam)
-        self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-        self.estimate_nmcmc()
-        self.mcmc_accepted += sub_accepted
-        self.mcmc_counter += sub_counter
-        # Yield the new sample
-        # if oldparam.logL > logLmin:
-        yield (float(self.sub_acceptance),sub_counter,oldparam)
+                    oldparam = newparam
+            self.evolution_points.append(oldparam)
+            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+            self.mcmc_accepted+=sub_accepted
+            self.mcmc_counter+=sub_counter
+            if newparam.logL > logLmin:
+                yield (float(self.sub_acceptance),sub_counter,oldparam)
 
-def autocorrelation (x) :
+def autocorrelation(x) :
     """
     Compute the autocorrelation of the signal, based on the properties of the
     power spectral density of the signal.

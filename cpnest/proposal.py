@@ -9,6 +9,12 @@ from scipy.interpolate import LSQUnivariateSpline
 from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
 
+class InvalidProposal(Exception):
+    """
+    Exception raise when proposal cannot be used
+    """
+    pass
+
 class Proposal(object):
     """
     Base class for jump proposals
@@ -16,7 +22,7 @@ class Proposal(object):
     __metaclass__ = ABCMeta
     log_J = 0.0 # Jacobian of this jump proposal
     @abstractmethod
-    def get_sample(self,old,**kwargs):
+    def get_sample(self,old):
         """
         Returns a new proposed sample given the old one.
         Must be implemented by user
@@ -62,12 +68,15 @@ class ProposalCycle(EnsembleProposal):
         self.cycle = np.random.choice(self.proposals, size = cyclelength, p=weights, replace=True)
         self.N=len(self.cycle)
 
-    def get_sample(self,old,**kwargs):
+    def get_sample(self,*args):
         # Call the current proposal and increment the index
-        p = self.cycle[self.idx]
-        new = p.get_sample(old,**kwargs)
-        self.log_J = p.log_J
         self.idx = (self.idx + 1) % self.N
+        p = self.cycle[self.idx]
+        try:
+            new = p.get_sample(*args)
+        except InvalidProposal:
+            return self.get_sample(*args)
+        self.log_J = p.log_J
         return new
 
     def set_ensemble(self,ensemble):
@@ -87,7 +96,7 @@ class EnsembleWalk(EnsembleProposal):
     """
     log_J = 0.0 # Symmetric proposal
     Npoints = 3
-    def get_sample(self,old,**kwargs):
+    def get_sample(self,old):
         subset = sample(self.ensemble,self.Npoints)
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
@@ -100,7 +109,7 @@ class EnsembleStretch(EnsembleProposal):
     The Ensemble "stretch" move from Goodman & Weare
     http://dx.doi.org/10.2140/camcos.2010.5.65
     """
-    def get_sample(self,old,**kwargs):
+    def get_sample(self,old):
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
         a = random.choice(self.ensemble)
@@ -123,7 +132,7 @@ class DifferentialEvolution(EnsembleProposal):
     We add a small perturbation around the exact step
     """
     log_J = 0.0 # Symmetric jump
-    def get_sample(self,old,**kwargs):
+    def get_sample(self,old):
         a,b = sample(self.ensemble,2)
         sigma = 1e-4 # scatter around difference vector by this factor
         out = old + (b-a)*gauss(1.0,sigma)
@@ -137,6 +146,7 @@ class EnsembleEigenVector(EnsembleProposal):
     log_J = 0.0
     eigen_values=None
     eigen_vectors=None
+    covariance=None
     def set_ensemble(self,ensemble):
         """
         Over-ride default set_ensemble so that the
@@ -156,14 +166,15 @@ class EnsembleEigenVector(EnsembleProposal):
         if dim == 1:
             name=self.ensemble[0].names[0]
             self.eigen_values = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.covariance = self.eigen_values
             self.eigen_vectors = np.eye(1)
         else:	 
             for i,name in enumerate(self.ensemble[0].names):
                 for j in range(n): cov_array[i,j] = self.ensemble[j][name]
-            covariance = np.cov(cov_array)
-            self.eigen_values,self.eigen_vectors = np.linalg.eigh(covariance)
+            self.covariance = np.cov(cov_array)
+            self.eigen_values,self.eigen_vectors = np.linalg.eigh(self.covariance)
 
-    def get_sample(self,old,**kwargs):
+    def get_sample(self,old):
         """
         Propose a jump along a random eigenvector
         """
@@ -182,7 +193,7 @@ class DefaultProposalCycle(ProposalCycle):
     and Eigenvector proposals. If the user passes a force function and/or a
     potential barrier, then a leap frog hamiltonian proposal is also added
     """
-    def __init__(self,*args,**kwargs):
+    def __init__(self):
         
         proposals = [EnsembleWalk(),
                      EnsembleStretch(),
@@ -192,21 +203,19 @@ class DefaultProposalCycle(ProposalCycle):
                    0.2,
                    0.2,
                    0.1]
-        if kwargs is not None:
-            # check if the user has defined a force function and a potential barrier
-            if 'force' in kwargs and 'barrier' in kwargs:
-                proposals.append(ConstrainedLeapFrog(**kwargs))#
-                weights.append(0.2)
-                proposals.append(LeapFrog(**kwargs))
-                weights.append(0.1)
-            elif 'force' in kwargs:
-                proposals.append(LeapFrog(**kwargs))
-                weights.append(0.1)
-#        proposals = [ConstrainedLeapFrog(**kwargs),LeapFrog(**kwargs)]
-#        weights = [1,1]
-        super(DefaultProposalCycle,self).__init__(proposals,weights,*args,**kwargs)
+        super(DefaultProposalCycle,self).__init__(proposals, weights)
 
-class HamiltonianProposal(EnsembleProposal):
+class HamiltonianProposalCycle(ProposalCycle):
+    def __init__(self, model=None):
+        """
+        A proposal cycle that uses hamiltonian MC steps.
+        Requires model to be passed for access to gradients etc
+        """
+        weights = [1]
+        proposals = [ConstrainedLeapFrog(model=model)]
+        super(HamiltonianProposalCycle,self).__init__(proposals, weights)
+
+class HamiltonianProposal(EnsembleEigenVector):
     """
     Base class for hamiltonian proposals
     """
@@ -214,15 +223,13 @@ class HamiltonianProposal(EnsembleProposal):
     inverse_mass_matrix = None
     momenta_distribution = None
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, model=None, **kwargs):
         """
         Sets the boundary conditions as a free particle at infinity (V=0)
         """
-        super(HamiltonianProposal, self).__init__()
+        super(HamiltonianProposal, self).__init__(**kwargs)
         self.T  = self.kinetic_energy
-        self.dV = kwargs['force']
-        self.V = kwargs['potential']
-        self.C = kwargs['barrier']
+        self.V = model.potential
         self.normal = None
     
     def set_ensemble(self, ensemble):
@@ -232,18 +239,26 @@ class HamiltonianProposal(EnsembleProposal):
         """
         super(HamiltonianProposal,self).set_ensemble(ensemble)
         self.update_mass()
+        self.update_normal_vector()
         self.update_momenta_distribution()
 
-    def update_normal_vector(self, tracers_array, V_vals):
+    def update_normal_vector(self):
         """
         update the constraint by approximating the
         loglikelihood hypersurface as a spline in
         each dimension.
         This is a rough approximation which
         improves as the algorithm proceeds
+        
         """
+        n = self.ensemble[0].dimension
+        tracers_array = np.zeros((len(self.ensemble),n))
+        for i,samp in enumerate(self.ensemble):
+            tracers_array[i,:] = samp.values
+        V_vals = np.atleast_1d([p.logL for p in self.ensemble])
+        
         self.normal = []
-        for i,x in enumerate(tracers_array):
+        for i,x in enumerate(tracers_array.T):
             # sort the values
             idx = x.argsort()
             xs = x[idx]
@@ -253,19 +268,30 @@ class HamiltonianProposal(EnsembleProposal):
             Vs = Vs[ids]
             # pick only finite values
             idx = np.isfinite(Vs)
-            # pick fixed n-dim knots for the spline from the percentiles
-            knots = np.percentile(xs[idx],np.linspace(1,99,tracers_array.shape[0]))
-            # construct a LSQ spline interpolant, weighting potential nans as zeros (which should have been sorted out already
-            window_length = len(idx)//2+1
+
+            # Pick knots for this parameters: Choose Ndim knots between
+            # the 1st and 99th percentiles (heuristic tuning WDP)
+            knots = np.percentile(xs[idx],np.linspace(1,99,n))
+            # Guesstimate the length scale for numerical derivatives
+            dimwidth = knots[-1]-knots[0]
+            delta = 0.1 * dimwidth / len(idx)
+            # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
+            window_length = len(idx)//2+1 # Window for SAVGOL filter
             if window_length%2 == 0: window_length += 1
-            f = savgol_filter(Vs[idx], window_length, 5  , deriv=1, delta=0.01, mode='mirror')
+            f = savgol_filter(Vs[idx], window_length,
+                              5, # Order of polynominal filter
+                              deriv=1, # Take first derivative
+                              delta=delta, # delta for numerical deriv
+                              mode='mirror' # Reflective boundary conds.
+                              )
+            # construct a LSQ spline interpolant
             self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
-#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f)))
+            #np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f)))
 
     def unit_normal(self, x):
         """
-        Returns the unit normal to the constraint surface
-        obtained from the spline interpolation of the
+        Returns the unit normal to the iso-Likelihood surface
+        at x, obtained from the spline interpolation of the
         directional derivatives of the likelihood
         """
         v = np.array([self.normal[i](x[n]) for i,n in enumerate(x.names)])
@@ -291,27 +317,8 @@ class HamiltonianProposal(EnsembleProposal):
         Recompute the mass matrix (covariance matrix)
         from the ensemble
         """
-        n   = len(self.ensemble)
-        dim = self.ensemble[0].dimension
-        cov_array = np.zeros((dim,n))
-        
-        if dim == 1:
-            name=self.ensemble[0].names[0]
-            cov_array = np.atleast_2d([self.ensemble[j][name] for j in range(n)])
-            self.inverse_mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
-            pvals = np.atleast_1d([self.ensemble[j].logL for j in range(n)])
-            self.mass_matrix = 1./self.inverse_mass_matrix
-        else:
-            for i,name in enumerate(self.ensemble[0].names):
-                for j in range(n):
-                    cov_array[i,j] = self.ensemble[j][name]
-            pvals = np.array([self.ensemble[j].logL for j in range(n)])
-            covariance = np.cov(cov_array)
-            self.mass_matrix = np.diag(np.diag(np.linalg.inv(covariance)))
-            self.inverse_mass_matrix = np.diag(np.diag(covariance))
-
-        # update the potential energy estimate
-        self.update_normal_vector(cov_array, pvals)
+        self.mass_matrix = np.diag(np.diag(np.linalg.inv(self.covariance)))
+        self.inverse_mass_matrix = np.diag(np.diag(self.covariance))
 
     def kinetic_energy(self,p):
         """
@@ -321,23 +328,30 @@ class HamiltonianProposal(EnsembleProposal):
 
 class LeapFrog(HamiltonianProposal):
     """
-    Leap frog integrator proposal for an uncostrained
+    Leap frog integrator proposal for an unconstrained
     Hamiltonian Monte Carlo step
     """
-    # symmetric proposal
-    log_J = 0.0
-    def get_sample(self, q0, **kwargs):
+    def __init__(self, model=None, **kwargs):
+        super(LeapFrog, self).__init__(model=model, **kwargs)
+        self.dV = model.force
+        self.prior_bounds = model.bounds
+
+    def get_sample(self, q0, *args):
+        """
+        Propose a new sample, starting at q0
+        """
+
         # generate a canonical momentum
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
         # evolve along the trajectory
-        q, p = self.evolve_trajectory(p0, q0, constraint=kwargs['constraint'])
+        q, p = self.evolve_trajectory(p0, q0, *args)
         
         initial_energy = self.T(p0) + self.V(q0)
         final_energy   = self.T(p)  + self.V(q)
-        log_J = min(0.0, initial_energy - final_energy)
+        self.log_J = min(0.0, initial_energy - final_energy)
         return q
     
-    def evolve_trajectory(self, p0, q0, constraint=None):
+    def evolve_trajectory(self, p0, q0):
         """
         https://arxiv.org/pdf/1206.1901.pdf
         """
@@ -352,7 +366,7 @@ class LeapFrog(HamiltonianProposal):
         for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
-                u,l = constraint[j][1], constraint[j][0]
+                u,l = self.prior_bounds[j][1], self.prior_bounds[j][0]
                 q[k] += self.dt * p[j] * invM[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
@@ -371,28 +385,36 @@ class LeapFrog(HamiltonianProposal):
 
         return q, -p
 
-class ConstrainedLeapFrog(HamiltonianProposal):
+class ConstrainedLeapFrog(LeapFrog):
     """
     Leap frog integrator proposal for a costrained
     (logLmin defines a reflective boundary)
     Hamiltonian Monte Carlo step
     """
-    # symmetric proposal
-    log_J = 0.0
-    def get_sample(self, q0, **kwargs):
-        # generate a canonical momentum
-        p0 = np.atleast_1d(self.momenta_distribution.rvs())
-        # evolve along the trajectory
-        q, p = self.evolve_trajectory(p0, q0, barrier=kwargs['barrier'], constraint=kwargs['constraint'])
-        
-        initial_energy = self.T(p0) + self.V(q0)
-        final_energy   = self.T(p)  + self.V(q)
-        log_J = min(0.0, initial_energy - final_energy)
-        return q
-    
-    def evolve_trajectory(self, p0, q0, barrier=-np.inf, constraint=None):
+    def __init__(self, model=None, **kwargs):
+        super(ConstrainedLeapFrog, self).__init__(model=model, **kwargs)
+        self.log_likelihood = model.log_likelihood
+
+    def get_sample(self, q0, logLmin=-np.inf):
         """
+        Generate new sample with constrained HMC, starting at q0.
+        """
+        if q0.logL < logLmin:
+            print('You started in a baaad place')
+            raise InvalidProposal
+        return super(ConstrainedLeapFrog,self).get_sample(q0,logLmin)
+    
+    def evolve_trajectory(self, p0, q0, logLmin):
+        """
+        Evolve point according to Hamiltonian method in
         https://arxiv.org/pdf/1005.0157.pdf
+        
+        Parameters
+        ----------
+        p0 : np.array
+            momentum
+        q0 : `cpnest.parameter.LivePoint`
+            position
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
 #        f = open("mass.txt","a")
@@ -401,6 +423,11 @@ class ConstrainedLeapFrog(HamiltonianProposal):
 #        f.close()
         # generate the trajectory lengths from a scale invariant distribution
         self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
+        """
+        Step size: 3e-2, manual tuning
+        dimension^-(1/4) based on
+        http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
+        """
         self.dt = 3e-2*float(len(invM))**(-0.25)
         self.dt = np.abs(gauss(self.dt,self.dt))
 #        f = open("trajectory.txt","w")
@@ -413,17 +440,17 @@ class ConstrainedLeapFrog(HamiltonianProposal):
 #            f.write("%e\t"%q0[k])
 #        f.write("%e\t"%barrier)
 #        f.write("%e\n"%q0.logL)
-
-        p = p0-0.5 * self.dt * self.gradient(q0)
+        # First half-step in momentum
+        p = p0 - 0.5 * self.dt * self.gradient(q0)
         q = q0
 #        for j,k in enumerate(q.names):
 #            f.write("%e\t"%q[k])
 #        f.write("%e\t"%barrier)
 #        f.write("%e\n"%q.logL)
         for i in range(self.L):
-            # do a step
+            # do a full step in position
             for j,k in enumerate(q.names):
-                u,l = constraint[j][1], constraint[j][0]
+                u,l = self.prior_bounds[j][1], self.prior_bounds[j][0]
                 q[k] += self.dt * p[j] * invM[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
@@ -435,13 +462,13 @@ class ConstrainedLeapFrog(HamiltonianProposal):
                     p[j] *= -1
             dV = self.gradient(q)
             
-            # if the trajectory led us to a lower likelihood,
+            # if the trajectory led us outside the likelihood bound,
             # reflect the momentum orthogonally to the surface
-            if np.isfinite(barrier):
-                logL = self.C(q)
+            if np.isfinite(logLmin):
+                logL = self.log_likelihood(q)
                 q.logL = logL
                 
-                if (logL - barrier) <= 0:
+                if (logL - logLmin) <= 0:
                     normal = self.unit_normal(q)
                     p = p - 2.0*np.dot(p,normal)*normal
                 else:

@@ -28,8 +28,9 @@ class CPNest(object):
         if Nthreads is None:
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
-        from .sampler import Sampler
+        from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
+        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
         self.user=usermodel
         self.verbose=verbose
         self.output=output
@@ -45,16 +46,14 @@ class CPNest(object):
         self.consumer_pipes = []
         
         for i in range(Nthreads):
-            sampler = Sampler(self.user,
+            sampler = HamiltonianMonteCarloSampler(self.user,
                               maxmcmc,
                               verbose=verbose,
                               output=output,
                               poolsize=Poolsize,
                               seed=self.seed+i,
-                              potential=self.user.potential,
-                              force=self.user.force,
-                              barrier=self.user.log_likelihood,
-                              constraint=self.user.bounds)
+                              proposal = HamiltonianProposalCycle(model=self.user)
+                              )
             # We set up pipes between the nested sampling and the various sampler processes
             consumer, producer = mp.Pipe(duplex=True)
             self.consumer_pipes.append(consumer)
