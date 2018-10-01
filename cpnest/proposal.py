@@ -400,7 +400,7 @@ class ConstrainedLeapFrog(LeapFrog):
         Generate new sample with constrained HMC, starting at q0.
         """
         if q0.logL < logLmin:
-            print('You started in a baaad place')
+            print('You started in a baaad place: '+str(q0.logL))
             raise InvalidProposal
         return super(ConstrainedLeapFrog,self).get_sample(q0,logLmin)
     
@@ -464,16 +464,15 @@ class ConstrainedLeapFrog(LeapFrog):
             
             # if the trajectory led us outside the likelihood bound,
             # reflect the momentum orthogonally to the surface
-            if np.isfinite(logLmin):
-                logL = self.log_likelihood(q)
-                q.logL = logL
+            logL = self.log_likelihood(q)
+            q.logL = logL
                 
-                if (logL - logLmin) <= 0:
-                    normal = self.unit_normal(q)
-                    p = p - 2.0*np.dot(p,normal)*normal
-                else:
-                    # take a full momentum step
-                    p += - self.dt * dV
+            if (logL - logLmin) <= 0:
+                normal = self.unit_normal(q)
+                p = p - 2.0*np.dot(p,normal)*normal
+            else:
+                # take a full momentum step
+                p += - self.dt * dV
 
 #            for j,k in enumerate(q.names):
 #                f.write("%e\t"%q[k])
