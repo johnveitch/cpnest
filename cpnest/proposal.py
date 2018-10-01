@@ -72,10 +72,10 @@ class ProposalCycle(EnsembleProposal):
         # Call the current proposal and increment the index
         self.idx = (self.idx + 1) % self.N
         p = self.cycle[self.idx]
-        try:
-            new = p.get_sample(*args)
-        except InvalidProposal:
-            return self.get_sample(*args)
+#        try:
+        new = p.get_sample(*args)
+#        except InvalidProposal:
+#            return self.get_sample(*args)
         self.log_J = p.log_J
         return new
 
@@ -271,7 +271,7 @@ class HamiltonianProposal(EnsembleEigenVector):
 
             # Pick knots for this parameters: Choose Ndim knots between
             # the 1st and 99th percentiles (heuristic tuning WDP)
-            knots = np.percentile(xs[idx],np.linspace(1,99,n))
+            knots = np.percentile(xs[idx],np.linspace(1,99,5))
             # Guesstimate the length scale for numerical derivatives
             dimwidth = knots[-1]-knots[0]
             delta = 0.1 * dimwidth / len(idx)
@@ -286,7 +286,7 @@ class HamiltonianProposal(EnsembleEigenVector):
                               )
             # construct a LSQ spline interpolant
             self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
-            #np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],self.normal[-1](xs[idx]),f)))
+            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],Vs[idx],self.normal[-1](xs[idx]),f)))
 
     def unit_normal(self, x):
         """
@@ -345,9 +345,11 @@ class LeapFrog(HamiltonianProposal):
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, *args)
-        
-        initial_energy = self.T(p0) + self.V(q0)
-        final_energy   = self.T(p)  + self.V(q)
+        q0.logP = -self.V(q0)
+        # minus sign from the definition of the potential
+        initial_energy = self.T(p0) - q0.logP
+        q.logP = -self.V(q)
+        final_energy   = self.T(p)  - q.logP
         self.log_J = min(0.0, initial_energy - final_energy)
         return q
     
@@ -399,9 +401,9 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         Generate new sample with constrained HMC, starting at q0.
         """
-        if q0.logL < logLmin:
-            print('You started in a baaad place: '+str(q0.logL))
-            raise InvalidProposal
+#        if q0.logL < logLmin:
+#            print('You started in a baaad place: '+str(q0.logL))
+#            raise InvalidProposal
         return super(ConstrainedLeapFrog,self).get_sample(q0,logLmin)
     
     def evolve_trajectory(self, p0, q0, logLmin):

@@ -154,12 +154,11 @@ class Sampler(object):
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
-        thinning = int(np.ceil(np.mean(self.ACLs)))
         self.samples.extend(self.evolution_points)
-        sys.stderr.write("Sampler process {0!s}: Mean ACL measured (suggested thinning) = {1:d}\n".format(os.getpid(),thinning))
         import numpy.lib.recfunctions as rfn
-        self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
         if self.verbose >=3:
+            self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray()
+                                                  for j in range(0,len(self.samples))],usemask=False)
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
                        self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
@@ -172,7 +171,7 @@ class MetropolisHastingsSampler(Sampler):
         """
         metropolis-hastings loop to generate the new live point taking nmcmc steps
         """
-        for j in range(self.poolsize):
+        while True:
             sub_counter = 0
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
@@ -205,7 +204,7 @@ class MetropolisHastingsSampler(Sampler):
 
 class HamiltonianMonteCarloSampler(Sampler):
     def yield_sample(self, logLmin):
-        for j in range(self.poolsize):
+        while True:
             sub_accepted = 0
             sub_counter = 0
             while not sub_accepted:
