@@ -313,12 +313,12 @@ class HamiltonianProposal(EnsembleEigenVector):
 
     def update_mass(self):
         """
-        Recompute the mass matrix (covariance matrix)
-        from the ensemble
+        Update the mass matrix (covariance matrix)
+        from the ensemble, allowing for correlated momenta
         """
-        self.mass_matrix = np.diag(np.diag(np.linalg.inv(np.atleast_2d(self.covariance))))
-        self.inverse_mass_matrix = np.diag(np.diag(np.atleast_2d(self.covariance)))
-
+        self.mass_matrix = np.linalg.inv(np.atleast_2d(self.covariance))
+        self.inverse_mass_matrix = np.atleast_2d(self.covariance)
+    
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian

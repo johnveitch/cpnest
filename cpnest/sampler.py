@@ -211,7 +211,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                 newparam = self.proposal.get_sample(oldparam.copy(), logLmin)
                 sub_counter += 1
                 if self.proposal.log_J > np.log(random()):
-                    sub_accepted+=1
+                    sub_accepted += 1
                     oldparam = newparam
                 self.evolution_points.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)

@@ -56,7 +56,20 @@ class CPNest(object):
 
         self.consumer_pipes = []
         
-        for i in range(nthreads/2):
+        # check for the number of threads requested bby the user and allocate the resources
+        # accordingly
+        
+        if nthreads==1:
+            nhmc = nthreads
+            nmh  = 0
+        elif nthreads%2==0:
+            nhmc = nthreads/2
+            nmh  = nthreads/2
+        else:
+            nhmc = nthreads/2
+            nmh  = nthreads - nhmc
+        
+        for i in range(nhmc):
             sampler = HamiltonianMonteCarloSampler(self.user,
                               maxmcmc,
                               verbose  = verbose,
@@ -71,13 +84,13 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
             self.process_pool.append(p)
         
-        for i in range(nthreads/2,nthreads):
+        for i in range(nmh):
             sampler = MetropolisHastingsSampler(self.user,
                               maxmcmc,
                               verbose   = verbose,
                               output    = output,
                               poolsize  = poolsize,
-                              seed      = self.seed+i,
+                              seed      = self.seed+i+nhmc,
                               proposal  = DefaultProposalCycle()
                               )
             # We set up pipes between the nested sampling and the various sampler processes
@@ -85,6 +98,7 @@ class CPNest(object):
             self.consumer_pipes.append(consumer)
             p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
             self.process_pool.append(p)
+
     def run(self):
         """
         Run the sampler
