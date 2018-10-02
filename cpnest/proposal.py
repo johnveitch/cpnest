@@ -268,15 +268,14 @@ class HamiltonianProposal(EnsembleEigenVector):
             Vs = Vs[ids]
             # pick only finite values
             idx = np.isfinite(Vs)
-
-            # Pick knots for this parameters: Choose Ndim knots between
+            # Pick knots for this parameters: Choose 5 knots between
             # the 1st and 99th percentiles (heuristic tuning WDP)
             knots = np.percentile(xs[idx],np.linspace(1,99,5))
             # Guesstimate the length scale for numerical derivatives
             dimwidth = knots[-1]-knots[0]
             delta = 0.1 * dimwidth / len(idx)
             # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
-            window_length = len(idx)//2+1 # Window for SAVGOL filter
+            window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
             if window_length%2 == 0: window_length += 1
             f = savgol_filter(Vs[idx], window_length,
                               5, # Order of polynominal filter
@@ -317,8 +316,8 @@ class HamiltonianProposal(EnsembleEigenVector):
         Recompute the mass matrix (covariance matrix)
         from the ensemble
         """
-        self.mass_matrix = np.diag(np.diag(np.linalg.inv(self.covariance)))
-        self.inverse_mass_matrix = np.diag(np.diag(self.covariance))
+        self.mass_matrix = np.diag(np.diag(np.linalg.inv(np.atleast_2d(self.covariance))))
+        self.inverse_mass_matrix = np.diag(np.diag(np.atleast_2d(self.covariance)))
 
     def kinetic_energy(self,p):
         """
@@ -419,10 +418,6 @@ class ConstrainedLeapFrog(LeapFrog):
             position
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-#        f = open("mass.txt","a")
-#        for M in invM: f.write("%e\t"%(1./M))
-#        f.write("\n")
-#        f.close()
         # generate the trajectory lengths from a scale invariant distribution
         self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
         """
@@ -440,14 +435,14 @@ class ConstrainedLeapFrog(LeapFrog):
 #        # Updating the momentum a half-step
 #        for j,k in enumerate(q0.names):
 #            f.write("%e\t"%q0[k])
-#        f.write("%e\t"%barrier)
+#        f.write("%e\t"%logLmin)
 #        f.write("%e\n"%q0.logL)
         # First half-step in momentum
         p = p0 - 0.5 * self.dt * self.gradient(q0)
         q = q0
 #        for j,k in enumerate(q.names):
 #            f.write("%e\t"%q[k])
-#        f.write("%e\t"%barrier)
+#        f.write("%e\t"%logLmin)
 #        f.write("%e\n"%q.logL)
         for i in range(self.L):
             # do a full step in position
@@ -478,7 +473,7 @@ class ConstrainedLeapFrog(LeapFrog):
 
 #            for j,k in enumerate(q.names):
 #                f.write("%e\t"%q[k])
-#            f.write("%e\t"%barrier)
+#            f.write("%e\t"%logLmin)
 #            f.write("%e\n"%q.logL)
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV

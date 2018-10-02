@@ -40,6 +40,7 @@ class CPNest(object):
         self.verbose  = verbose
         self.output   = output
         self.poolsize = poolsize
+        
         if seed is None: self.seed=1234
         else:
             self.seed=seed
