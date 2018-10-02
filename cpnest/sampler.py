@@ -84,9 +84,10 @@ class Sampler(object):
 
         self.proposal.set_ensemble(self.evolution_points)
         # Now, run evolution so samples are drawn from actual prior
-        for _ in range(self.poolsize):
+        for k in range(self.poolsize):
+            if self.verbose > 2: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from as the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
             _, _, p = next(self.yield_sample(-np.inf))
-
+        
         if self.verbose > 2: sys.stderr.write("\n")
         if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
         self.proposal.set_ensemble(self.evolution_points)

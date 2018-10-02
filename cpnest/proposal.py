@@ -268,24 +268,31 @@ class HamiltonianProposal(EnsembleEigenVector):
             Vs = Vs[ids]
             # pick only finite values
             idx = np.isfinite(Vs)
+            Vs  = Vs[idx]
+            xs  = xs[idx]
+            # filter to within the 90% range of the Pvals
+            Vl,Vh = np.percentile(Vs,[5,95])
+            (idx,) = np.where(np.logical_and(Vs > Vl,Vs < Vh))
+            Vs = Vs[idx]
+            xs = xs[idx]
             # Pick knots for this parameters: Choose 5 knots between
             # the 1st and 99th percentiles (heuristic tuning WDP)
-            knots = np.percentile(xs[idx],np.linspace(1,99,5))
+            knots = np.percentile(xs,np.linspace(1,99,5))
             # Guesstimate the length scale for numerical derivatives
             dimwidth = knots[-1]-knots[0]
             delta = 0.1 * dimwidth / len(idx)
             # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
             window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
             if window_length%2 == 0: window_length += 1
-            f = savgol_filter(Vs[idx], window_length,
+            f = savgol_filter(Vs, window_length,
                               5, # Order of polynominal filter
                               deriv=1, # Take first derivative
                               delta=delta, # delta for numerical deriv
                               mode='mirror' # Reflective boundary conds.
                               )
             # construct a LSQ spline interpolant
-            self.normal.append(LSQUnivariateSpline(xs[idx], f, knots, ext = 3, k = 3))
-#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs[idx],Vs[idx],self.normal[-1](xs[idx]),f)))
+            self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
+            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
 
     def unit_normal(self, x):
         """
@@ -426,7 +433,6 @@ class ConstrainedLeapFrog(LeapFrog):
         http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
         """
         self.dt = 3e-2*float(len(invM))**(-0.25)
-        self.dt = np.abs(gauss(self.dt,self.dt))
 #        f = open("trajectory.txt","w")
 #        for j,k in enumerate(q0.names):
 #            f.write("%s\t"%k)
