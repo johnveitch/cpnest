@@ -13,6 +13,9 @@ class AckleyModel(cpnest.model.Model):
     def log_likelihood(x):
         return ackley(x['x'],x['y'])
 
+    def force(self,x):
+        f = np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
+        return f
 
 def ackley(x, y):
     """
@@ -28,7 +31,7 @@ class AckleyTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(AckleyModel(),verbose=1,Nthreads=8,Nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(AckleyModel(),verbose=1,nthreads=8,nlive=1000,maxmcmc=1000)
 
     def test_run(self):
         self.work.run()

@@ -28,12 +28,18 @@ class GaussianMixtureModel(cpnest.model.Model):
         if not self.in_bounds(p): return -np.inf
         return -np.log(p['sigma1'])-np.log(p['sigma2'])
 
+    def force(self,x):
+        f = np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
+        f['sigma1'] = 1.0
+        f['sigma2'] = 1.0
+        return f
+
 class GaussianMixtureTestCase(unittest.TestCase):
     """
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianMixtureModel(),verbose=1,Nthreads=8,Nlive=1024,maxmcmc=1024)
+        self.work=cpnest.CPNest(GaussianMixtureModel(),verbose=1,nthreads=8,nlive=1024,maxmcmc=1024)
 
     def test_run(self):
         self.work.run()
