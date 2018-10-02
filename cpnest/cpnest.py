@@ -9,49 +9,59 @@ import os
 class CPNest(object):
     """
     Class to control CPNest sampler
-    cp = CPNest(usermodel,Nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balanced_sampling = True)
+    cp = CPNest(usermodel,nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,nthreads=None,balanced_sampling = True)
     
     Input variables:
     usermodel : an object inheriting cpnest.model.Model that defines the user's problem
-    Nlive : Number of live points (100)
-    Poolsize: Number of objects in the sampler pool (100)
+    nlive : Number of live points (100)
+    poolsize: Number of objects in the sampler pool (100)
     output : output directory (./)
     verbose: Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
     seed: random seed (default: 1234)
     maxmcmc: maximum MCMC points for sampling chains (100)
-    Nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
-    balance_samplers: If False, more samples will come from threads sampling "fast" parts of parameter space.
-                      This may cause bias if parts of your parameter space are more expensive than others.
-                      Default: True    
+    nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
     """
-    def __init__(self,usermodel,Nlive=100,Poolsize=100,output='./',verbose=0,seed=None,maxmcmc=100,Nthreads=None,balance_samplers = True):
-        if Nthreads is None:
-            Nthreads = mp.cpu_count()
-        print('Running with {0} parallel threads'.format(Nthreads))
+    def __init__(self,
+                 usermodel,
+                 nlive      = 100,
+                 poolsize   = 100,
+                 output     = './',
+                 verbose    = 0,
+                 seed       = None,
+                 maxmcmc    = 100,
+                 nthreads   = None):
+        if nthreads is None:
+            nthreads = mp.cpu_count()
+        print('Running with {0} parallel threads'.format(nthreads))
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
-        self.user=usermodel
-        self.verbose=verbose
-        self.output=output
-        self.poolsize = Poolsize
+        self.user     = usermodel
+        self.verbose  = verbose
+        self.output   = output
+        self.poolsize = poolsize
         if seed is None: self.seed=1234
         else:
             self.seed=seed
         
-        self.NS = NestedSampler(self.user,Nlive=Nlive,output=output,verbose=verbose,seed=self.seed,prior_sampling=False)
+        self.NS = NestedSampler(self.user,
+                                nlive          = nlive,
+                                output         = output,
+                                verbose        = verbose,
+                                seed           = self.seed,
+                                prior_sampling = False)
 
         self.process_pool = []
 
         self.consumer_pipes = []
         
-        for i in range(Nthreads/2):
+        for i in range(nthreads/2):
             sampler = HamiltonianMonteCarloSampler(self.user,
                               maxmcmc,
-                              verbose=verbose,
-                              output=output,
-                              poolsize=Poolsize,
-                              seed=self.seed+i,
+                              verbose  = verbose,
+                              output   = output,
+                              poolsize = poolsize,
+                              seed     = self.seed+i,
                               proposal = HamiltonianProposalCycle(model=self.user)
                               )
             # We set up pipes between the nested sampling and the various sampler processes
@@ -60,14 +70,14 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
             self.process_pool.append(p)
         
-        for i in range(Nthreads/2,Nthreads):
+        for i in range(nthreads/2,nthreads):
             sampler = MetropolisHastingsSampler(self.user,
                               maxmcmc,
-                              verbose=verbose,
-                              output=output,
-                              poolsize=Poolsize,
-                              seed=self.seed+i,
-                              proposal = None
+                              verbose   = verbose,
+                              output    = output,
+                              poolsize  = poolsize,
+                              seed      = self.seed+i,
+                              proposal  = DefaultProposalCycle()
                               )
             # We set up pipes between the nested sampling and the various sampler processes
             consumer, producer = mp.Pipe(duplex=True)

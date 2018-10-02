@@ -36,8 +36,8 @@ class _NSintegralState(object):
   """
   Stores the state of the nested sampling integrator
   """
-  def __init__(self,nlive):
-    self.nlive=nlive
+  def __init__(self, nlive):
+    self.nlive = nlive
     self.reset()
   def reset(self):
     """
@@ -51,7 +51,7 @@ class _NSintegralState(object):
     # Start with a dummy sample enclosing the whole prior
     self.logLs=[-inf] # Likelihoods sampled
     self.log_vols=[0.0] # Volumes enclosed by contours
-  def increment(self,logL,nlive=None):
+  def increment(self, logL, nlive=None):
     """
     Increment the state of the evidence integrator
     Simply uses rectangle rule for initial estimate
@@ -134,7 +134,13 @@ class NestedSampler(object):
     
     """
 
-    def __init__(self,usermodel,Nlive=1024,maxmcmc=4096,output=None,verbose=1,seed=1,prior_sampling=False,stopping=0.1):
+    def __init__(self,usermodel,
+                 nlive          = 1024,
+                 output         = None,
+                 verbose        = 1,
+                 seed           = 1,
+                 prior_sampling = False,
+                 stopping       = 0.1):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
@@ -145,9 +151,7 @@ class NestedSampler(object):
         self.accepted = 0
         self.rejected = 1
         self.queue_counter = 0
-        self.Nlive = Nlive
-        self.Nmcmc = maxmcmc
-        self.maxmcmc = maxmcmc
+        self.Nlive = nlive
         self.params = [None] * self.Nlive
         self.tolerance = stopping
         self.condition = np.inf

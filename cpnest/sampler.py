@@ -215,8 +215,8 @@ class HamiltonianMonteCarloSampler(Sampler):
                     oldparam = newparam
                 self.evolution_points.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.mcmc_accepted+=sub_accepted
-            self.mcmc_counter+=sub_counter
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter  += sub_counter
             if newparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
 

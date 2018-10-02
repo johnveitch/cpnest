@@ -30,7 +30,7 @@ class HalfGaussianTestCase(unittest.TestCase):
     """
     def setUp(self,xmax=20):
         self.model=HalfGaussianModel(xmax=xmax)
-        self.work=cpnest.CPNest(self.model,verbose=1,Nlive=500,Nthreads=1)
+        self.work=cpnest.CPNest(self.model,verbose=1,nlive=500,nthreads=1)
         self.work.run()
 
     def test_evidence(self):
