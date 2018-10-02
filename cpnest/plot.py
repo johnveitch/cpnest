@@ -7,6 +7,7 @@ def plot_chain(x,name=None,filename=None):
     """
     fig=plt.figure(figsize=(4,3))
     plt.plot(x,',')
+    plt.grid()
     plt.xlabel('iteration')
     if name is not None:
         plt.ylabel(name)
@@ -16,13 +17,12 @@ def plot_chain(x,name=None,filename=None):
         plt.savefig(filename,bbox_inches='tight')
     plt.close()
 
-
 def plot_hist(x,name=None,filename=None):
     """
     Produce a histogram
     """
     fig=plt.figure(figsize=(4,3))
-    plt.hist(x,density=True,bins=int(len(x)/4))
+    plt.hist(x, density = True, facecolor = '0.5', bins=int(len(x)/20))
     plt.ylabel('probability density')
     if name is not None:
         plt.xlabel(name)
