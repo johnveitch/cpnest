@@ -41,6 +41,7 @@ class CPNest(object):
         self.verbose  = verbose
         self.output   = output
         self.poolsize = poolsize
+        self.posterior_samples = None
         
         if seed is None: self.seed=1234
         else:
@@ -92,10 +93,6 @@ class CPNest(object):
         """
         Run the sampler
         """
-        import numpy as np
-        import os
-        from .nest2pos import draw_posterior_many, redraw_mcmc_chain
-
         for each in self.process_pool:
             each.start()
         
@@ -104,28 +101,41 @@ class CPNest(object):
         for each in self.process_pool:
             each.join()
 
+        self.posterior_samples = self.get_posterior(filename=None)
         if self.verbose>1: self.plot()
 
-    def get_posterior(self):
+
+    def get_posterior(self, filename='posterior.dat'):
         """
         Returns posterior samples
 
+        Parameters
+        ----------
+        filename : string
+            File to save posterior to
+
         Returns
+        -------
         pos : `np.ndarray`
         """
+        import numpy as np
+        import os
+        from .nest2pos import draw_posterior_many
         import numpy.lib.recfunctions as rfn
         self.nested_samples = rfn.stack_arrays(
                 [self.NS.nested_samples[j].asnparray()
                     for j in range(len(self.NS.nested_samples))]
                 ,usemask=False)
-        self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
-        self.posterior_samples = np.array(self.posterior_samples)
+        posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        posterior_samples = np.array(posterior_samples)
         # TODO: Replace with something to output samples in whatever format
-        np.savetxt(os.path.join(
-            self.NS.output_folder,'posterior.dat'),
-            self.posterior_samples.ravel(),
-            header=' '.join(self.posterior_samples.dtype.names),
-            newline='\n',delimiter=' ')
+        if filename:
+            np.savetxt(os.path.join(
+                self.NS.output_folder,'posterior.dat'),
+                self.posterior_samples.ravel(),
+                header=' '.join(posterior_samples.dtype.names),
+                newline='\n',delimiter=' ')
+        return posterior_samples
 
     def plot(self):
         """
