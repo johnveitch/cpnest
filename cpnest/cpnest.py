@@ -29,7 +29,8 @@ class CPNest(object):
                  verbose    = 0,
                  seed       = None,
                  maxmcmc    = 100,
-                 nthreads   = None):
+                 nthreads   = None,
+                 nhamiltonian = 0):
         if nthreads is None:
             nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(nthreads))
@@ -56,20 +57,22 @@ class CPNest(object):
 
         self.consumer_pipes = []
         
-        # check for the number of threads requested bby the user and allocate the resources
-        # accordingly
+        for i in range(nthreads-nhamiltonian):
+            sampler = MetropolisHastingsSampler(self.user,
+                              maxmcmc,
+                              verbose   = verbose,
+                              output    = output,
+                              poolsize  = poolsize,
+                              seed      = self.seed+i,
+                              proposal  = DefaultProposalCycle()
+                              )
+            # We set up pipes between the nested sampling and the various sampler processes
+            consumer, producer = mp.Pipe(duplex=True)
+            self.consumer_pipes.append(consumer)
+            p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
+            self.process_pool.append(p)
         
-        if nthreads==1:
-            nhmc = nthreads
-            nmh  = 0
-        elif nthreads%2==0:
-            nhmc = nthreads/2
-            nmh  = nthreads/2
-        else:
-            nhmc = nthreads/2
-            nmh  = nthreads - nhmc
-        
-        for i in range(nhmc):
+        for i in range(nthreads-nhamiltonian,nthreads):
             sampler = HamiltonianMonteCarloSampler(self.user,
                               maxmcmc,
                               verbose  = verbose,
@@ -84,20 +87,6 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
             self.process_pool.append(p)
         
-        for i in range(nmh):
-            sampler = MetropolisHastingsSampler(self.user,
-                              maxmcmc,
-                              verbose   = verbose,
-                              output    = output,
-                              poolsize  = poolsize,
-                              seed      = self.seed+i+nhmc,
-                              proposal  = DefaultProposalCycle()
-                              )
-            # We set up pipes between the nested sampling and the various sampler processes
-            consumer, producer = mp.Pipe(duplex=True)
-            self.consumer_pipes.append(consumer)
-            p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
-            self.process_pool.append(p)
 
     def run(self):
         """
@@ -115,19 +104,28 @@ class CPNest(object):
         for each in self.process_pool:
             each.join()
 
-        import numpy.lib.recfunctions as rfn
-        self.nested_samples = rfn.stack_arrays([self.NS.nested_samples[j].asnparray() for j in range(len(self.NS.nested_samples))],usemask=False)
-        if self.verbose>=3:
-            
-            chain = [redraw_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,'mcmc_chain_%d.dat'%each.pid), names=True),verbose=self.verbose) for each in self.process_pool]
-            self.posterior_samples = rfn.stack_arrays(chain)
-            nssamps = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
-            self.posterior_samples = rfn.stack_arrays([self.posterior_samples,nssamps])
-        else:
-            self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
-        self.posterior_samples = np.array(self.posterior_samples)
-        np.savetxt(os.path.join(self.NS.output_folder,'posterior.dat'),self.posterior_samples.ravel(),header=' '.join(self.posterior_samples.dtype.names),newline='\n',delimiter=' ')
         if self.verbose>1: self.plot()
+
+    def get_posterior(self):
+        """
+        Returns posterior samples
+
+        Returns
+        pos : `np.ndarray`
+        """
+        import numpy.lib.recfunctions as rfn
+        self.nested_samples = rfn.stack_arrays(
+                [self.NS.nested_samples[j].asnparray()
+                    for j in range(len(self.NS.nested_samples))]
+                ,usemask=False)
+        self.posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        self.posterior_samples = np.array(self.posterior_samples)
+        # TODO: Replace with something to output samples in whatever format
+        np.savetxt(os.path.join(
+            self.NS.output_folder,'posterior.dat'),
+            self.posterior_samples.ravel(),
+            header=' '.join(self.posterior_samples.dtype.names),
+            newline='\n',delimiter=' ')
 
     def plot(self):
         """
