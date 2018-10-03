@@ -85,7 +85,7 @@ class Sampler(object):
         self.proposal.set_ensemble(self.evolution_points)
         # Now, run evolution so samples are drawn from actual prior
         for k in range(self.poolsize):
-            if self.verbose > 2: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from as the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
+            if self.verbose > 2: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
             _, _, p = next(self.yield_sample(-np.inf))
         
         if self.verbose > 2: sys.stderr.write("\n")
@@ -215,6 +215,11 @@ class HamiltonianMonteCarloSampler(Sampler):
                     sub_accepted += 1
                     oldparam = newparam
                 self.evolution_points.append(oldparam)
+#            print("acc: {0:f} sub counter = {1:d} {2:s} {3:f} {4:f}".format(self.proposal.log_J,
+#                                                                              sub_counter,
+#                                                                 oldparam,
+#                                                                 oldparam.logP,
+#                                                                 oldparam.logL))
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter

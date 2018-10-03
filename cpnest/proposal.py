@@ -292,7 +292,7 @@ class HamiltonianProposal(EnsembleEigenVector):
                               )
             # construct a LSQ spline interpolant
             self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
-            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
+#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
 
     def unit_normal(self, x):
         """
@@ -432,13 +432,13 @@ class ConstrainedLeapFrog(LeapFrog):
         dimension^-(1/4) based on
         http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
         """
-        self.dt = 3e-2*float(len(invM))**(-0.25)
+        self.dt = 3e-4*float(len(invM))**(-0.25)
 #        f = open("trajectory.txt","w")
 #        for j,k in enumerate(q0.names):
 #            f.write("%s\t"%k)
 #        f.write("barrier\t")
 #        f.write("logL\n")
-#        # Updating the momentum a half-step
+        # Updating the momentum a half-step
 #        for j,k in enumerate(q0.names):
 #            f.write("%e\t"%q0[k])
 #        f.write("%e\t"%logLmin)
@@ -469,14 +469,16 @@ class ConstrainedLeapFrog(LeapFrog):
             # reflect the momentum orthogonally to the surface
             logL = self.log_likelihood(q)
             q.logL = logL
+            if np.isfinite(logLmin):
                 
-            if (logL - logLmin) <= 0:
-                normal = self.unit_normal(q)
-                p = p - 2.0*np.dot(p,normal)*normal
+                if (logL - logLmin) <= 0:
+                    normal = self.unit_normal(q)
+                    p = p - 2.0*np.dot(p,normal)*normal
+                else:
+                    # take a full momentum step
+                    p += - self.dt * dV
             else:
-                # take a full momentum step
                 p += - self.dt * dV
-
 #            for j,k in enumerate(q.names):
 #                f.write("%e\t"%q[k])
 #            f.write("%e\t"%logLmin)
