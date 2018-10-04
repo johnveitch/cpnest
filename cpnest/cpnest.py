@@ -116,7 +116,7 @@ class CPNest(object):
 
         Returns
         -------
-        pos : `np.ndarray`
+        pos : :obj:`numpy.ndarray`
         """
         import numpy as np
         import os
