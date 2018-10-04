@@ -30,10 +30,13 @@ class CPNest(object):
                  seed       = None,
                  maxmcmc    = 100,
                  nthreads   = None,
-                 nhamiltonian = 0):
+                 nhamiltonian = 0,
+                 resume_file  = None):
         if nthreads is None:
-            nthreads = mp.cpu_count()
-        print('Running with {0} parallel threads'.format(nthreads))
+            self.nthreads = mp.cpu_count()
+        else:
+            self.nthreads = nthreads
+        print('Running with {0} parallel threads'.format(self.nthreads))
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
@@ -47,47 +50,67 @@ class CPNest(object):
         else:
             self.seed=seed
         
-        self.NS = NestedSampler(self.user,
-                                nlive          = nlive,
-                                output         = output,
-                                verbose        = verbose,
-                                seed           = self.seed,
-                                prior_sampling = False)
-
         self.process_pool = []
+        # set up the communication pipes
+        self.producer_pipes, self.consumer_pipes = self.set_communications()
+        # instantiate the nested sampler class
+        if resume_file is None:
+            self.NS = NestedSampler(self.user,
+                        nlive          = nlive,
+                        output         = output,
+                        verbose        = verbose,
+                        seed           = self.seed,
+                        prior_sampling = False,
+                        resume_file    = None)
+        else:
+            self.NS = NestedSampler.resume(resume_file)
 
-        self.consumer_pipes = []
-        
-        for i in range(nthreads-nhamiltonian):
-            sampler = MetropolisHastingsSampler(self.user,
-                              maxmcmc,
-                              verbose   = verbose,
-                              output    = output,
-                              poolsize  = poolsize,
-                              seed      = self.seed+i,
-                              proposal  = DefaultProposalCycle()
-                              )
-            # We set up pipes between the nested sampling and the various sampler processes
-            consumer, producer = mp.Pipe(duplex=True)
-            self.consumer_pipes.append(consumer)
-            p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
+        # instantiate the sampler class
+        for i in range(self.nthreads-nhamiltonian):
+            if resume_file is None:
+                sampler = MetropolisHastingsSampler(self.user,
+                                  maxmcmc,
+                                  verbose     = verbose,
+                                  output      = output,
+                                  poolsize    = poolsize,
+                                  seed        = self.seed+i,
+                                  proposal    = DefaultProposalCycle(),
+                                  resume_file = None
+                                  )
+            else:
+                sampler = MetropolisHastingsSampler.resume(resume_file)
+
+            p = mp.Process(target=sampler.produce_sample, args=(self.producer_pipes[i], self.NS.logLmin, ))
             self.process_pool.append(p)
         
-        for i in range(nthreads-nhamiltonian,nthreads):
-            sampler = HamiltonianMonteCarloSampler(self.user,
-                              maxmcmc,
-                              verbose  = verbose,
-                              output   = output,
-                              poolsize = poolsize,
-                              seed     = self.seed+i,
-                              proposal = HamiltonianProposalCycle(model=self.user)
-                              )
-            # We set up pipes between the nested sampling and the various sampler processes
-            consumer, producer = mp.Pipe(duplex=True)
-            self.consumer_pipes.append(consumer)
-            p = mp.Process(target=sampler.produce_sample, args=(producer, self.NS.logLmin, ))
+        for i in range(self.nthreads-nhamiltonian,self.nthreads):
+            if resume_file is None:
+                sampler = HamiltonianMonteCarloSampler(self.user,
+                                  maxmcmc,
+                                  verbose     = verbose,
+                                  output      = output,
+                                  poolsize    = poolsize,
+                                  seed        = self.seed+i,
+                                  proposal    = HamiltonianProposalCycle(model=self.user),
+                                  resume_file = None
+                                  )
+            else:
+                sampler = HamiltonianMonteCarloSampler.resume(resume_file)
+            p = mp.Process(target=sampler.produce_sample, args=(self.producer_pipes[i], self.NS.logLmin, ))
             self.process_pool.append(p)
-        
+
+    def set_communications(self):
+        """
+        Sets up the `multiprocessing.Pipe` communication
+        channels
+        """
+        producer_pipes = []
+        consumer_pipes = []
+        for i in range(self.nthreads):
+            consumer, producer = mp.Pipe(duplex=True)
+            producer_pipes.append(producer)
+            consumer_pipes.append(consumer)
+        return producer_pipes, consumer_pipes
 
     def run(self):
         """

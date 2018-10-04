@@ -10,6 +10,8 @@ from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
 
+import pickle
+
 class Sampler(object):
     """
     Sampler class.
@@ -37,13 +39,22 @@ class Sampler(object):
     
     """
 
-    def __init__(self, usermodel, maxmcmc, seed=None, output=None, verbose=False, poolsize=1000, proposal=None):
+    def __init__(self,
+                 usermodel,
+                 maxmcmc,
+                 seed        = None,
+                 output      = None,
+                 verbose     = False,
+                 poolsize    = 1000,
+                 proposal    = None,
+                 resume_file = None):
 
         self.seed = seed
         self.user = usermodel
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
-
+        self.resume_file = resume_file
+        
         if proposal is None:
             self.proposal = DefaultProposalCycle()
         else:
@@ -85,10 +96,10 @@ class Sampler(object):
         self.proposal.set_ensemble(self.evolution_points)
         # Now, run evolution so samples are drawn from actual prior
         for k in range(self.poolsize):
-            if self.verbose > 2: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
+            if self.verbose > 1: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
             _, _, p = next(self.yield_sample(-np.inf))
         
-        if self.verbose > 2: sys.stderr.write("\n")
+        if self.verbose > 1: sys.stderr.write("\n")
         if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
@@ -165,6 +176,16 @@ class Sampler(object):
             sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0
+
+    def checkpoint(self):
+        """
+        Checkpoint its internal state
+        """
+        pickle.dump(self, self.resume_file)
+
+    @classmethod
+    def resume(cls, filename):
+        return pickle.load(filename)
 
 class MetropolisHastingsSampler(Sampler):
     def yield_sample(self, logLmin):

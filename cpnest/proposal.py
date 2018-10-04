@@ -586,10 +586,10 @@ class ConstrainedLeapFrog(LeapFrog):
                     p[j] *= -1
             dV = self.gradient(q)
             
-            # if the trajectory led us outside the likelihood bound,
-            # reflect the momentum orthogonally to the surface
             logL = self.log_likelihood(q)
             q.logL = logL
+            # if the trajectory led us outside the likelihood bound,
+            # reflect the momentum orthogonally to the surface
             if np.isfinite(logLmin):
                 
                 if (logL - logLmin) <= 0:

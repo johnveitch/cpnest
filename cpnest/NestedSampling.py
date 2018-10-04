@@ -1,6 +1,7 @@
 from __future__ import division, print_function
 import sys
 import os
+import pickle
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import Lock
@@ -18,19 +19,19 @@ from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 
-try:
-    import copyreg
-except ImportError:
-    import copy_reg as copyreg
-
-
-def _pickle_method(m):
-    if m.im_self is None:
-        return getattr, (m.im_class, m.im_func.func_name)
-    else:
-        return getattr, (m.im_self, m.im_func.func_name)
-
-copyreg.pickle(types.MethodType, _pickle_method)
+#try:
+#    import copyreg
+#except ImportError:
+#    import copy_reg as copyreg
+#
+#
+#def _pickle_method(m):
+#    if m.im_self is None:
+#        return getattr, (m.im_class, m.im_func.func_name)
+#    else:
+#        return getattr, (m.im_self, m.im_func.func_name)
+#
+#copyreg.pickle(types.MethodType, _pickle_method)
 
 class _NSintegralState(object):
   """
@@ -140,11 +141,13 @@ class NestedSampler(object):
                  verbose        = 1,
                  seed           = 1,
                  prior_sampling = False,
-                 stopping       = 0.1):
+                 stopping       = 0.1,
+                 resume_file    = None):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
         self.model=usermodel
+        self.resume_file = resume_file
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose = verbose
@@ -299,3 +302,12 @@ class NestedSampler(object):
           self.state.plot(os.path.join(self.output_folder,self.outfilename+'.png'))
         return self.state.logZ
 
+    def checkpoint(self):
+        """
+        Checkpoint its internal state
+        """
+        pickle.dump(self, self.resume_file)
+
+    @classmethod
+    def resume(cls, filename):
+        return pickle.load(filename)
