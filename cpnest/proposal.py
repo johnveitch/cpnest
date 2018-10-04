@@ -23,11 +23,11 @@ class Proposal(object):
 
         Parameters
         ----------
-        old : `cpnest.parameter.LivePoint`
+        old : :class:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
-        out: `cpnest.parameter.LivePoint`
+        out: :class:`cpnest.parameter.LivePoint`
         """
         pass
 
@@ -84,7 +84,7 @@ class ProposalCycle(EnsembleProposal):
     def set_ensemble(self,ensemble):
         """
         Updates the ensemble statistics
-        by calling it on each `EnsembleProposal`
+        by calling it on each :class:`EnsembleProposal`
         """
         self.ensemble=ensemble
         for p in self.proposals:
@@ -106,11 +106,11 @@ class EnsembleWalk(EnsembleProposal):
         """
         Parameters
         ----------
-        old : `cpnest.parameter.LivePoint`
+        old : :class:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
-        out: `cpnest.parameter.LivePoint`
+        out: :class:`cpnest.parameter.LivePoint`
         """
         subset = sample(self.ensemble,self.Npoints)
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
@@ -128,11 +128,11 @@ class EnsembleStretch(EnsembleProposal):
         """
         Parameters
         ----------
-        old : `cpnest.parameter.LivePoint`
+        old : :class:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
-        out: `cpnest.parameter.LivePoint`
+        out: :class:`cpnest.parameter.LivePoint`
         """
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
@@ -160,11 +160,11 @@ class DifferentialEvolution(EnsembleProposal):
         """
         Parameters
         ----------
-        old : `cpnest.parameter.LivePoint`
+        old : :class:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
-        out: `cpnest.parameter.LivePoint`
+        out: :class:`cpnest.parameter.LivePoint`
         """
         a,b = sample(self.ensemble,2)
         sigma = 1e-4 # scatter around difference vector by this factor
@@ -212,11 +212,11 @@ class EnsembleEigenVector(EnsembleProposal):
         Propose a jump along a random eigenvector
         Parameters
         ----------
-        old : `cpnest.parameter.LivePoint`
+        old : :class:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
-        out: `cpnest.parameter.LivePoint`
+        out: :class:`cpnest.parameter.LivePoint`
         """
         out = old
         # pick a random eigenvector
@@ -230,8 +230,8 @@ class EnsembleEigenVector(EnsembleProposal):
 class DefaultProposalCycle(ProposalCycle):
     """
     A default proposal cycle that uses the
-    `cpnest.proposal.EnsembleWalk`, `cpnest.proposal.EnsembleStretch`,
-    `cpnest.proposal.DifferentialEvolution`, `cpnest.proposal.EnsembleEigenVector`
+    :class:`cpnest.proposal.EnsembleWalk`, `cpnest.proposal.EnsembleStretch`,
+    :class:`cpnest.proposal.DifferentialEvolution`, `cpnest.proposal.EnsembleEigenVector`
     ensemble proposals.
     """
     def __init__(self):
@@ -249,11 +249,11 @@ class DefaultProposalCycle(ProposalCycle):
 class HamiltonianProposalCycle(ProposalCycle):
     def __init__(self, model=None):
         """
-        A proposal cycle that uses the hamiltonian `ConstrainedLeapFrog`
+        A proposal cycle that uses the hamiltonian :class:`ConstrainedLeapFrog`
         proposal.
-        Requires a `cpnest.Model` to be passed for access to the user-defined
-        `cpnest.Model.force` (the gradient of `cpnest.Model.potential`) and
-        `cpnest.Model.log_likelihood` to define the reflective
+        Requires a :class:`cpnest.Model` to be passed for access to the user-defined
+        :class:`cpnest.Model.force` (the gradient of `cpnest.Model.potential`) and
+        :class:`cpnest.Model.log_likelihood` to define the reflective
         """
         weights = [1]
         proposals = [ConstrainedLeapFrog(model=model)]
@@ -270,7 +270,7 @@ class HamiltonianProposal(EnsembleEigenVector):
     def __init__(self, model=None, **kwargs):
         """
         Initialises the class with the kinetic
-        energy and the `cpnest.Model.potential`.
+        energy and the :class:`cpnest.Model.potential`.
         """
         super(HamiltonianProposal, self).__init__(**kwargs)
         self.T  = self.kinetic_energy
@@ -347,12 +347,12 @@ class HamiltonianProposal(EnsembleEigenVector):
         directional derivatives of the likelihood
         Parameters
         ----------
-        q : `cpnest.parameter.LivePoint`
+        q : :class:`cpnest.parameter.LivePoint`
             position
         
         Returns
         ----------
-        n: `np.ndarray` unit normal to the logLmin contour evaluated at q
+        n: :class:`numpy.ndarray` unit normal to the logLmin contour evaluated at q
         """
         v = np.array([self.normal[i](q[n]) for i,n in enumerate(q.names)])
         v[np.isnan(v)] = -1.0
@@ -364,12 +364,12 @@ class HamiltonianProposal(EnsembleEigenVector):
         return the gradient of the potential function as numpy ndarray
         Parameters
         ----------
-        q : `cpnest.parameter.LivePoint`
+        q : :class:`cpnest.parameter.LivePoint`
             position
         
         Returns
         ----------
-        dV: `np.ndarray` gradient evaluated at q
+        dV: :class:`numpy.ndarray` gradient evaluated at q
         """
         dV = self.dV(q)
         return dV.view(np.float64)
@@ -395,7 +395,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         kinetic energy part for the Hamiltonian.
         Parameters
         ----------
-        p : `np.ndarray`
+        p : :class:`numpy.ndarray`
             momentum
         
         Returns
@@ -413,7 +413,7 @@ class LeapFrog(HamiltonianProposal):
         """
         Parameters
         ----------
-        model : `cpnest.Model`
+        model : :class:`cpnest.Model`
         """
         super(LeapFrog, self).__init__(model=model, **kwargs)
         self.dV = model.force
@@ -425,12 +425,12 @@ class LeapFrog(HamiltonianProposal):
         
         Parameters
         ----------
-        q0 : `cpnest.parameter.LivePoint`
+        q0 : :class:`cpnest.parameter.LivePoint`
             position
         
         Returns
         ----------
-        q: `cpnest.parameter.LivePoint`
+        q: :class:`cpnest.parameter.LivePoint`
             position
         """
         # generate a canonical momentum
@@ -453,15 +453,15 @@ class LeapFrog(HamiltonianProposal):
         
         Parameters
         ----------
-        p0 : `np.ndarray`
+        p0 : :class:`numpy.ndarray`
             momentum
-        q0 : `cpnest.parameter.LivePoint`
+        q0 : :class:`cpnest.parameter.LivePoint`
             position
         
         Returns
         ----------
-        p: `np.ndarray` updated momentum vector
-        q: `cpnest.parameter.LivePoint`
+        p: :class:`numpy.ndarray` updated momentum vector
+        q: :class:`cpnest.parameter.LivePoint`
             position
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
@@ -504,7 +504,7 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         Parameters
         ----------
-        model : `cpnest.Model`
+        model : :class:`cpnest.Model`
         """
         super(ConstrainedLeapFrog, self).__init__(model=model, **kwargs)
         self.log_likelihood = model.log_likelihood
@@ -515,14 +515,14 @@ class ConstrainedLeapFrog(LeapFrog):
         
         Parameters
         ----------
-        q0 : `cpnest.parameter.LivePoint`
+        q0 : :class:`cpnest.parameter.LivePoint`
             position
         
         logLmin: hard likelihood boundary
         
         Returns
         ----------
-        q: `cpnest.parameter.LivePoint`
+        q: :class:`cpnest.parameter.LivePoint`
             position
         """
         return super(ConstrainedLeapFrog,self).get_sample(q0,logLmin)
@@ -534,15 +534,15 @@ class ConstrainedLeapFrog(LeapFrog):
         
         Parameters
         ----------
-        p0 : `np.ndarray`
+        p0 : :class:`numpy.ndarray`
             momentum
-        q0 : `cpnest.parameter.LivePoint`
+        q0 : :class:`cpnest.parameter.LivePoint`
             position
         
         Returns
         ----------
-        p: `np.ndarray` updated momentum vector
-        q: `cpnest.parameter.LivePoint`
+        p: :class:`numpy.ndarray` updated momentum vector
+        q: :class:`cpnest.parameter.LivePoint`
             position
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
