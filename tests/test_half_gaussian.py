@@ -21,8 +21,9 @@ class HalfGaussianModel(cpnest.model.Model):
 
     def log_likelihood(self,p):
         return self.distr.logpdf(p['x'])
-        #return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
 
+    def force(self,x):
+        return np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
 
 class HalfGaussianTestCase(unittest.TestCase):
     """

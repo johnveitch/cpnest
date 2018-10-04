@@ -19,6 +19,8 @@ class GaussianModel(cpnest.model.Model):
         if not self.in_bounds(p): return -np.inf
         return -np.log(p['sigma']) - np.log(10) - np.log(0.95)
 
+    def force(self,x):
+        return np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
 
 class GaussianTestCase(unittest.TestCase):
     """
