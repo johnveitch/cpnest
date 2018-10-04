@@ -68,7 +68,7 @@ class CPNest(object):
         else:
             nhmc = nthreads/2
             nmh  = nthreads - nhmc
-        
+
         for i in range(nhmc):
             sampler = HamiltonianMonteCarloSampler(self.user,
                               maxmcmc,
