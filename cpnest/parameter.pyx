@@ -35,7 +35,7 @@ cdef class LivePoint:
         return (rebuild_livepoint, (self.names,),self.__getstate__()) 
     
     def __repr__(self):
-        return 'LivePoint({0:s}, d={1:s}, logL={2:f}, logP={3:f})'.format(str(self.names),str(self.values),self.logL,self.logP)
+        return self.__class__.__name__+'({0:s}, d={1:s}, logL={2:f}, logP={3:f})'.format(str(self.names),str(self.values),self.logL,self.logP)
 
     def __getstate__(self):
       return (self.logL,self.logP,self.values)

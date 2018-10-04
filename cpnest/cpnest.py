@@ -2,9 +2,25 @@
 # coding: utf-8
 
 import multiprocessing as mp
+from ctypes import c_double, c_int
+import numpy as np
+import os
+import sys
+import signal
+
+from multiprocessing.sharedctypes import Value
+from multiprocessing import Lock
+from multiprocessing.managers import SyncManager
+
 import cProfile
 import time
 import os
+
+class CheckPoint(Exception):
+    pass
+
+def sighandler(signal, frame):
+    raise CheckPoint
 
 class CPNest(object):
     """
@@ -30,8 +46,7 @@ class CPNest(object):
                  seed       = None,
                  maxmcmc    = 100,
                  nthreads   = None,
-                 nhamiltonian = 0,
-                 resume_file  = None):
+                 nhamiltonian = 0):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -45,29 +60,31 @@ class CPNest(object):
         self.output   = output
         self.poolsize = poolsize
         self.posterior_samples = None
+        self.manager = RunManager(nthreads=nthreads)
+        self.manager.start()
         
         if seed is None: self.seed=1234
         else:
             self.seed=seed
         
         self.process_pool = []
-        # set up the communication pipes
-        self.producer_pipes, self.consumer_pipes = self.set_communications()
         # instantiate the nested sampler class
-        if resume_file is None:
+        resume_file = os.path.join(output, "nested_sampler_resume.pkl")
+        if not os.path.exists(resume_file):
             self.NS = NestedSampler(self.user,
                         nlive          = nlive,
                         output         = output,
                         verbose        = verbose,
                         seed           = self.seed,
                         prior_sampling = False,
-                        resume_file    = None)
+                        manager        = self.manager)
         else:
-            self.NS = NestedSampler.resume(resume_file)
+            self.NS = NestedSampler.resume(resume_file, self.manager)
 
         # instantiate the sampler class
         for i in range(self.nthreads-nhamiltonian):
-            if resume_file is None:
+            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+            if not os.path.exists(resume_file):
                 sampler = MetropolisHastingsSampler(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
@@ -75,16 +92,18 @@ class CPNest(object):
                                   poolsize    = poolsize,
                                   seed        = self.seed+i,
                                   proposal    = DefaultProposalCycle(),
-                                  resume_file = None
+                                  resume_file = resume_file,
+                                  manager     = self.manager
                                   )
             else:
-                sampler = MetropolisHastingsSampler.resume(resume_file)
+                sampler = MetropolisHastingsSampler.resume(resume_file, self.manager)
 
-            p = mp.Process(target=sampler.produce_sample, args=(self.producer_pipes[i], self.NS.logLmin, ))
+            p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
         
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
-            if resume_file is None:
+            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+            if not os.path.exists(resume_file):
                 sampler = HamiltonianMonteCarloSampler(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
@@ -92,40 +111,37 @@ class CPNest(object):
                                   poolsize    = poolsize,
                                   seed        = self.seed+i,
                                   proposal    = HamiltonianProposalCycle(model=self.user),
-                                  resume_file = None
+                                  resume_file = resume_file,
+                                  manager     = self.manager
                                   )
             else:
                 sampler = HamiltonianMonteCarloSampler.resume(resume_file)
-            p = mp.Process(target=sampler.produce_sample, args=(self.producer_pipes[i], self.NS.logLmin, ))
+            p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
-
-    def set_communications(self):
-        """
-        Sets up the `multiprocessing.Pipe` communication
-        channels
-        """
-        producer_pipes = []
-        consumer_pipes = []
-        for i in range(self.nthreads):
-            consumer, producer = mp.Pipe(duplex=True)
-            producer_pipes.append(producer)
-            consumer_pipes.append(consumer)
-        return producer_pipes, consumer_pipes
 
     def run(self):
         """
         Run the sampler
         """
+        signal.signal(signal.SIGTERM, sighandler)
+        signal.signal(signal.SIGQUIT, sighandler)
+        signal.signal(signal.SIGINT, sighandler)
+        
+        #self.p_ns.start()
         for each in self.process_pool:
             each.start()
-        
-        self.NS.nested_sampling_loop(self.consumer_pipes)
-
-        for each in self.process_pool:
-            each.join()
+        try:
+            self.NS.nested_sampling_loop()
+            for each in self.process_pool:
+                each.join()
+        except CheckPoint:
+            self.checkpoint()
+            sys.exit()
 
         self.posterior_samples = self.get_posterior(filename=None)
         if self.verbose>1: self.plot()
+    
+        #TODO: Clean up the resume pickles
 
 
     def get_posterior(self, filename='posterior.dat'):
@@ -146,8 +162,8 @@ class CPNest(object):
         from .nest2pos import draw_posterior_many
         import numpy.lib.recfunctions as rfn
         self.nested_samples = rfn.stack_arrays(
-                [self.NS.nested_samples[j].asnparray()
-                    for j in range(len(self.NS.nested_samples))]
+                [s.asnparray()
+                    for s in self.NS.nested_samples]
                 ,usemask=False)
         posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
         posterior_samples = np.array(posterior_samples)
@@ -189,3 +205,34 @@ class CPNest(object):
             self.process_pool.append(p)
         for each in self.process_pool:
             each.start()
+
+    def checkpoint(self):
+        self.manager.checkpoint_flag=1
+
+class RunManager(SyncManager):
+    def __init__(self, *args, nthreads=None, **kwargs):
+        super(RunManager,self).__init__(*args, **kwargs)
+        self.nconnected=0
+        self.producer_pipes=None
+        self.consumer_pipes=None
+        self.logLmin=None
+        self.nthreads=nthreads
+
+    def start(self):
+        super(RunManager, self).start()
+        self.logLmin = mp.Value(c_double,-np.inf)
+        self.checkpoint_flag=mp.Value(c_int,0)
+        self.producer_pipes = self.list()
+        self.consumer_pipes = self.list()
+        for i in range(self.nthreads):
+            consumer, producer = mp.Pipe(duplex=True)
+            self.producer_pipes.append(producer)
+            self.consumer_pipes.append(consumer)
+
+    def connect_producer(self):
+        """
+        Returns the producer's end of the pipe
+        """
+        self.nconnected+=1
+        return self.producer_pipes[self.nconnected-1]
+

@@ -4,7 +4,6 @@ import os
 import pickle
 import numpy as np
 import multiprocessing as mp
-from multiprocessing import Lock
 from numpy import logaddexp, exp
 from numpy import inf
 from math import isnan
@@ -12,26 +11,11 @@ try:
     from queue import Empty
 except ImportError:
     from Queue import Empty # For python 2 compatibility
-from multiprocessing.sharedctypes import Value
-from ctypes import c_int, c_double
 import types
 from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
-
-#try:
-#    import copyreg
-#except ImportError:
-#    import copy_reg as copyreg
-#
-#
-#def _pickle_method(m):
-#    if m.im_self is None:
-#        return getattr, (m.im_class, m.im_func.func_name)
-#    else:
-#        return getattr, (m.im_self, m.im_func.func_name)
-#
-#copyreg.pickle(types.MethodType, _pickle_method)
+from .cpnest import CheckPoint, RunManager
 
 class _NSintegralState(object):
   """
@@ -136,18 +120,18 @@ class NestedSampler(object):
     """
 
     def __init__(self,usermodel,
+                 manager        = None,
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
                  seed           = 1,
                  prior_sampling = False,
-                 stopping       = 0.1,
-                 resume_file    = None):
+                 stopping       = 0.1):
         """
         Initialise all necessary arguments and variables for the algorithm
         """
         self.model=usermodel
-        self.resume_file = resume_file
+        self.manager = manager
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose = verbose
@@ -160,34 +144,42 @@ class NestedSampler(object):
         self.condition = np.inf
         self.worst = 0
         self.logLmax = -np.inf
+        self.logLmin = self.manager.logLmin
         self.iteration = 0
         self.nested_samples=[]
         self.logZ=None
         self.state = _NSintegralState(self.Nlive)
         sys.stdout.flush()
         self.output_folder = output
-        self.output,self.evidence_out,self.checkpoint = self.setup_output(output)
+        self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
         header = open(os.path.join(output,'header.txt'),'w')
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
-        self.logLmin = Value(c_double,-np.inf,lock=Lock())
+        self.initialised=False
 
     def setup_output(self,output):
         """
         Set up the output folder
         """
         os.system("mkdir -p {0!s}".format(output))
-        self.outfilename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
-        self.outputfile=open(os.path.join(output,self.outfilename),"w")
-        self.outputfile.write('{0:s}\n'.format(self.model.header().rstrip()))
-        self.outputfile.flush()
-        return self.outputfile,open(os.path.join(output,self.outfilename+"_evidence.txt"), "w" ),os.path.join(output,self.outfilename+"_resume")
+        chain_filename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
+        output_file   = os.path.join(output,chain_filename)
+        evidence_file = os.path.join(output,chain_filename+"_evidence.txt")
+        resume_file  = os.path.join(output,"nested_sampler_resume.pkl")
+        
+        return output_file, evidence_file, resume_file
 
-    def output_sample(self,sample):
-        self.outputfile.write('{0:s}\n'.format(self.model.strsample(sample).rstrip()))
-        self.outputfile.flush()
-        self.nested_samples.append(sample)
+
+    def write_chain_to_file(self):
+        with open(self.output_file,"w") as f:
+            f.write('{0:s}\n'.format(self.model.header().rstrip()))
+            for ns in self.nested_samples:
+                f.write('{0:s}\n'.format(self.model.strsample(ns).rstrip()))
+
+    def write_evidence_to_file(self):
+        with open(self.evidence_file,"w") as f:
+            f.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
 
     def setup_random_seed(self,seed):
         """
@@ -196,17 +188,17 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self, consumer_pipes):
+    def consume_sample(self):
         """
         consumes a sample from the shared queues and updates the evidence
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(consumer_pipes))
+        logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
-            consumer_pipes[k].send(self.params[k])
-            self.output_sample(self.params[k])
+            self.manager.consumer_pipes[k].send(self.params[k])
+            self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
@@ -216,15 +208,15 @@ class NestedSampler(object):
             loops = 0
             while(True):
                 loops += 1
-                self.acceptance, self.jumps, proposed = consumer_pipes[self.queue_counter].recv()
+                self.acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
                 if proposed.logL > self.logLmin.value:
                     # replace worst point with new one
                     self.params[k]=proposed
-                    self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
+                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     break
                 else:
                     # resend it to the producer
-                    consumer_pipes[k].send(self.params[k])
+                    self.manager.consumer_pipes[k].send(self.params[k])
                     
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
@@ -242,72 +234,101 @@ class NestedSampler(object):
         self.logLmax = np.max(self.params[-1].logL)
         return np.float128(self.logLmin.value)
 
-    def nested_sampling_loop(self, consumer_pipes):
-        """
-        main nested sampling loop
-        """
+    def reset(self):
         # send all live points to the samplers for start
         i = 0
         while i < self.Nlive:
-            for j in range(len(consumer_pipes)): consumer_pipes[j].send(self.model.new_point())
-            for j in range(len(consumer_pipes)):
+            for j in range(self.manager.nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
+            for j in range(self.manager.nthreads):
                 while i<self.Nlive:
-                    self.acceptance,self.jumps,self.params[i] = consumer_pipes[self.queue_counter].recv()
-                    self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
+                    self.acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
+                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
                         i+=1
                         break
-
-
             if self.verbose:
                 sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
                 sys.stderr.flush()
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
+        self.initialised=True
+    
+    def nested_sampling_loop(self):
+        """
+        main nested sampling loop
+        """
+        if not self.initialised:
+            self.reset()
         if self.prior_sampling:
             for i in range(self.Nlive):
-                self.output_sample(self.params[i])
-            self.output.close()
-            self.evidence_out.close()
+                self.nested_samples.append(self.params[i])
+            self.write_chain_to_file()
+            self.write_evidence_to_file()
             self.logLmin.value = np.inf
+            for c in consumer_pipes:
+                c.send(None)
             print("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
 
-        while self.condition > self.tolerance:
-            self.consume_sample(consumer_pipes)
+        try:
+            while self.condition > self.tolerance:
+                self.consume_sample()
+        except CheckPoint:
+            self.checkpoint()
+            sys.exit()
 
 	    # Signal worker threads to exit
         self.logLmin.value = np.inf
-        for c in consumer_pipes:
+        for c in self.manager.consumer_pipes:
             c.send(None)
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
         for i,p in enumerate(self.params):
             self.state.increment(p.logL,nlive=self.Nlive-i)
-            self.output_sample(p)
- 
+            self.nested_samples.append(p)
+
         # Refine evidence estimate
         self.state.finalise()
         self.logZ = self.state.logZ
-
-        self.output.close()
-        self.evidence_out.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
-        self.evidence_out.close()
+        # output the chain and evidence
+        self.write_chain_to_file()
+        self.write_evidence_to_file()
         print('Final evidence: {0:0.2f}\nInformation: {1:.2f}'.format(self.state.logZ,self.state.info))
         
         # Some diagnostics
         if self.verbose>1 :
-          self.state.plot(os.path.join(self.output_folder,self.outfilename+'.png'))
-        return self.state.logZ
+          self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
+        return self.state.logZ, self.nested_samples
 
     def checkpoint(self):
         """
         Checkpoint its internal state
         """
-        pickle.dump(self, self.resume_file)
+        print('Checkpointing nested sampling')
+        with open(self.resume_file,"wb") as f:
+            pickle.dump(self, f)
+        sys.exit(0)
 
     @classmethod
-    def resume(cls, filename):
-        return pickle.load(filename)
+    def resume(cls, filename, manager):
+        print('Resuming NestedSampler from '+filename)
+        with open(filename,"rb") as f:
+            obj = pickle.load(f)
+        obj.manager=manager
+        obj.logLmin = obj.manager.logLmin
+        obj.logLmin.value = obj.llmin
+        del obj.__dict__['llmin']
+        return(obj)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['llmin']=self.logLmin.value
+        # Remove the unpicklable entries.
+        del state['logLmin']
+        del state['manager']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__ = state

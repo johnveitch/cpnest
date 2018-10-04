@@ -5,12 +5,16 @@ import numpy as np
 from math import log
 from collections import deque
 from random import random,randrange
+import signal
 
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
+from .cpnest import CheckPoint, RunManager
 
 import pickle
+__checkpoint_flag = False
+
 
 class Sampler(object):
     """
@@ -47,13 +51,16 @@ class Sampler(object):
                  verbose     = False,
                  poolsize    = 1000,
                  proposal    = None,
-                 resume_file = None):
+                 resume_file = None,
+                 manager     = None):
 
         self.seed = seed
         self.user = usermodel
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
         self.resume_file = resume_file
+        self.manager = manager
+        self.logLmin = self.manager.logLmin
         
         if proposal is None:
             self.proposal = DefaultProposalCycle()
@@ -73,6 +80,7 @@ class Sampler(object):
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
         self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output, if requested
+        self.producer_pipe = self.manager.connect_producer()
         
     def reset(self):
         """
@@ -121,44 +129,42 @@ class Sampler(object):
         
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
-#        if self.verbose >=3:
-#            if self.counter%(self.poolsize) == 0:
-#                if len(self.samples) > 2*self.maxmcmc:
-#                    import numpy.lib.recfunctions as rfn
-#                    print("computing actual ACF\n")
-#                    mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray() for j in range(0,len(self.samples))],usemask=False)
-#                    print mcmc_samples.dtype.names
-#                    for n in mcmc_samples.dtype.names:
-#                        if n!='logL' and n!='logPrior':
-#                            print mcmc_samples[n].dtype
-#                            acf = 2.0*autocorrelation(mcmc_samples[n]).cumsum()-1.0
-#                            print "n",acl(acf),self.Nmcmc
+
         return self.Nmcmc
 
-    def produce_sample(self, producer_pipe, logLmin):
+    def produce_sample(self):
+        try:
+            self._produce_sample()
+        except CheckPoint:
+            self.checkpoint()
+    
+    def _produce_sample(self):
         """
         main loop that generates samples and puts them in the queue for the nested sampler object
         """
-
         if not self.initialised:
-          self.reset()
+            self.reset()
 
         self.counter=1
-        
+        __checkpoint_flag=False
         while True:
-            if logLmin.value==np.inf:
+            if self.manager.checkpoint_flag.value:
+                self.checkpoint()
+                sys.exit()
+            
+            if self.logLmin.value==np.inf:
                 break
             
-            p = producer_pipe.recv()
+            p = self.producer_pipe.recv()
 
             if p is None:
                 break
             
             self.evolution_points.append(p)
-            (acceptance,Nmcmc,outParam) = next(self.yield_sample(logLmin.value))
+            (acceptance,Nmcmc,outParam) = next(self.yield_sample(self.logLmin.value))
 
             # Send the sample to the Nested Sampler
-            producer_pipe.send((acceptance,Nmcmc,outParam))
+            self.producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize//10))==0:
                 self.proposal.set_ensemble(self.evolution_points)
@@ -181,11 +187,32 @@ class Sampler(object):
         """
         Checkpoint its internal state
         """
-        pickle.dump(self, self.resume_file)
+        print('Checkpointing Sampler')
+        with open(self.resume_file, "wb") as f:
+            pickle.dump(self, f)
+        sys.exit(0)
 
     @classmethod
-    def resume(cls, filename):
-        return pickle.load(filename)
+    def resume(cls, resume_file, manager):
+        print('Resuming Sampler from '+resume_file)
+        with open(resume_file, "rb") as f:
+            obj = pickle.load(f)
+        obj.manager = manager
+        obj.logLmin = obj.manager.logLmin
+        obj.producer_pipe = obj.manager.connect_producer()
+        return(obj)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Remove the unpicklable entries.
+        del state['logLmin']
+        del state['manager']
+        del state['producer_pipe']
+        return state
+    
+    def __setstate__(self, state):
+        self.__dict__ = state
+        self.manager = None
 
 class MetropolisHastingsSampler(Sampler):
     def yield_sample(self, logLmin):
