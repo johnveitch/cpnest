@@ -213,8 +213,12 @@ class RunManager(SyncManager):
     def __init__(self, nthreads=None, **kwargs):
         super(RunManager,self).__init__(**kwargs)
         self.nconnected=0
-        self.producer_pipes=None
-        self.consumer_pipes=None
+        self.producer_pipes = list()
+        self.consumer_pipes = list()
+        for i in range(nthreads):
+            consumer, producer = mp.Pipe(duplex=True)
+            self.producer_pipes.append(producer)
+            self.consumer_pipes.append(consumer)
         self.logLmin=None
         self.nthreads=nthreads
 
@@ -222,12 +226,6 @@ class RunManager(SyncManager):
         super(RunManager, self).start()
         self.logLmin = mp.Value(c_double,-np.inf)
         self.checkpoint_flag=mp.Value(c_int,0)
-        self.producer_pipes = self.list()
-        self.consumer_pipes = self.list()
-        for i in range(self.nthreads):
-            consumer, producer = mp.Pipe(duplex=True)
-            self.producer_pipes.append(producer)
-            self.consumer_pipes.append(consumer)
 
     def connect_producer(self):
         """

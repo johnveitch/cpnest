@@ -86,11 +86,11 @@ class ProposalCycle(EnsembleProposal):
             weights[i]=weights[i] / norm
         return weights
 
-    def get_sample(self,old):
+    def get_sample(self,old,**kwargs):
         # Call the current proposal and increment the index
         self.idx = (self.idx + 1) % self.N
         p = self.cycle[self.idx]
-        new = p.get_sample(*args)
+        new = p.get_sample(old,**kwargs)
         self.log_J = p.log_J
         return new
 
