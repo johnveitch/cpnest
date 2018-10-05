@@ -249,8 +249,8 @@ class EnsembleEigenVector(EnsembleProposal):
 class DefaultProposalCycle(ProposalCycle):
     """
     A default proposal cycle that uses the
-    :obj:`cpnest.proposal.EnsembleWalk`, `cpnest.proposal.EnsembleStretch`,
-    :obj:`cpnest.proposal.DifferentialEvolution`, `cpnest.proposal.EnsembleEigenVector`
+    :obj:`cpnest.proposal.EnsembleWalk`, :obj:`cpnest.proposal.EnsembleStretch`,
+    :obj:`cpnest.proposal.DifferentialEvolution`, :obj:`cpnest.proposal.EnsembleEigenVector`
     ensemble proposals.
     """
     def __init__(self):
@@ -271,7 +271,7 @@ class HamiltonianProposalCycle(ProposalCycle):
         A proposal cycle that uses the hamiltonian :obj:`ConstrainedLeapFrog`
         proposal.
         Requires a :obj:`cpnest.Model` to be passed for access to the user-defined
-        :obj:`cpnest.Model.force` (the gradient of `cpnest.Model.potential`) and
+        :obj:`cpnest.Model.force` (the gradient of :obj:`cpnest.Model.potential`) and
         :obj:`cpnest.Model.log_likelihood` to define the reflective
         """
         weights = [1]
@@ -419,7 +419,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         
         Returns
         ----------
-        T: kinetic energy
+        T: :float: kinetic energy
         """
         return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
 

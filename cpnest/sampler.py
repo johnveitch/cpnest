@@ -19,28 +19,42 @@ __checkpoint_flag = False
 class Sampler(object):
     """
     Sampler class.
+    ---------
+    
     Initialisation arguments:
     
-    usermodel:
-    user defined model to sample
+    args:
+    usermodel: :obj:`cpnest.Model` user defined model to sample
     
     maxmcmc:
-    maximum number of mcmc steps to be used in the sampler
+        :int: maximum number of mcmc steps to be used in the :obj:`cnest.sampler.Sampler`
+    
+    ----------
+    kwargs:
     
     verbose:
-    display debug information on screen
-    default: False
+        :int: display debug information on screen
+        Default: 0
     
     poolsize:
-    number of objects for the affine invariant sampling
-    default: 1000
+        :int: number of objects for the affine invariant sampling
+        Default: 1000
     
     seed:
-    Random seed
+        :int: random seed to initialise the pseudo-random chain
+        Default: None
     
     proposal:
-    JumpProposal class to use (defaults to proposals.DefaultProposalCycle)
+        :obj:`cpnest.proposals.Proposal` to use
+        Defaults: :obj:`cpnest.proposals.DefaultProposalCycle`)
     
+    resume_file:
+        File for checkpointing
+        Default: None
+    
+    manager:
+        :obj:`multiprocessing.Manager` hosting all communication objects
+        Default: None
     """
 
     def __init__(self,
@@ -84,7 +98,8 @@ class Sampler(object):
         
     def reset(self):
         """
-        Initialise the sampler
+        Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
+        and distributing them according to :obj:`cpnest.model.Model.log_prior`
         """
         np.random.seed(seed=self.seed)
         for n in range(self.poolsize):
@@ -117,8 +132,10 @@ class Sampler(object):
         Estimate autocorrelation length of chain using acceptance fraction
         ACL = (2/acc) - 1
         multiplied by a safety margin of 5
-        Uses moving average with decay time tau iterations (default: self.poolsize)
-        Taken from W. Farr's github.com/farr/Ensemble.jl
+        Uses moving average with decay time tau iterations
+        (default: :int:`self.poolsize`)
+        
+        Taken from http://github.com/farr/Ensemble.jl
         """
         if tau is None: tau = self.maxmcmc/safety#self.poolsize
 
@@ -140,7 +157,9 @@ class Sampler(object):
     
     def _produce_sample(self):
         """
-        main loop that generates samples and puts them in the queue for the nested sampler object
+        main loop that takes the worst :obj:`cpnest.parameter.LivePoint` and
+        evolves it. Proposed sample is then sent back
+        to :obj:`cpnest.NestedSampler`.
         """
         if not self.initialised:
             self.reset()
@@ -194,6 +213,10 @@ class Sampler(object):
 
     @classmethod
     def resume(cls, resume_file, manager):
+        """
+        Resumes the interrupted state from a
+        checkpoint pickle file.
+        """
         print('Resuming Sampler from '+resume_file)
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
@@ -215,10 +238,11 @@ class Sampler(object):
         self.manager = None
 
 class MetropolisHastingsSampler(Sampler):
+    """
+    metropolis-hastings acceptance rule
+    for :obj:`cpnest.proposal.EnembleProposal`
+    """
     def yield_sample(self, logLmin):
-        """
-        metropolis-hastings loop to generate the new live point taking nmcmc steps
-        """
         while True:
             sub_counter = 0
             sub_accepted = 0
@@ -251,6 +275,10 @@ class MetropolisHastingsSampler(Sampler):
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
 
 class HamiltonianMonteCarloSampler(Sampler):
+    """
+    HamiltonianMonteCarlo acceptance rule
+    for :obj:`cpnest.proposal.HamiltonianProposal`
+    """
     def yield_sample(self, logLmin):
         while True:
             sub_accepted = 0
@@ -263,29 +291,9 @@ class HamiltonianMonteCarloSampler(Sampler):
                     sub_accepted += 1
                     oldparam = newparam
                 self.evolution_points.append(oldparam)
-#            print("acc: {0:f} sub counter = {1:d} {2:s} {3:f} {4:f}".format(self.proposal.log_J,
-#                                                                              sub_counter,
-#                                                                 oldparam,
-#                                                                 oldparam.logP,
-#                                                                 oldparam.logL))
+
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             if newparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
-
-def autocorrelation(x) :
-    """
-    Compute the autocorrelation of the signal, based on the properties of the
-    power spectral density of the signal.
-    """
-    xp = x-np.mean(x)
-    f = np.fft.fft(xp)
-    p = np.array([np.real(v)**2+np.imag(v)**2 for v in f])
-    pi = np.fft.ifft(p)
-    return np.real(pi)[:x.shape[0]//2]/np.sum(xp**2)
-
-def acl(acf):
-    for i in range(len(acf)//2):
-        if acf[i] < i/5.0:
-            return acf[i]

@@ -36,17 +36,20 @@ class CPNest(object):
     seed: random seed (default: 1234)
     maxmcmc: maximum MCMC points for sampling chains (100)
     nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
+    nhamiltomnian: number of sampler threads using an hamiltonian samplers. Default: 0
+    resume: determines whether cpnest will resume a run or run from scratch. Default: False.
     """
     def __init__(self,
                  usermodel,
-                 nlive      = 100,
-                 poolsize   = 100,
-                 output     = './',
-                 verbose    = 0,
-                 seed       = None,
-                 maxmcmc    = 100,
-                 nthreads   = None,
-                 nhamiltonian = 0):
+                 nlive        = 100,
+                 poolsize     = 100,
+                 output       = './',
+                 verbose      = 0,
+                 seed         = None,
+                 maxmcmc      = 100,
+                 nthreads     = None,
+                 nhamiltonian = 0,
+                 resume       = False):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -68,9 +71,10 @@ class CPNest(object):
             self.seed=seed
         
         self.process_pool = []
+        
         # instantiate the nested sampler class
         resume_file = os.path.join(output, "nested_sampler_resume.pkl")
-        if not os.path.exists(resume_file):
+        if not os.path.exists(resume_file) or resume == False:
             self.NS = NestedSampler(self.user,
                         nlive          = nlive,
                         output         = output,
@@ -84,7 +88,7 @@ class CPNest(object):
         # instantiate the sampler class
         for i in range(self.nthreads-nhamiltonian):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-            if not os.path.exists(resume_file):
+            if not os.path.exists(resume_file) or resume == False:
                 sampler = MetropolisHastingsSampler(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
@@ -103,7 +107,7 @@ class CPNest(object):
         
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-            if not os.path.exists(resume_file):
+            if not os.path.exists(resume_file) or resume == False:
                 sampler = HamiltonianMonteCarloSampler(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
@@ -151,7 +155,7 @@ class CPNest(object):
         Parameters
         ----------
         filename : string
-            File to save posterior to
+                   File to save posterior samples to
 
         Returns
         -------
@@ -178,7 +182,7 @@ class CPNest(object):
 
     def plot(self):
         """
-        Make some plots of the posterior and nested samples
+        Make diagnostic plots of the posterior and nested samples
         """
         pos = self.posterior_samples
         from . import plot

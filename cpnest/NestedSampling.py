@@ -26,7 +26,7 @@ class _NSintegralState(object):
     self.reset()
   def reset(self):
     """
-    Reset the sampler
+    Reset the sampler to its initial state at logZ = -infinity
     """
     self.iteration=0
     self.logZ=-inf
@@ -92,31 +92,35 @@ class NestedSampler(object):
     Nested Sampler class.
     Initialisation arguments:
     
-    Nlive:
+    manager: `multiprocessing` manager instance which controls
+        the shared objects.
+        Default: None
+    
+    Nlive: int
         number of live points to be used for the integration
-        default: 1024
+        Default: 1024
     
-    maxmcmc:
-        maximum number of mcmc steps to be used in the sampler
-        default: 4096
-    
-    output:
+    output: string
         folder where the output will be stored
-    
-    verbose: Verbosity level
-	0: Nothing
+        Default: None
+        
+    verbose: int
+        0: Nothing
         1: display information on screen
         2: (1) + diagnostic plots
+        Default: 1
         
-    seed:
+    seed: int
         seed for the initialisation of the pseudorandom chain
+        Default: 1234
     
-    prior_sampling:
-        produce Nlive samples from the prior
+    prior_sampling: boolean
+        produce Nlive samples from the prior.
+        Default: False
         
-    stopping:
-	Stop when remaining samples wouldn't change logZ estimate by this much
-    
+    stopping: float
+        Stop when remaining samples wouldn't change logZ estimate by this much.
+        Deafult: 0.1
     """
 
     def __init__(self,usermodel,
@@ -128,7 +132,8 @@ class NestedSampler(object):
                  prior_sampling = False,
                  stopping       = 0.1):
         """
-        Initialise all necessary arguments and variables for the algorithm
+        Initialise all necessary arguments and
+        variables for the algorithm
         """
         self.model=usermodel
         self.manager = manager
@@ -161,6 +166,17 @@ class NestedSampler(object):
     def setup_output(self,output):
         """
         Set up the output folder
+        
+        -----------
+        Parameters:
+        output: string
+            folder where the results will be stored
+        -----------
+        Returns:
+            output_file, evidence_file, resume_file: tuple
+                output_file:   file where the nested samples will be written
+                evidence_file: file where the evidence will be written
+                resume_file:   file used for checkpointing the algorithm
         """
         os.system("mkdir -p {0!s}".format(output))
         chain_filename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
@@ -172,12 +188,19 @@ class NestedSampler(object):
 
 
     def write_chain_to_file(self):
+        """
+        Outputs a `cpnest.parameter.LivePoint` to the
+        output_file
+        """
         with open(self.output_file,"w") as f:
             f.write('{0:s}\n'.format(self.model.header().rstrip()))
             for ns in self.nested_samples:
                 f.write('{0:s}\n'.format(self.model.strsample(ns).rstrip()))
 
     def write_evidence_to_file(self):
+        """
+        Write the evidence logZ and maximum likelihood to the evidence_file
+        """
         with open(self.evidence_file,"w") as f:
             f.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
 
@@ -190,7 +213,8 @@ class NestedSampler(object):
 
     def consume_sample(self):
         """
-        consumes a sample from the shared queues and updates the evidence
+        consumes a sample from the consumer_pipes
+        and updates the evidence logZ
         """
         # Increment the state of the evidence integration
         logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
@@ -227,6 +251,7 @@ class NestedSampler(object):
     def get_worst_n_live_points(self, n):
         """
         selects the lowest likelihood N live points
+        for evolution
         """
         self.params.sort(key=attrgetter('logL'))
         self.worst = np.arange(n)
@@ -235,6 +260,10 @@ class NestedSampler(object):
         return np.float128(self.logLmin.value)
 
     def reset(self):
+        """
+        Initialise the pool of `cpnest.parameter.LivePoint` by
+        sampling them from the `cpnest.model.log_prior` distribution
+        """
         # send all live points to the samplers for start
         i = 0
         while i < self.Nlive:
@@ -313,6 +342,10 @@ class NestedSampler(object):
 
     @classmethod
     def resume(cls, filename, manager):
+        """
+        Resumes the interrupted state from a
+        checkpoint pickle file.
+        """
         print('Resuming NestedSampler from '+filename)
         with open(filename,"rb") as f:
             obj = pickle.load(f)

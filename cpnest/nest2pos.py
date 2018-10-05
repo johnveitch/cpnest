@@ -4,9 +4,21 @@ from numpy.random import uniform
 from functools import reduce
 
 def logsubexp(x,y):
-        assert np.all(x >= y), 'cannot take log of negative number {0!s} - {1!s}'.format(str(x), str(y))
+    """
+    Helper function to compute the exponential
+    of a difference between two numbers
+    
+    ----------
+    Parameter:
+        x: :float:
+        y: :float:
+    ----------
+    Return
+        z: :float: x + np.log1p(-np.exp(y-x))
+    """
+    assert np.all(x >= y), 'cannot take log of negative number {0!s} - {1!s}'.format(str(x), str(y))
 
-        return x + np.log1p(-np.exp(y-x))
+    return x + np.log1p(-np.exp(y-x))
 
 def log_integrate_log_trap(log_func,log_support):
     """
