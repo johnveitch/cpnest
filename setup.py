@@ -1,4 +1,4 @@
-#Always prefer setuptools over distutils
+# Always prefer setuptools over distutils
 from setuptools import setup, find_packages
 from setuptools import Extension
 from setuptools.command.build_ext import build_ext as _build_ext
@@ -6,6 +6,7 @@ from setuptools.command.build_ext import build_ext as _build_ext
 from codecs import open
 import os
 import re
+
 
 # see https://stackoverflow.com/a/21621689/1862861 for why this is here
 class build_ext(_build_ext):
@@ -15,6 +16,7 @@ class build_ext(_build_ext):
         __builtins__.__NUMPY_SETUP__ = False
         import numpy
         self.include_dirs.append(numpy.get_include())
+
 
 # check whether user has Cython
 try:
@@ -42,11 +44,13 @@ here = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
         long_description = f.read()
 
+
 # Get the version info from __init__.py file
 def readfile(filename):
     with open(filename) as fp:
         filecontents = fp.read()
     return filecontents
+
 
 VERSION_REGEX = re.compile(r"__version__ = \'(.*?)\'")
 CONTENTS = readfile(os.path.join(
