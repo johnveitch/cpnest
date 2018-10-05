@@ -210,8 +210,8 @@ class CPNest(object):
         self.manager.checkpoint_flag=1
 
 class RunManager(SyncManager):
-    def __init__(self, *args, nthreads=None, **kwargs):
-        super(RunManager,self).__init__(*args, **kwargs)
+    def __init__(self, nthreads=None, **kwargs):
+        super(RunManager,self).__init__(**kwargs)
         self.nconnected=0
         self.producer_pipes=None
         self.consumer_pipes=None
