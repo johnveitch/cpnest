@@ -31,6 +31,9 @@ cdef class LivePoint:
         else:
           self.values = array.array('d',[0]*self.dimension)
 
+    def keys(self):
+        return self.names
+
     def __reduce__(self):
         return (rebuild_livepoint, (self.names,),self.__getstate__()) 
     

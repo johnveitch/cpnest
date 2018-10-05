@@ -61,19 +61,32 @@ class ProposalCycle(EnsembleProposal):
     def __init__(self,proposals,weights,cyclelength=100,*args,**kwargs):
         super(ProposalCycle,self).__init__()
         assert(len(weights)==len(proposals))
-        # Normalise the weights
-        norm = sum(weights)
-        for i,_ in enumerate(weights):
-            weights[i]=weights[i]/norm
-        self.proposals=proposals
+        self.cyclelength = cyclelength
+        self.weights = weights
+        self.proposals = proposals
+        self.set_cycle()
+
+    def set_cycle(self):
         # The cycle is a list of indices for self.proposals
-        self.cycle = np.random.choice(self.proposals, size = cyclelength, p=weights, replace=True)
+        self.cycle = np.random.choice(self.proposals, size=self.cyclelength,
+                                      p=self.weights, replace=True)
         self.N=len(self.cycle)
 
-    def get_sample(self,*args):
-        """
-        Calls the current proposal in the cycle
-        """
+    @property
+    def weights(self):
+        return self._weights
+
+    @weights.setter
+    def weights(self, weights):
+        self._weights = self.normalise_weights(weights)
+
+    def normalise_weights(self, weights):
+        norm = sum(weights)
+        for i, _ in enumerate(weights):
+            weights[i]=weights[i] / norm
+        return weights
+
+    def get_sample(self,old):
         # Call the current proposal and increment the index
         self.idx = (self.idx + 1) % self.N
         p = self.cycle[self.idx]
@@ -90,6 +103,12 @@ class ProposalCycle(EnsembleProposal):
         for p in self.proposals:
             if isinstance(p,EnsembleProposal):
                 p.set_ensemble(self.ensemble)
+
+    def add_proposal(self, proposal, weight):
+        self.proposals = self.proposals + [proposal]
+        self.weights = self.weights + [weight]
+        self.set_cycle()
+
 
 class EnsembleWalk(EnsembleProposal):
     """
