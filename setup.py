@@ -4,7 +4,8 @@ from setuptools import Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 # To use a consistent encoding
 from codecs import open
-from os import path
+import os
+import re
 
 # see https://stackoverflow.com/a/21621689/1862861 for why this is here
 class build_ext(_build_ext):
@@ -29,15 +30,27 @@ if have_cython: # convert the pyx file to a .c file if cython is available
 else: # just compile the included parameter.c (already converted from parameter.pyx) file
     ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.c"], include_dirs=['cpnest/'], libraries=['m']) ]
 
-here = path.abspath(path.dirname(__file__))
+here = os.path.abspath(os.path.dirname(__file__))
 
 # Get the long description from the relevant file
-with open(path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
+with open(os.path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
         long_description = f.read()
+
+# Get the version info from __init__.py file
+def readfile(filename):
+    with open(filename) as fp:
+        filecontents = fp.read()
+    return filecontents
+
+VERSION_REGEX = re.compile(r"__version__ = \'(.*?)\'")
+CONTENTS = readfile(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "cpnest", "__init__.py"))
+VERSION = VERSION_REGEX.findall(CONTENTS)[0]
 
 setup(
         name = 'cpnest',
-        version = '0.9.1',
+        version = VERSION,
         description = 'CPNest: Parallel nested sampling',
         long_description=long_description,
         author = 'Walter Del Pozzo, John Veitch',
