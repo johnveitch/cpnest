@@ -25,10 +25,16 @@ else:
     have_cython = True
 
 # set extension
-if have_cython: # convert the pyx file to a .c file if cython is available
-    ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.pyx"], include_dirs=['cpnest/'], libraries=['m']) ]
-else: # just compile the included parameter.c (already converted from parameter.pyx) file
-    ext_modules = [ Extension("cpnest.parameter", sources =[ "cpnest/parameter.c"], include_dirs=['cpnest/'], libraries=['m']) ]
+if have_cython:  # convert the pyx file to a .c file if cython is available
+    ext_modules = [Extension("cpnest.parameter",
+                             sources = ["cpnest/parameter.pyx"],
+                             include_dirs = ['cpnest/'],
+                             libraries=['m'])]
+else:  # just compile the included parameter.c (already converted from parameter.pyx) file
+    ext_modules = [Extension("cpnest.parameter",
+                             sources = ["cpnest/parameter.c"],
+                             include_dirs=['cpnest/'],
+                             libraries=['m'])]
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -52,13 +58,13 @@ setup(
         name = 'cpnest',
         version = VERSION,
         description = 'CPNest: Parallel nested sampling',
-        long_description=long_description,
+        long_description = long_description,
         author = 'Walter Del Pozzo, John Veitch',
-        author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
-        url='https://github.com/johnveitch/cpnest',
-        license='MIT',
+        author_email = 'walter.delpozzo@ligo.org, john.veitch@ligo.org',
+        url = 'https://github.com/johnveitch/cpnest',
+        license = 'MIT',
         cmdclass = {'build_ext': build_ext},
-        classifiers =[
+        classifiers = [
         # How mature is this project? Common values are
         #   3 - Alpha
         #   4 - Beta
@@ -84,13 +90,13 @@ setup(
         'Programming Language :: Python :: 3.5',
         ],
 
-        keywords='nested sampling bayesian inference',
+        keywords = 'nested sampling bayesian inference',
         #packages=find_packages(exclude=['contrib','docs','tests*','examples']),
-        packages=['cpnest'],
-        install_requires=['numpy','scipy','corner'],
-        setup_requires=['numpy'],
-        tests_require=['corner'],
-        package_data={"": ['*.c', '*.pyx', '*.pxd']},
+        packages = ['cpnest'],
+        install_requires = ['numpy','scipy','corner'],
+        setup_requires = ['numpy'],
+        tests_require = ['corner'],
+        package_data = {"": ['*.c', '*.pyx', '*.pxd']},
         # To provide executable scripts, use entry points in preference to the
         # "scripts" keyword. Entry points provide cross-platform support and allow
         # pip to create the appropriate form of executable for the target platform.
@@ -98,7 +104,7 @@ setup(
         #    'console_scripts':['sample=sample:main',
         #        ],
             },
-            test_suite='tests',
-        ext_modules=ext_modules
+        test_suite = 'tests',
+        ext_modules = ext_modules
         )
 
