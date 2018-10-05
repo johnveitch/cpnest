@@ -32,7 +32,9 @@ if have_cython:  # convert the pyx file to a .c file if cython is available
                              sources=["cpnest/parameter.pyx"],
                              include_dirs=['cpnest/'],
                              libraries=['m'])]
-else:  # just compile the included parameter.c (already converted from parameter.pyx) file
+else:
+    # just compile the included parameter.c (already converted from
+    # parameter.pyx) file
     ext_modules = [Extension("cpnest.parameter",
                              sources=["cpnest/parameter.c"],
                              include_dirs=['cpnest/'],
@@ -69,45 +71,24 @@ setup(
         license='MIT',
         cmdclass={'build_ext': build_ext},
         classifiers=[
-        # How mature is this project? Common values are
-        #   3 - Alpha
-        #   4 - Beta
-        #   5 - Production/Stable
-        'Development Status :: 4 - Beta',
-
-        # Indicate who your project is intended for
-        #'Intended Audience :: Developers',
-        #'Topic :: Data Analysis :: Bayesian Inference',
-
-        # Pick your license as you wish (should match "license" above)
-        'License :: OSI Approved :: MIT License',
-
-        # Specify the Python versions you support here. In particular, ensure
-        # that you indicate whether you support Python 2, Python 3 or both.
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.2',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        ],
-
+            'Development Status :: 4 - Beta',
+            'License :: OSI Approved :: MIT License',
+            'Programming Language :: Python :: 2',
+            'Programming Language :: Python :: 2.6',
+            'Programming Language :: Python :: 2.7',
+            'Programming Language :: Python :: 3',
+            'Programming Language :: Python :: 3.2',
+            'Programming Language :: Python :: 3.3',
+            'Programming Language :: Python :: 3.4',
+            'Programming Language :: Python :: 3.5'],
         keywords='nested sampling bayesian inference',
-        #packages=find_packages(exclude=['contrib','docs','tests*','examples']),
         packages=['cpnest'],
-        install_requires=['numpy','scipy','corner'],
+        install_requires=['numpy', 'scipy', 'corner'],
         setup_requires=['numpy'],
         tests_require=['corner'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
-        # To provide executable scripts, use entry points in preference to the
-        # "scripts" keyword. Entry points provide cross-platform support and allow
-        # pip to create the appropriate form of executable for the target platform.
-        entry_points={
-        #    'console_scripts':['sample=sample:main',
-        #        ],
-            },
+        entry_points={},
         test_suite='tests',
         ext_modules=ext_modules
         )
+
