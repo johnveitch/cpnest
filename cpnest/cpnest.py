@@ -83,7 +83,7 @@ class CPNest(object):
                         prior_sampling = False,
                         manager        = self.manager)
         else:
-            self.NS = NestedSampler.resume(resume_file, self.manager)
+            self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
         # instantiate the sampler class
         for i in range(self.nthreads-nhamiltonian):
@@ -100,7 +100,9 @@ class CPNest(object):
                                   manager     = self.manager
                                   )
             else:
-                sampler = MetropolisHastingsSampler.resume(resume_file, self.manager)
+                sampler = MetropolisHastingsSampler.resume(resume_file,
+                                                           self.manager,
+                                                           self.user)
 
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
@@ -119,7 +121,9 @@ class CPNest(object):
                                   manager     = self.manager
                                   )
             else:
-                sampler = HamiltonianMonteCarloSampler.resume(resume_file)
+                sampler = HamiltonianMonteCarloSampler.resume(resume_file,
+                                                              self.manager,
+                                                              self.user)
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
 

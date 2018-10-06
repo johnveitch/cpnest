@@ -341,7 +341,7 @@ class NestedSampler(object):
         sys.exit(0)
 
     @classmethod
-    def resume(cls, filename, manager):
+    def resume(cls, filename, manager, usermodel):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
@@ -349,9 +349,10 @@ class NestedSampler(object):
         print('Resuming NestedSampler from '+filename)
         with open(filename,"rb") as f:
             obj = pickle.load(f)
-        obj.manager=manager
+        obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.logLmin.value = obj.llmin
+        obj.model = usermodel
         del obj.__dict__['llmin']
         return(obj)
 
@@ -361,6 +362,7 @@ class NestedSampler(object):
         # Remove the unpicklable entries.
         del state['logLmin']
         del state['manager']
+        del state['model']
         return state
 
     def __setstate__(self, state):

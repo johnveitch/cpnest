@@ -212,7 +212,7 @@ class Sampler(object):
         sys.exit(0)
 
     @classmethod
-    def resume(cls, resume_file, manager):
+    def resume(cls, resume_file, manager, usermodel):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
@@ -220,6 +220,7 @@ class Sampler(object):
         print('Resuming Sampler from '+resume_file)
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
+        obj.user    = usermodel
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.producer_pipe = obj.manager.connect_producer()
@@ -228,6 +229,7 @@ class Sampler(object):
     def __getstate__(self):
         state = self.__dict__.copy()
         # Remove the unpicklable entries.
+        del state['user']
         del state['logLmin']
         del state['manager']
         del state['producer_pipe']
