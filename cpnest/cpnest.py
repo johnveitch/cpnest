@@ -59,11 +59,12 @@ class CPNest(object):
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
         self.user     = usermodel
+        self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
         self.poolsize = poolsize
         self.posterior_samples = None
-        self.manager = RunManager(nthreads=nthreads)
+        self.manager = RunManager(nthreads=self.nthreads)
         self.manager.start()
         
         if seed is None: self.seed=1234
@@ -146,20 +147,44 @@ class CPNest(object):
             self.checkpoint()
             sys.exit()
 
-        self.posterior_samples = self.get_posterior(filename=None)
+        self.posterior_samples = self.get_posterior_samples(filename=None)
         if self.verbose>1: self.plot()
     
         #TODO: Clean up the resume pickles
 
+    def get_nested_samples(self, filename='nested_samples.dat'):
+        """
+        returns nested sampling chain
+        Parameters
+        ----------
+        filename : string
+                   If given, file to save nested samples to
 
-    def get_posterior(self, filename='posterior.dat'):
+        Returns
+        -------
+        pos : :obj:`numpy.ndarray`
+        """
+        import numpy.lib.recfunctions as rfn
+        self.nested_samples = rfn.stack_arrays(
+                [s.asnparray()
+                    for s in self.NS.nested_samples]
+                ,usemask=False)
+        if filename:
+            np.savetxt(os.path.join(
+                self.NS.output_folder,'nested_samples.dat'),
+                self.nested_samples.ravel(),
+                header=' '.join(self.nested_samples.dtype.names),
+                newline='\n',delimiter=' ')
+        return self.nested_samples
+
+    def get_posterior_samples(self, filename='posterior.dat'):
         """
         Returns posterior samples
 
         Parameters
         ----------
         filename : string
-                   File to save posterior samples to
+                   If given, file to save posterior samples to
 
         Returns
         -------
@@ -168,12 +193,8 @@ class CPNest(object):
         import numpy as np
         import os
         from .nest2pos import draw_posterior_many
-        import numpy.lib.recfunctions as rfn
-        self.nested_samples = rfn.stack_arrays(
-                [s.asnparray()
-                    for s in self.NS.nested_samples]
-                ,usemask=False)
-        posterior_samples = draw_posterior_many([self.nested_samples],[self.NS.Nlive],verbose=self.verbose)
+        nested_samples = self.get_nested_samples()
+        posterior_samples = draw_posterior_many([nested_samples],[self.nlive],verbose=self.verbose)
         posterior_samples = np.array(posterior_samples)
         # TODO: Replace with something to output samples in whatever format
         if filename:
