@@ -35,6 +35,8 @@ The CPNest module is Free Software under the MIT license, and available on `Gith
 
 This is usually the best way to install the program. Alternatively, to install this package from source using setuptools::
 
+  git clone https://github.com/johnveitch/cpnest.git
+  cd cpnest
   python setup.py install
 
 Tests can be run with::
@@ -45,6 +47,56 @@ This documentation can be built in build/sphinx with::
 
   python setup.py build_sphinx -b html
 
+Quickstart
+==========
+
+CPNest provides a nested sampling class that interfaces with a user-defined model,
+which much implement the interface defined in :class:`cpnest.model.Model`.
+The simplest way to do this is for the user to inherit from this class, and implement
+the :func:`cpnest.model.Model.log_likelihood` function, and define the :obj:`cpnest.model.Model.names`
+and :obj:`cpnest.model.Model.bounds` for their model. Here is an example for a two-dimensional
+Gaussian distribution on variable x and y.
+
+.. code-block:: python
+
+        import numpy as np
+        import cpnest
+
+        class Simple2DModel(cpnest.model.Model):
+            """
+            A simple 2 dimensional gaussian
+            """
+            names=['x','y']
+            bounds=[[-10,10],[-10,10]]
+
+            def log_likelihood(self, param):
+                return -0.5*(param['x']**2 + param['y']**2) - np.log(2.0*np.pi)
+
+The user then uses CPNest by passing this when creating a :class:`cpnest.cpnest.CPNest`
+object, which provides a way of controlling the parameters of the nested sampling run. The use then calls :func:`cpnest.cpnest.CPNest.run()`, which starts the run going:
+
+.. code-block:: python
+
+        mymodel = Simple2DModel()
+        nest = cpnest.CPNest(mymodel)
+        nest.run()
+
+After calling `run()`, the final evidence and information will be displayed on the command line output:
+
+.. code-block:: python
+
+        >>> Final evidence: -5.99
+        >>> Information: 3.37
+
+Note that the final result will have some uncertainty that can be reduced by increasing the number of live points
+with the `nlive` keyword argument.
+The other keyword arguments for :obj:`cpnest.cpnest.CPNest`
+provide means of controlling the number of threads used, the verbosity of the output, setting the random seed,
+and so on. See the documentation for :obj:`cpnest.cpnest.CPNest` for more details. 
+
+The user can also retrieve the samples produced during the run, and samples from the posterior
+by calling the :func:`cpnest.cpnest.CPNest.get_nested_samples()` and :func:`cpnest.cpnest.CPNest.get_posterior_samples()`
+methods, which each return a numpy array.
 
 
 Indices and tables

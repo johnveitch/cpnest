@@ -83,10 +83,10 @@ class Model(object):
         """
         return -self.log_prior(param)
 
-    @abstractmethod
     def force(self,param):
         """
         returns the force (-grad potential)
+        Required for Hamiltonian sampling
         
         ----------
         Parameter:

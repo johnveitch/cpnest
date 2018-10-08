@@ -572,7 +572,7 @@ class ConstrainedLeapFrog(LeapFrog):
         dimension^-(1/4) based on
         http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
         """
-        self.dt = 3e-2*float(len(invM))**(-0.25)
+        self.dt = 3e-3*float(len(invM))**(-0.25)
 #        f = open("trajectory.txt","w")
 #        for j,k in enumerate(q0.names):
 #            f.write("%s\t"%k)
