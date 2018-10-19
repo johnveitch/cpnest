@@ -66,7 +66,8 @@ class CPNest(object):
         self.posterior_samples = None
         self.manager = RunManager(nthreads=self.nthreads)
         self.manager.start()
-        
+        self.resume = resume
+
         if seed is None: self.seed=1234
         else:
             self.seed=seed
@@ -132,9 +133,10 @@ class CPNest(object):
         """
         Run the sampler
         """
-        signal.signal(signal.SIGTERM, sighandler)
-        signal.signal(signal.SIGQUIT, sighandler)
-        signal.signal(signal.SIGINT, sighandler)
+        if self.resume:
+            signal.signal(signal.SIGTERM, sighandler)
+            signal.signal(signal.SIGQUIT, sighandler)
+            signal.signal(signal.SIGINT, sighandler)
         
         #self.p_ns.start()
         for each in self.process_pool:
