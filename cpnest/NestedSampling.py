@@ -217,17 +217,13 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        N       = len(self.manager.consumer_pipes)
-        logLmin = self.get_worst_n_live_points(N)
+        logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
+            self.manager.consumer_pipes[k].send(self.params[k])
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
-            # copy a random live point on the old one before sending it
-            self.params[k] = self.params[np.random.randint(self.Nlive-N)].copy()
-            self.manager.consumer_pipes[k].send(self.params[k])
-        
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
         # Replace the points we just consumed with the next acceptable ones

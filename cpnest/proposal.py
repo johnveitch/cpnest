@@ -293,7 +293,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         """
         super(HamiltonianProposal, self).__init__(**kwargs)
         self.T  = self.kinetic_energy
-        self.V  = model.potential
+        self.V = model.potential
         self.normal = None
     
     def set_ensemble(self, ensemble):
@@ -323,17 +323,20 @@ class HamiltonianProposal(EnsembleEigenVector):
         V_vals = np.atleast_1d([p.logL for p in self.ensemble])
         
         self.normal = []
-        self.widths = []
         for i,x in enumerate(tracers_array.T):
+            # sort the values
+            idx = x.argsort()
+            xs = x[idx]
+            Vs = V_vals[idx]
             # remove potential duplicate entries
-            xs, ids = np.unique(x, return_index = True)
-            Vs = V_vals[ids]
+            xs, ids = np.unique(xs, return_index = True)
+            Vs = Vs[ids]
             # pick only finite values
             idx = np.isfinite(Vs)
             Vs  = Vs[idx]
             xs  = xs[idx]
             # filter to within the 90% range of the Pvals
-            Vl,Vh = np.percentile(Vs,[2.5,97.5])
+            Vl,Vh = np.percentile(Vs,[5,95])
             (idx,) = np.where(np.logical_and(Vs > Vl,Vs < Vh))
             Vs = Vs[idx]
             xs = xs[idx]
@@ -342,20 +345,19 @@ class HamiltonianProposal(EnsembleEigenVector):
             knots = np.percentile(xs,np.linspace(1,99,5))
             # Guesstimate the length scale for numerical derivatives
             dimwidth = knots[-1]-knots[0]
-            self.widths.append(dimwidth)
-            delta = dimwidth / len(idx)
+            delta = 0.1 * dimwidth / len(idx)
             # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
             window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
             if window_length%2 == 0: window_length += 1
             f = savgol_filter(Vs, window_length,
-                              3, # Order of polynominal filter
+                              5, # Order of polynominal filter
                               deriv=1, # Take first derivative
                               delta=delta, # delta for numerical deriv
                               mode='mirror' # Reflective boundary conds.
                               )
             # construct a LSQ spline interpolant
             self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
-            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
+#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
 
     def unit_normal(self, q):
         """
@@ -394,7 +396,7 @@ class HamiltonianProposal(EnsembleEigenVector):
     def update_momenta_distribution(self):
         """
         update the momenta distribution using the
-        mass matrix (covariance matrix of the ensemble).
+        mass matrix (precision matrix of the ensemble).
         """
         self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
 
@@ -406,7 +408,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         """
         self.mass_matrix = np.linalg.inv(np.atleast_2d(self.covariance))
         self.inverse_mass_matrix = np.atleast_2d(self.covariance)
-        
+
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian.
@@ -452,15 +454,13 @@ class LeapFrog(HamiltonianProposal):
         """
         # generate a canonical momentum
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
-        V0 = self.V(q0)
-        # minus sign from the definition of the potential
-        q0.logP = -V0
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, *args)
-        initial_energy = self.T(p0) + V0
-        V = self.V(q)
-        q.logP = -V
-        final_energy   = self.T(p)  + V
+        q0.logP = -self.V(q0)
+        # minus sign from the definition of the potential
+        initial_energy = self.T(p0) - q0.logP
+        q.logP = -self.V(q)
+        final_energy   = self.T(p)  - q.logP
         self.log_J = min(0.0, initial_energy - final_energy)
         return q
     
@@ -484,17 +484,10 @@ class LeapFrog(HamiltonianProposal):
             position
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        # generate the trajectory lengths from a uniform distribution
-        maxL    = 100
-        self.L  = np.random.randint(10,maxL)
-        """
-        Step size: dimension^-(1/4) based on
-        http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
-        Rescaled to the width of the enclosed region, estimated from the
-        percentiles
-        """
-        dt = float(len(invM))**(-0.25)
-        self.dt = np.array([dt*w/maxL for w in self.widths])
+        # generate the trajectory lengths from a scale invariant distribution
+        self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
+        self.dt = 3e-2*float(len(invM))**(-0.25)
+        self.dt = np.abs(gauss(self.dt,self.dt))
         # Updating the momentum a half-step
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0
@@ -505,13 +498,12 @@ class LeapFrog(HamiltonianProposal):
                 q[k] += self.dt * p[j] * invM[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
-                while q[k] > u or q[k] < l:
-                    if q[k] > u:
-                        q[k] = u - (q[k] - u)
-                        p[j] *= -1
-                    if q[k] < l:
-                        q[k] = l + (l - q[k])
-                        p[j] *= -1
+                if q[k] > u:
+                    q[k] = u - (q[k] - u)
+                    p[j] *= -1
+                if q[k] < l:
+                    q[k] = l + (l - q[k])
+                    p[j] *= -1
         
             dV = self.gradient(q)
             # take a full momentum step
@@ -573,77 +565,62 @@ class ConstrainedLeapFrog(LeapFrog):
             position
         """
         invM = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        # generate the trajectory lengths from a uniform distribution
-        minL    = 10
-        maxL    = 100
-        self.L  = np.random.randint(minL,maxL)
+        # generate the trajectory lengths from a scale invariant distribution
+        self.L  = int(np.exp(np.random.uniform(np.log(10),np.log(50))))
         """
-        Step size: dimension^-(1/4) based on
+        Step size: 3e-2, manual tuning
+        dimension^-(1/4) based on
         http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
-        Rescaled to the width of the enclosed region, estimated from the
-        percentiles
         """
-        dt = float(len(invM))**(-0.25)
-        self.dt = np.array([dt*w/maxL for w in self.widths])
-
-#        f = open("trajectory.txt","a")
+        self.dt = 3e-3*float(len(invM))**(-0.25)
+#        f = open("trajectory.txt","w")
 #        for j,k in enumerate(q0.names):
-#            f.write("%s\tv_%s\tdV_%s\t"%(k,k,k))
+#            f.write("%s\t"%k)
 #        f.write("barrier\t")
 #        f.write("logL\n")
         # Updating the momentum a half-step
+#        for j,k in enumerate(q0.names):
+#            f.write("%e\t"%q0[k])
+#        f.write("%e\t"%logLmin)
+#        f.write("%e\n"%q0.logL)
         # First half-step in momentum
-        dV= self.gradient(q0)
-        p = p0 - 0.5 * self.dt * dV
+        p = p0 - 0.5 * self.dt * self.gradient(q0)
         q = q0
 #        for j,k in enumerate(q.names):
-#            f.write("%e\t%e\t%e\t"%(q[k],p[j]*invM[j],dV[j]))
+#            f.write("%e\t"%q[k])
 #        f.write("%e\t"%logLmin)
 #        f.write("%e\n"%q.logL)
         for i in range(self.L):
-            logLi  = q.logL
             # do a full step in position
             for j,k in enumerate(q.names):
                 u,l = self.prior_bounds[j][1], self.prior_bounds[j][0]
-                q[k] += self.dt[j] * p[j] * invM[j]
+                q[k] += self.dt * p[j] * invM[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
-                while q[k] > u or q[k] < l:
-                    if q[k] > u:
-                        q[k] = u - (q[k] - u)
-                        p[j] *= -1
-                    if q[k] < l:
-                        q[k] = l + (l - q[k])
-                        p[j] *= -1
-
-            dV     = self.gradient(q)
-            logL   = self.log_likelihood(q)
+                if q[k] > u:
+                    q[k] = u - (q[k] - u)
+                    p[j] *= -1
+                if q[k] < l:
+                    q[k] = l + (l - q[k])
+                    p[j] *= -1
+            dV = self.gradient(q)
+            
+            logL = self.log_likelihood(q)
             q.logL = logL
-
+            # if the trajectory led us outside the likelihood bound,
+            # reflect the momentum orthogonally to the surface
             if np.isfinite(logLmin):
                 
-                if (logL - logLmin) < 0:
-                    # if we are moving in a region of increasing likelihood, but we are
-                    # outside the reflective boundary, keep going
-#                    if logL > logLi: p += -self.dt * dV
-#                    # if we are moving in a region of decreasing likelihood, and we are
-#                    # outside the reflective boundary, reflect
-#                    elif logL < logLi :
+                if (logL - logLmin) <= 0:
                     normal = self.unit_normal(q)
                     p = p - 2.0*np.dot(p,normal)*normal
-#                elif logLi > logLmin and logL < logLmin:
-#                    # if the trajectory led us outside the likelihood bound,
-#                    # reflect the momentum orthogonally to the surface
-#                    normal = self.unit_normal(q)
-#                    p = p - 2.0*np.dot(p,normal)*normal
                 else:
-                    # if every bound is satisfied, take a full momentum step
+                    # take a full momentum step
                     p += - self.dt * dV
             else:
                 p += - self.dt * dV
-            
 #            for j,k in enumerate(q.names):
-#                f.write("%e\t%e\t%e\t"%(q[k],p[j]*invM[j],dV[j]))
+#                f.write("%e\t"%q[k])
 #            f.write("%e\t"%logLmin)
 #            f.write("%e\n"%q.logL)
         # Do a final update of the momentum for a half step

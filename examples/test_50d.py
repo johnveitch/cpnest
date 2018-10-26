@@ -7,7 +7,7 @@ class GaussianModel(cpnest.model.Model):
     """
     An n-dimensional gaussian
     """
-    def __init__(self,dim=3):
+    def __init__(self,dim=50):
         self.distr = stats.norm(loc=0,scale=1.0)
         self.dim=dim
         self.names=['{0}'.format(i) for i in range(self.dim)]
@@ -30,7 +30,7 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel()
-        self.work=cpnest.CPNest(self.model, verbose=3, nthreads=1, nlive=1000, maxmcmc=5000, poolsize=1000, nhamiltonian=1)
+        self.work=cpnest.CPNest(self.model, verbose=3, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=100)
 
     def test_run(self):
         self.work.run()
