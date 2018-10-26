@@ -155,7 +155,7 @@ class EnsembleStretch(EnsembleProposal):
         """
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
-        a = random.choice(list(self.ensemble))
+        a = random.choice(self.ensemble)
         # Pick the scale factor
         x = uniform(-1,1)*log(scale)
         Z = exp(x)
