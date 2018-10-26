@@ -6,7 +6,7 @@ from math import log
 from collections import deque
 from random import random,randrange
 import signal
-
+from operator import attrgetter
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
@@ -245,8 +245,8 @@ class MetropolisHastingsSampler(Sampler):
     for :obj:`cpnest.proposal.EnembleProposal`
     """
     def yield_sample(self, logLmin):
+        sub_counter = 0
         while True:
-            sub_counter = 0
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
             logp_old = self.user.log_prior(oldparam)
@@ -282,20 +282,32 @@ class HamiltonianMonteCarloSampler(Sampler):
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
     def yield_sample(self, logLmin):
+        sub_counter = 0
         while True:
             sub_accepted = 0
-            sub_counter = 0
-            while not sub_accepted:
-                oldparam = self.evolution_points.popleft()
+#            l = sorted(self.evolution_points,key=attrgetter('logL'))
+#            print("{0}".format(l))
+#            self.evolution_points = deque(l,maxlen=self.poolsize)
+            while True:
+                while True:
+                    oldparam = self.evolution_points.popleft()
+                    if np.isfinite(logLmin) and oldparam.logL - logLmin < np.log(random()):
+                        N = len(self.evolution_points)
+                        idx = np.random.randint(1,N)
+                        self.evolution_points.append(self.evolution_points[idx].copy())
+                    else:
+                        # we got a candidate point
+                        break
                 newparam = self.proposal.get_sample(oldparam.copy(),logLmin=logLmin)
                 sub_counter += 1
                 if self.proposal.log_J > np.log(random()):
                     sub_accepted += 1
                     oldparam = newparam
                 self.evolution_points.append(oldparam)
-
+                if sub_accepted > 0 or sub_counter >= self.maxmcmc:
+                    break
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
-            if newparam.logL > logLmin:
+            if oldparam.logL > logLmin:
                 yield (float(self.sub_acceptance),sub_counter,oldparam)
