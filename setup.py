@@ -87,9 +87,9 @@ setup(
         keywords='nested sampling bayesian inference',
         #packages=find_packages(exclude=['contrib','docs','tests*','examples']),
         packages=['cpnest'],
-        install_requires=['numpy','scipy','corner'],
+        install_requires=['numpy','scipy','corner','tqdm'],
         setup_requires=['numpy'],
-        tests_require=['corner'],
+        tests_require=['corner','tqdm'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
         # To provide executable scripts, use entry points in preference to the
         # "scripts" keyword. Entry points provide cross-platform support and allow

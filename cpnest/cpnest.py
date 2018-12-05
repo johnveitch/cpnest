@@ -58,7 +58,6 @@ class CPNest(object):
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
-        self.user     = usermodel
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
@@ -66,6 +65,7 @@ class CPNest(object):
         self.posterior_samples = None
         self.manager = RunManager(nthreads=self.nthreads)
         self.manager.start()
+        self.user     = usermodel
         self.resume = resume
 
         if seed is None: self.seed=1234
@@ -243,7 +243,7 @@ class CPNest(object):
 class RunManager(SyncManager):
     def __init__(self, nthreads=None, **kwargs):
         super(RunManager,self).__init__(**kwargs)
-        self.nconnected=0
+        self.nconnected=mp.Value(c_int,0)
         self.producer_pipes = list()
         self.consumer_pipes = list()
         for i in range(nthreads):
@@ -262,5 +262,8 @@ class RunManager(SyncManager):
         """
         Returns the producer's end of the pipe
         """
-        self.nconnected+=1
-        return self.producer_pipes[self.nconnected-1]
+        with self.nconnected.get_lock():
+            n = self.nconnected.value
+            pipe = self.producer_pipes[n]
+            self.nconnected.value+=1
+        return pipe, n

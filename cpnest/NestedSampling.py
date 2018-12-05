@@ -17,6 +17,8 @@ from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint, RunManager
 
+from tqdm import tqdm
+
 class _NSintegralState(object):
   """
   Stores the state of the nested sampling integrator
@@ -266,18 +268,18 @@ class NestedSampler(object):
         """
         # send all live points to the samplers for start
         i = 0
-        while i < self.Nlive:
-            for j in range(self.manager.nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
-            for j in range(self.manager.nthreads):
-                while i<self.Nlive:
-                    self.acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
-                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
-                    if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
-                        i+=1
-                        break
-            if self.verbose:
-                sys.stderr.write("sampling the prior --> {0:.0f} % complete\r".format((100.0*float(i+1)/float(self.Nlive))))
-                sys.stderr.flush()
+        nthreads=self.manager.nthreads
+        with tqdm(total=self.Nlive,disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
+            while i < self.Nlive:
+                for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
+                for j in range(nthreads):
+                    while i<self.Nlive:
+                        self.acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
+                        self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                        if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
+                            i+=1
+                            pbar.update()
+                            break
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
