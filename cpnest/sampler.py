@@ -104,7 +104,8 @@ class Sampler(object):
         and distributing them according to :obj:`cpnest.model.Model.log_prior`
         """
         np.random.seed(seed=self.seed)
-        for n in tqdm(range(self.poolsize), desc='SMPLR init draw', disable= not self.verbose, position=self.thread_id):
+        for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
             while True: # Generate an in-bounds sample
                 #if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 p = self.user.new_point()
@@ -116,11 +117,10 @@ class Sampler(object):
                 print("You may want to check your likelihood function to improve sampling")
             self.evolution_points.append(p)
 
-        if self.verbose > 2: sys.stderr.write("\n")
-
         self.proposal.set_ensemble(self.evolution_points)
         # Now, run evolution so samples are drawn from actual prior
-        for k in tqdm(range(self.poolsize), disable= not self.verbose, desc='SMPLR init evolve', position=self.thread_id):
+        for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
             #if self.verbose > 1: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
             _, _, p = next(self.yield_sample(-np.inf))
         
