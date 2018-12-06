@@ -224,7 +224,7 @@ class Sampler(object):
         obj.user    = usermodel
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
-        obj.producer_pipe = obj.manager.connect_producer()
+        obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         return(obj)
 
     def __getstate__(self):
@@ -234,6 +234,7 @@ class Sampler(object):
         del state['logLmin']
         del state['manager']
         del state['producer_pipe']
+        del state['thread_id']
         return state
     
     def __setstate__(self, state):
