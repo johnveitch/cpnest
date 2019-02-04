@@ -234,19 +234,22 @@ class NestedSampler(object):
             loops = 0
             while(True):
                 loops += 1
-                self.acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
+                self.acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
                 if proposed.logL > self.logLmin.value:
                     # replace worst point with new one
-                    self.params[k]=proposed
+                    self.params[k]     = proposed
                     self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     break
                 else:
                     # resend it to the producer
-                    self.manager.consumer_pipes[k].send(self.params[k])
-                    
+#                    print (self.queue_counter, k)
+                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
+                    # try the next sampler
+#                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
-                .format(self.iteration, self.jumps, self.acceptance/float(loops), self.acceptance, self.state.info,\
+                .format(self.iteration, self.jumps, self.acceptance/float(loops), sub_acceptance, self.state.info,\
                   logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
                 sys.stderr.flush()
 
@@ -269,12 +272,12 @@ class NestedSampler(object):
         # send all live points to the samplers for start
         i = 0
         nthreads=self.manager.nthreads
-        with tqdm(total=self.Nlive,disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
+        with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
             while i < self.Nlive:
                 for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
                 for j in range(nthreads):
                     while i<self.Nlive:
-                        self.acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
+                        self.acceptance,sub_acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
                         self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                         if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
                             i+=1
