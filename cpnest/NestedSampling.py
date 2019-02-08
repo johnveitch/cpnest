@@ -230,8 +230,8 @@ class NestedSampler(object):
         
         # Replace the points we just consumed with the next acceptable ones
         for k in self.worst:
-            self.iteration+=1
-            loops = 0
+            self.iteration += 1
+            loops           = 0
             while(True):
                 loops += 1
                 self.acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
@@ -242,14 +242,11 @@ class NestedSampler(object):
                     break
                 else:
                     # resend it to the producer
-#                    print (self.queue_counter, k)
                     self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
-                    # try the next sampler
-#                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
 
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
-                .format(self.iteration, self.jumps, self.acceptance/float(loops), sub_acceptance, self.state.info,\
+                .format(self.iteration, self.jumps*loops, self.acceptance/float(loops), sub_acceptance, self.state.info,\
                   logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
                 sys.stderr.flush()
 
@@ -261,7 +258,7 @@ class NestedSampler(object):
         self.params.sort(key=attrgetter('logL'))
         self.worst = np.arange(n)
         self.logLmin.value = np.float128(self.params[n].logL)
-        self.logLmax = np.max(self.params[-1].logL)
+        self.logLmax = self.params[-1].logL
         return np.float128(self.logLmin.value)
 
     def reset(self):
@@ -276,7 +273,7 @@ class NestedSampler(object):
             while i < self.Nlive:
                 for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
                 for j in range(nthreads):
-                    while i<self.Nlive:
+                    while i < self.Nlive:
                         self.acceptance,sub_acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
                         self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                         if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:

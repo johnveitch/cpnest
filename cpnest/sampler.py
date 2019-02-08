@@ -285,38 +285,46 @@ class HamiltonianMonteCarloSampler(Sampler):
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
     def yield_sample(self, logLmin):
-        sub_accepted    = 0
-        sub_counter     = 0
+        
         while True:
-            while True:
-                oldparam    = self.evolution_points.popleft()
-                newparam    = self.proposal.get_sample(oldparam.copy(),logLmin=logLmin)
+            
+            sub_accepted    = 0
+            sub_counter     = 0
+            
+            while sub_accepted == 0:
+                
                 sub_counter += 1
+                oldparam     = self.evolution_points.popleft()
+                newparam     = self.proposal.get_sample(oldparam.copy(),logLmin=np.minimum(oldparam.logL,logLmin))
+
                 if self.proposal.log_J > np.log(random()):
                     oldparam        = newparam
                     sub_accepted   += 1
-                    self.evolution_points.append(oldparam)
-                    break
+
                 self.evolution_points.append(oldparam)
-            if self.verbose >=3:
+
+            if self.verbose >= 3:
                 self.samples.append(oldparam)
+            
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+            
             for p in self.proposal.proposals:
                 p.update_time_step(self.sub_acceptance)
-#            if newparam.logL > logLmin:
+
             yield (sub_counter, oldparam)
-#            else:
-#                # if we did not accept, inject a new particle in the system (gran-canonical) from the prior
-#                # by picking one from the existing pool and giving it a random trajectory
-#                k = np.random.randint(self.evolution_points.maxlen)
-#                self.evolution_points.rotate(k)
-#                p  = self.evolution_points.pop()
-#                self.evolution_points.append(p)
-#                self.evolution_points.rotate(-k)
-#                oldparam = self.proposal.get_sample(p.copy(),logLmin=-np.inf)
-#                self.evolution_points.append(oldparam)
+            
+    def inject_sample(self):
+        # if we did not accept, inject a new particle in the system (gran-canonical) from the prior
+        # by picking one from the existing pool and giving it a random trajectory
+        k = np.random.randint(self.evolution_points.maxlen)
+        self.evolution_points.rotate(k)
+        p  = self.evolution_points.pop()
+        self.evolution_points.append(p)
+        self.evolution_points.rotate(-k)
+        p = self.proposal.get_sample(p.copy(),logLmin=p.logL)
+        self.evolution_points.append(p)
 
 
