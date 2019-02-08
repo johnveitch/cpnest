@@ -432,9 +432,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         acceptance : :obj:'numpy.float'
         """
         if acceptance <= self.TARGET:
-            self.dt *= 0.95
+            self.dt *= 0.9
         else:
-            self.dt *= 1.05
+            self.dt *= 1.1
 
         if self.dt > 1e-1*self.d**(-0.25): self.dt = 1e-1*self.d**(-0.25)
         if self.dt < 1e-5*self.d**(-0.25): self.dt = 1e-5*self.d**(-0.25)
@@ -444,7 +444,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         Set the trajectory length based on the mean parameters
         range and dimensionality
         """
-        self.L = 10#+int(np.random.poisson(np.mean(self.inverse_mass)))
+        self.L = 5+int(np.random.poisson(np.mean(self.inverse_mass)))
 
     def kinetic_energy(self,p):
         """
