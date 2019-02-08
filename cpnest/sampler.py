@@ -299,7 +299,10 @@ class HamiltonianMonteCarloSampler(Sampler):
             while sub_accepted == 0:
                 
                 sub_counter += 1
-                oldparam     = self.evolution_points.popleft()
+                while True:
+                    oldparam     = self.evolution_points.popleft()
+                    if oldparam.logL - logLmin > np.log(random()): break
+                    else: self.evolution_points.append(self.inject_sample())
                 newparam     = self.proposal.get_sample(oldparam.copy(),logLmin=np.minimum(oldparam.logL,logLmin))
 
                 if self.proposal.log_J > np.log(random()):
