@@ -432,9 +432,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         acceptance : :obj:'numpy.float'
         """
         if acceptance <= self.TARGET:
-            self.dt *= 0.9
+            self.dt *= 0.5
         else:
-            self.dt *= 1.1
+            self.dt *= 1.5
 
         if self.dt > 1e-1*self.d**(-0.25): self.dt = 1e-1*self.d**(-0.25)
         if self.dt < 1e-5*self.d**(-0.25): self.dt = 1e-5*self.d**(-0.25)
