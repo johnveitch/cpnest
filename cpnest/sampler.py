@@ -300,13 +300,6 @@ class HamiltonianMonteCarloSampler(Sampler):
                 if self.proposal.log_J > np.log(random()):
                     oldparam        = newparam
                     sub_accepted   += 1
-            
-                # if we are stuck in some low likelihood region and we are never accepting,
-                # inject a new point in the pool starting from the existing ones
-                if sub_counter >= self.maxmcmc:
-                    oldparam = self.inject_sample()
-                    self.evolution_points.append(oldparam)
-                    break
                 
                 self.evolution_points.append(oldparam)
 
