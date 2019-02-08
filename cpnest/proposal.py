@@ -401,7 +401,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=np.identity(self.d))
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#np.identity(self.d))
 
     def update_mass(self):
         """
@@ -444,7 +444,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         Set the trajectory length based on the mean parameters
         range and dimensionality
         """
-        self.L = 10+int(np.random.poisson(self.d**0.25))#+int(np.random.poisson(np.mean(self.inverse_mass)))
+        self.L = 10#+int(np.random.poisson(np.mean(self.inverse_mass)))
 
     def kinetic_energy(self,p):
         """
