@@ -247,22 +247,27 @@ class MetropolisHastingsSampler(Sampler):
     for :obj:`cpnest.proposal.EnembleProposal`
     """
     def yield_sample(self, logLmin):
+        
         while True:
+            
             sub_counter = 0
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
             logp_old = self.model.log_prior(oldparam)
 
             while True:
+                
                 sub_counter += 1
                 newparam = self.proposal.get_sample(oldparam.copy())
                 newparam.logP = self.model.log_prior(newparam)
+                
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.model.log_likelihood(newparam)
                     if newparam.logL > logLmin:
                         oldparam = newparam
                         logp_old = newparam.logP
                         sub_accepted+=1
+            
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
         
@@ -312,7 +317,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
             
             for p in self.proposal.proposals:
-                p.update_time_step(self.sub_acceptance)
+                p.update_time_step(self.acceptance)
 
             yield (sub_counter, oldparam)
             

@@ -437,7 +437,7 @@ class HamiltonianProposal(EnsembleEigenVector):
             self.dt *= 1.05
 
         if self.dt > 1e-1*self.d**(-0.25): self.dt = 1e-1*self.d**(-0.25)
-        if self.dt < 1e-4*self.d**(-0.25): self.dt = 1e-4*self.d**(-0.25)
+        if self.dt < 1e-5*self.d**(-0.25): self.dt = 1e-5*self.d**(-0.25)
 
     def set_trajectory_length(self):
         """
@@ -497,7 +497,6 @@ class LeapFrog(HamiltonianProposal):
         q, p = self.evolve_trajectory(p0, q0, *args)
         # minus sign from the definition of the potential
         initial_energy = T0 + V0
-        q.logP = -self.V(q)
         final_energy   = self.T(p)  - q.logP
         self.log_J = min(0.0, initial_energy - final_energy)
         return q
@@ -595,8 +594,7 @@ class ConstrainedLeapFrog(LeapFrog):
         Returns
         ----------
         p: :obj:`numpy.ndarray` updated momentum vector
-        q: :obj:`cpnest.parameter.LivePoint`
-            position
+        q: :obj:`cpnest.parameter.LivePoint` position
         """
         
         p = p0 - 0.5 * self.dt * self.gradient(q0)
