@@ -328,40 +328,39 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.normal = []
         for i,x in enumerate(tracers_array.T):
             # sort the values
-            self.normal.append(lambda x: -x)
-#            idx = x.argsort()
-#            xs = x[idx]
-#            Vs = V_vals[idx]
-#            # remove potential duplicate entries
-#            xs, ids = np.unique(xs, return_index = True)
-#            Vs = Vs[ids]
-#            # pick only finite values
-#            idx = np.isfinite(Vs)
-#            Vs  = Vs[idx]
-#            xs  = xs[idx]
-#            # filter to within the 90% range of the Pvals
-#            Vl,Vh = np.percentile(Vs,[5,95])
-#            (idx,) = np.where(np.logical_and(Vs > Vl,Vs < Vh))
-#            Vs = Vs[idx]
-#            xs = xs[idx]
-#            # Pick knots for this parameters: Choose 5 knots between
-#            # the 1st and 99th percentiles (heuristic tuning WDP)
-#            knots = np.percentile(xs,np.linspace(1,99,5))
-#            # Guesstimate the length scale for numerical derivatives
-#            dimwidth = knots[-1]-knots[0]
-#            delta = 0.1 * dimwidth / len(idx)
-#            # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
-#            window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
-#            if window_length%2 == 0: window_length += 1
-#            f = savgol_filter(Vs, window_length,
-#                              5, # Order of polynominal filter
-#                              deriv=1, # Take first derivative
-#                              delta=delta, # delta for numerical deriv
-#                              mode='mirror' # Reflective boundary conds.
-#                              )
-#            # construct a LSQ spline interpolant
-#            self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
-##            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
+            idx = x.argsort()
+            xs = x[idx]
+            Vs = V_vals[idx]
+            # remove potential duplicate entries
+            xs, ids = np.unique(xs, return_index = True)
+            Vs = Vs[ids]
+            # pick only finite values
+            idx = np.isfinite(Vs)
+            Vs  = Vs[idx]
+            xs  = xs[idx]
+            # filter to within the 90% range of the Pvals
+            Vl,Vh = np.percentile(Vs,[5,95])
+            (idx,) = np.where(np.logical_and(Vs > Vl,Vs < Vh))
+            Vs = Vs[idx]
+            xs = xs[idx]
+            # Pick knots for this parameters: Choose 5 knots between
+            # the 1st and 99th percentiles (heuristic tuning WDP)
+            knots = np.percentile(xs,np.linspace(1,99,5))
+            # Guesstimate the length scale for numerical derivatives
+            dimwidth = knots[-1]-knots[0]
+            delta = 0.1 * dimwidth / len(idx)
+            # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
+            window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
+            if window_length%2 == 0: window_length += 1
+            f = savgol_filter(Vs, window_length,
+                              5, # Order of polynominal filter
+                              deriv=1, # Take first derivative
+                              delta=delta, # delta for numerical deriv
+                              mode='mirror' # Reflective boundary conds.
+                              )
+            # construct a LSQ spline interpolant
+            self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
+#            np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
 
     def unit_normal(self, q):
         """
