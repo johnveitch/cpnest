@@ -402,7 +402,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#np.identity(self.d))
+        self.momenta_distribution = multivariate_normal(cov=np.identity(self.d))#self.mass_matrix)#
 
     def update_mass(self):
         """
@@ -443,9 +443,11 @@ class HamiltonianProposal(EnsembleEigenVector):
     def set_trajectory_length(self):
         """
         Set the trajectory length based on the mean parameters
-        range and dimensionality
+        range and dimensionality so that, depending of the current time step,
+        we can in principle traverse the whole ccurrrent allowed region
         """
-        self.L = 20+int(np.random.poisson(np.mean(self.inverse_mass)))
+        self.L = int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
+        #+np.random.randint(np.ceil(self.d**(0.25)),np.mean(self.inverse_mass))#+int(np.random.poisson(np.mean(self.inverse_mass)))
 
     def kinetic_energy(self,p):
         """
@@ -496,6 +498,7 @@ class LeapFrog(HamiltonianProposal):
         V0 = -q0.logP
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, *args)
+#        print ("sampled with dt",self.dt,"and L",self.L,"distance travelled",self.dt*self.L*self.inverse_mass*p)
         # minus sign from the definition of the potential
         initial_energy = T0 + V0
         final_energy   = self.T(p)  - q.logP

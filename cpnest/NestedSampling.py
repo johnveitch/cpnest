@@ -44,7 +44,7 @@ class _NSintegralState(object):
     Simply uses rectangle rule for initial estimate
     """
     if(logL<=self.logLs[-1]):
-      print('WARNING: NS integrator received non-monotonic logL. {0:.3f} -> {1:.3f}'.format(self.logLs[-1],logL))
+      print('WARNING: NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1],logL))
     if nlive is None:
       nlive = self.nlive
     oldZ = self.logZ
@@ -245,8 +245,8 @@ class NestedSampler(object):
                     self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
 
             if self.verbose:
-                sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
-                .format(self.iteration, self.jumps*loops, self.acceptance/float(loops), sub_acceptance, self.state.info,\
+                sys.stderr.write("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}\n"\
+                .format(self.iteration, self.jumps*loops, self.acceptance/float(loops), k, self.acceptance, sub_acceptance, self.state.info,\
                   logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
                 sys.stderr.flush()
 
