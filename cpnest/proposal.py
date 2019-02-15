@@ -295,7 +295,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.T      = self.kinetic_energy
         self.V      = model.potential
         self.normal = None
-        self.dt     = 3e-4
+        self.dt     = 5e-1
+        self.dtmin  = 1e-3
+        self.dtmax  = 1.0
         self.TARGET = 0.654
     
     def set_ensemble(self, ensemble):
@@ -309,7 +311,6 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.update_mass()
         self.update_normal_vector()
         self.update_momenta_distribution()
-        self.set_time_step()
     
     def update_normal_vector(self):
         """
@@ -401,7 +402,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=np.identity(self.d))#self.mass_matrix)#
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#p.identity(self.d))#
 
     def update_mass(self):
         """
@@ -409,7 +410,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         inverse mass matrix (precision matrix)
         from the ensemble, allowing for correlated momenta
         """
-        self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
+        self.inverse_mass_matrix    = np.atleast_2d(np.diag(np.diag(self.covariance)))
         self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
         self.d                      = len(self.inverse_mass)
@@ -421,7 +422,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         Step size: dimension^-(1/4) based on
         http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
         """
-        self.dt = 1e-1*self.d**(-0.25)
+        self.dt = 5e-3
     
     def update_time_step(self, acceptance):
         """
@@ -436,17 +437,16 @@ class HamiltonianProposal(EnsembleEigenVector):
         else:
             self.dt *= 1.05
 
-        if self.dt > 1e-1*self.d**(-0.25): self.dt = 1e-1*self.d**(-0.25)
-        if self.dt < 1e-5*self.d**(-0.25): self.dt = 1e-5*self.d**(-0.25)
-
+        if self.dt > self.dtmax: self.dt = self.dtmax
+        if self.dt < self.dtmin: self.dt = self.dtmin
+#        print('dt:',self.dt,'L:',self.L)
     def set_trajectory_length(self):
         """
         Set the trajectory length based on the mean parameters
         range and dimensionality so that, depending of the current time step,
-        we can in principle traverse the whole ccurrrent allowed region
+        we can in principle traverse the whole current allowed region
         """
-        self.L = int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
-        #+np.random.randint(np.ceil(self.d**(0.25)),np.mean(self.inverse_mass))#+int(np.random.poisson(np.mean(self.inverse_mass)))
+        self.L = np.random.randint(10,50)#int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
 
     def kinetic_energy(self,p):
         """
@@ -497,7 +497,6 @@ class LeapFrog(HamiltonianProposal):
         V0 = -q0.logP
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, *args)
-#        print ("sampled with dt",self.dt,"and L",self.L,"distance travelled",self.dt*self.L*self.inverse_mass*p)
         # minus sign from the definition of the potential
         initial_energy = T0 + V0
         final_energy   = self.T(p)  - q.logP
@@ -526,6 +525,7 @@ class LeapFrog(HamiltonianProposal):
         # Updating the momentum a half-step
         p = p0-0.5 * self.dt * self.gradient(q0)
         q = q0.copy()
+        
         for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
@@ -533,7 +533,7 @@ class LeapFrog(HamiltonianProposal):
                 q[k] += self.dt * p[j] * self.inverse_mass[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
-                while q[k] < l or q[k] > u:
+                while q[k] <= l or q[k] >= u:
                     if q[k] > u:
                         q[k] = u - (q[k] - u)
                         p[j] *= -1
@@ -602,7 +602,7 @@ class ConstrainedLeapFrog(LeapFrog):
         
         p = p0 - 0.5 * self.dt * self.gradient(q0)
         q = q0.copy()
-
+#        print("proposal q0.logL, logLmin",q0.logL, logLmin)
         for i in range(self.L):
             # do a full step in position
             for j,k in enumerate(q.names):
@@ -610,7 +610,7 @@ class ConstrainedLeapFrog(LeapFrog):
                 q[k] += self.dt * p[j] * self.inverse_mass[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
-                while q[k] < l or q[k] > u:
+                while q[k] <= l or q[k] >= u:
                     if q[k] > u:
                         q[k] = u - (q[k] - u)
                         p[j] *= -1
@@ -621,13 +621,15 @@ class ConstrainedLeapFrog(LeapFrog):
             dV      = self.gradient(q)
             q.logP  = -self.V(q)
             q.logL  = self.log_likelihood(q)
-            
+#            print(i,"--> proposal q.logL, logLmin",q.logL, logLmin)
             if np.isfinite(logLmin):
                 # if the trajectory led us outside the likelihood bound,
                 # reflect the momentum orthogonally to the surface
-                if (q.logL - logLmin) < 0:
-                    normal = self.unit_normal(q)
-                    p      = p - 2.0*np.dot(p,normal)*normal
+                if (q.logL - logLmin) <= 0:
+                    normal      = self.unit_normal(q)
+#                    print(i,"--> reflection p, normal, jump",p, normal, self.dt * p * self.inverse_mass)
+                    p           = p - 2.0*np.dot(p,normal)*normal
+#                    print(i,"--> reflected p, normal, jump",p, normal, self.dt * p * self.inverse_mass)
                 else:
                     # take a full momentum step
                     p += - self.dt * dV

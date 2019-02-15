@@ -11,7 +11,6 @@ from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
 from .cpnest import CheckPoint, RunManager
-
 from tqdm import tqdm
 
 import pickle
@@ -87,7 +86,7 @@ class Sampler(object):
         self.Nmcmc_exact        = float(self.initial_mcmc)
 
         self.poolsize           = poolsize
-        self.evolution_points   = deque(maxlen=self.poolsize)
+        self.evolution_points   = deque(maxlen = self.poolsize)
         self.verbose            = verbose
         self.acceptance         = 0.0
         self.sub_acceptance     = 0.0
@@ -122,10 +121,9 @@ class Sampler(object):
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
-            #if self.verbose > 1: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
-             _, p = next(self.yield_sample(-np.inf))
-        
-        if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
+            _, p = next(self.yield_sample(-np.inf))
+
+    
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
@@ -180,9 +178,9 @@ class Sampler(object):
 
             if p is None:
                 break
-            
+        
             self.evolution_points.append(p)
-            (Nmcmc,outParam) = next(self.yield_sample(self.logLmin.value))
+            (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
             # Send the sample to the Nested Sampler
             self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
@@ -264,7 +262,7 @@ class MetropolisHastingsSampler(Sampler):
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.model.log_likelihood(newparam)
                     if newparam.logL > logLmin:
-                        oldparam = newparam
+                        oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
             
@@ -281,7 +279,6 @@ class MetropolisHastingsSampler(Sampler):
             self.mcmc_counter += sub_counter
             self.acceptance    = float(self.mcmc_accepted)/float(self.mcmc_counter)
             # Yield the new sample
-#            if oldparam.logL > logLmin:
             yield (sub_counter, oldparam)
 
 class HamiltonianMonteCarloSampler(Sampler):
@@ -295,16 +292,17 @@ class HamiltonianMonteCarloSampler(Sampler):
             
             sub_accepted    = 0
             sub_counter     = 0
-            oldparam     = self.evolution_points.popleft()
-            
+            oldparam        = self.evolution_points.popleft()
+
             while sub_accepted == 0:
-                
+
                 sub_counter += 1
-                newparam     = self.proposal.get_sample(oldparam.copy(),logLmin=np.minimum(oldparam.logL,logLmin))
-                if self.proposal.log_J > np.log(random()):
-                    oldparam        = newparam
-                    sub_accepted   += 1
+                newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
                 
+                if self.proposal.log_J > np.log(random()):
+                    oldparam        = newparam.copy()
+                    sub_accepted   += 1
+
             self.evolution_points.append(oldparam)
 
             if self.verbose >= 3:
@@ -320,7 +318,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             yield (sub_counter, oldparam)
             
-    def inject_sample(self):
+    def insert_sample(self, p):
         # if we did not accept, inject a new particle in the system (gran-canonical) from the prior
         # by picking one from the existing pool and giving it a random trajectory
         k = np.random.randint(self.evolution_points.maxlen)
@@ -328,6 +326,6 @@ class HamiltonianMonteCarloSampler(Sampler):
         p  = self.evolution_points.pop()
         self.evolution_points.append(p)
         self.evolution_points.rotate(-k)
-        return self.proposal.get_sample(p.copy(),logLmin=-np.inf)
+        return self.proposal.get_sample(p.copy(),logLmin=p.logL)
 
 
