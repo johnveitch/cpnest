@@ -295,8 +295,8 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.T      = self.kinetic_energy
         self.V      = model.potential
         self.normal = None
-        self.dt     = 5e-1
-        self.dtmin  = 1e-3
+        self.dt     = 1e-1
+        self.dtmin  = 1e-2
         self.dtmax  = 1.0
         self.TARGET = 0.654
     
@@ -402,7 +402,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#p.identity(self.d))#
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#np.identity(self.d))#
 
     def update_mass(self):
         """
@@ -439,14 +439,14 @@ class HamiltonianProposal(EnsembleEigenVector):
 
         if self.dt > self.dtmax: self.dt = self.dtmax
         if self.dt < self.dtmin: self.dt = self.dtmin
-#        print('dt:',self.dt,'L:',self.L)
+
     def set_trajectory_length(self):
         """
         Set the trajectory length based on the mean parameters
         range and dimensionality so that, depending of the current time step,
         we can in principle traverse the whole current allowed region
         """
-        self.L = np.random.randint(10,50)#int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
+        self.L = np.random.randint(10,100)*int(self.d**(0.25))#int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
 
     def kinetic_energy(self,p):
         """
@@ -629,10 +629,8 @@ class ConstrainedLeapFrog(LeapFrog):
                 # reflect the momentum orthogonally to the surface
                 if (q.logL - logLmin) <= 0:
                     normal      = self.unit_normal(q)
-#                    print(i,"--> reflection p, normal, jump",p, normal, self.dt * p * self.inverse_mass)
                     p           = p - 2.0*np.dot(p,normal)*normal
                     last_reflection = 1
-#                    print(i,"--> reflected p, normal, jump",p, normal, self.dt * p * self.inverse_mass)
                 else:
                     last_reflection = 0
                     # take a full momentum step
@@ -640,8 +638,9 @@ class ConstrainedLeapFrog(LeapFrog):
             else:
                 p += - self.dt * dV
             i += 1
-            if i == 5*self.L:
+            if i == 10*self.L:
                 break
+#        print ("effective number of steps:",i,"L:",self.L)
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV
         return q, -p

@@ -293,7 +293,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             sub_accepted    = 0
             sub_counter     = 0
             oldparam        = self.evolution_points.popleft()
-
+            
             while sub_accepted == 0:
 
                 sub_counter += 1
