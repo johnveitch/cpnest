@@ -602,8 +602,10 @@ class ConstrainedLeapFrog(LeapFrog):
         
         p = p0 - 0.5 * self.dt * self.gradient(q0)
         q = q0.copy()
+        i = 0
+        last_reflection = 0
 #        print("proposal q0.logL, logLmin",q0.logL, logLmin)
-        for i in range(self.L):
+        while (i < self.L) or (last_reflection):
             # do a full step in position
             for j,k in enumerate(q.names):
                 u, l  = self.prior_bounds[j][1], self.prior_bounds[j][0]
@@ -629,12 +631,17 @@ class ConstrainedLeapFrog(LeapFrog):
                     normal      = self.unit_normal(q)
 #                    print(i,"--> reflection p, normal, jump",p, normal, self.dt * p * self.inverse_mass)
                     p           = p - 2.0*np.dot(p,normal)*normal
+                    last_reflection = 1
 #                    print(i,"--> reflected p, normal, jump",p, normal, self.dt * p * self.inverse_mass)
                 else:
+                    last_reflection = 0
                     # take a full momentum step
                     p += - self.dt * dV
             else:
                 p += - self.dt * dV
+            i += 1
+            if i == 5*self.L:
+                break
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV
         return q, -p
