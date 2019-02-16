@@ -240,20 +240,20 @@ class NestedSampler(object):
                 acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
                 if proposed.logL > self.logLmin.value:
                     # replace worst point with new one
-                    self.params[self.queue_counter]     = proposed
+                    self.params[k]     = proposed
                     self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     self.accepted += 1
                     break
                 else:
                     # resend it to the producer
-                    self.manager.consumer_pipes[self.queue_counter].send(self.params[self.queue_counter])
+                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
                     self.rejected += 1
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-        if self.verbose:
-            sys.stderr.write("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}\n"\
-            .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-              logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
-            sys.stderr.flush()
+            if self.verbose:
+                sys.stderr.write("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}\n"\
+                .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
+                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
+                sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
         """

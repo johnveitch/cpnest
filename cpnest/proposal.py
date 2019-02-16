@@ -295,9 +295,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.T      = self.kinetic_energy
         self.V      = model.potential
         self.normal = None
-        self.dt     = 1e-1
-        self.dtmin  = 1e-2
-        self.dtmax  = 1.0
+        self.dt     = 1.0
+        self.dtmin  = 1e-3
+        self.dtmax  = 10.0
         self.TARGET = 0.654
     
     def set_ensemble(self, ensemble):
@@ -446,7 +446,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         range and dimensionality so that, depending of the current time step,
         we can in principle traverse the whole current allowed region
         """
-        self.L = np.random.randint(10,100)*int(self.d**(0.25))#int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
+        self.L = np.random.randint(3,30)*int(self.d**(0.25))#int(np.ceil(self.d**(0.25))+(np.mean(self.inverse_mass)/self.dt)**(0.25))
 
     def kinetic_energy(self,p):
         """
