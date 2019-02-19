@@ -107,7 +107,6 @@ class Sampler(object):
         for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
                       disable=not self.verbose, position=self.thread_id, leave=False):
             while True:  # Generate an in-bounds sample
-                #if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 p = self.user.new_point()
                 p.logP = self.user.log_prior(p)
                 if np.isfinite(p.logP):
@@ -124,7 +123,6 @@ class Sampler(object):
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                       disable=not self.verbose, position=self.thread_id, leave=False):
-            #if self.verbose > 1: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
             _, _, p = next(self.yield_sample(-np.inf))
 
         if self.verbose > 2:
