@@ -257,8 +257,8 @@ class NestedSampler(object):
         """
         self.params.sort(key=attrgetter('logL'))
         self.worst = np.arange(n)
-        self.logLmin.value = np.float128(self.params[n].logL)
-        self.logLmax = np.max(self.params[-1].logL)
+        self.logLmin.value = np.float128(self.params[n-1].logL)
+        self.logLmax = self.params[-1].logL
         return np.float128(self.logLmin.value)
 
     def reset(self):
