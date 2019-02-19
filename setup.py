@@ -83,9 +83,10 @@ setup(
             'Programming Language :: Python :: 3.5'],
         keywords='nested sampling bayesian inference',
         packages=['cpnest'],
-        install_requires=['numpy', 'scipy', 'corner'],
+        install_requires=['numpy', 'scipy', 'corner', 'tqdm'],
+
         setup_requires=['numpy'],
-        tests_require=['corner'],
+        tests_require=['corner','tqdm'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
         entry_points={},
         test_suite='tests',

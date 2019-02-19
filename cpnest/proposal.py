@@ -131,7 +131,7 @@ class EnsembleWalk(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        subset = sample(self.ensemble,self.Npoints)
+        subset = sample(list(self.ensemble),self.Npoints)
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
         for x in subset:
@@ -185,7 +185,7 @@ class DifferentialEvolution(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        a,b = sample(self.ensemble,2)
+        a,b = sample(list(self.ensemble),2)
         sigma = 1e-4 # scatter around difference vector by this factor
         out = old + (b-a)*gauss(1.0,sigma)
         return out

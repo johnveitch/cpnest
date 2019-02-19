@@ -1,6 +1,6 @@
 from .cpnest import CPNest
 
-__version__ = '0.9.4'
+__version__ = '0.9.7'
 
 __all__ = ['model',
            'NestedSampling',

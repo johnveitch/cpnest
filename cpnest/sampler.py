@@ -12,6 +12,8 @@ from .proposal import DefaultProposalCycle
 from . import proposal
 from .cpnest import CheckPoint, RunManager
 
+from tqdm import tqdm
+
 import pickle
 __checkpoint_flag = False
 
@@ -94,7 +96,7 @@ class Sampler(object):
         self.output = output
         self.samples = [] # the list of samples from the mcmc chain
         self.ACLs = [] # the history of the ACL of the chain, will be used to thin the output, if requested
-        self.producer_pipe = self.manager.connect_producer()
+        self.producer_pipe, self.thread_id = self.manager.connect_producer()
         
     def reset(self):
         """
@@ -102,9 +104,10 @@ class Sampler(object):
         and distributing them according to :obj:`cpnest.model.Model.log_prior`
         """
         np.random.seed(seed=self.seed)
-        for n in range(self.poolsize):
+        for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
             while True: # Generate an in-bounds sample
-                if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
+                #if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 p = self.user.new_point()
                 p.logP = self.user.log_prior(p)
                 if np.isfinite(p.logP): break
@@ -114,15 +117,13 @@ class Sampler(object):
                 print("You may want to check your likelihood function to improve sampling")
             self.evolution_points.append(p)
 
-        if self.verbose > 2: sys.stderr.write("\n")
-
         self.proposal.set_ensemble(self.evolution_points)
         # Now, run evolution so samples are drawn from actual prior
-        for k in range(self.poolsize):
-            if self.verbose > 1: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
+        for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
+            #if self.verbose > 1: sys.stderr.write("process {0!s} --> distributing pool of {1:d} points from the prior --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(k+1)/float(self.poolsize)))
             _, _, p = next(self.yield_sample(-np.inf))
         
-        if self.verbose > 1: sys.stderr.write("\n")
         if self.verbose > 2: sys.stderr.write("Initial estimated ACL = {0:d}\n".format(self.Nmcmc))
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
@@ -223,7 +224,7 @@ class Sampler(object):
         obj.user    = usermodel
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
-        obj.producer_pipe = obj.manager.connect_producer()
+        obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         return(obj)
 
     def __getstate__(self):
@@ -233,6 +234,7 @@ class Sampler(object):
         del state['logLmin']
         del state['manager']
         del state['producer_pipe']
+        del state['thread_id']
         return state
     
     def __setstate__(self, state):
