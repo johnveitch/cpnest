@@ -44,7 +44,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 # Get the long description from the relevant file
 with open(os.path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
-        long_description = f.read()
+    long_description = f.read()
 
 
 # Get the version info from __init__.py file
@@ -61,16 +61,16 @@ CONTENTS = readfile(os.path.join(
 VERSION = VERSION_REGEX.findall(CONTENTS)[0]
 
 setup(
-        name='cpnest',
-        version=VERSION,
-        description='CPNest: Parallel nested sampling',
-        long_description=long_description,
-        author='Walter Del Pozzo, John Veitch',
-        author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
-        url='https://github.com/johnveitch/cpnest',
-        license='MIT',
-        cmdclass={'build_ext': build_ext},
-        classifiers=[
+    name='cpnest',
+    version=VERSION,
+    description='CPNest: Parallel nested sampling',
+    long_description=long_description,
+    author='Walter Del Pozzo, John Veitch',
+    author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
+    url='https://github.com/johnveitch/cpnest',
+    license='MIT',
+    cmdclass={'build_ext': build_ext},
+    classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: MIT License',
             'Programming Language :: Python :: 2',
@@ -81,15 +81,14 @@ setup(
             'Programming Language :: Python :: 3.3',
             'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5'],
-        keywords='nested sampling bayesian inference',
-        packages=['cpnest'],
-        install_requires=['numpy', 'scipy', 'corner', 'tqdm'],
+    keywords='nested sampling bayesian inference',
+    packages=['cpnest'],
+    install_requires=['numpy', 'scipy', 'corner', 'tqdm'],
 
-        setup_requires=['numpy'],
-        tests_require=['corner','tqdm'],
-        package_data={"": ['*.c', '*.pyx', '*.pxd']},
-        entry_points={},
-        test_suite='tests',
-        ext_modules=ext_modules
-        )
-
+    setup_requires=['numpy'],
+        tests_require=['corner', 'tqdm'],
+    package_data={"": ['*.c', '*.pyx', '*.pxd']},
+    entry_points={},
+    test_suite='tests',
+    ext_modules=ext_modules
+)
