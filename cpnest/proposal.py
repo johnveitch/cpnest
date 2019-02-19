@@ -617,15 +617,15 @@ class ConstrainedLeapFrog(LeapFrog):
         for i in range(self.L):
             # do a full step in position
             for j, k in enumerate(q.names):
-                u, l = self.prior_bounds[j][1], self.prior_bounds[j][0]
+                up, lo = self.prior_bounds[j][1], self.prior_bounds[j][0]
                 q[k] += self.dt * p[j] * invM[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
-                if q[k] > u:
-                    q[k] = u - (q[k] - u)
+                if q[k] > up:
+                    q[k] = up - (q[k] - up)
                     p[j] *= -1
-                if q[k] < l:
-                    q[k] = l + (l - q[k])
+                if q[k] < lo:
+                    q[k] = lo + (lo - q[k])
                     p[j] *= -1
             dV = self.gradient(q)
 
