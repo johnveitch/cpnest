@@ -131,16 +131,6 @@ def draw_N_posterior_many(datas, Nlives, Npost, verbose=False):
     posts=[draw_N_posterior(data,logwt,N) for (data,logwt,N) in zip(datas,log_wts,Ns)]
     return vstack(posts).flatten()
 
-def draw_posterior(data, log_wts, verbose=False):
-    """Draw points from the given data (of shape (Nsamples, Ndim))
-        with associated log(weight) (of shape (Nsamples,)). Draws uniquely so
-        there are no repeated samples"""
-    maxWt=max(log_wts)
-    normalised_wts=log_wts-maxWt
-    selection=[n > np.log(uniform()) for n in normalised_wts]
-    idx=list(filter(lambda i: selection[i], range(len(selection))))
-    return data[idx]
-
 def redraw_mcmc_chain(chain, verbose=False, burnin=True):
     """
     Draw samples from the mcmc chains posteriors by redrawing
