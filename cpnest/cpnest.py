@@ -96,7 +96,7 @@ class CPNest(object):
         # instantiate the sampler class
         for i in range(self.nthreads-nhamiltonian):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-            if not (os.path.exists(resume_file) and resume ):
+            if not (os.path.exists(resume_file) and resume):
                 sampler = MetropolisHastingsSampler(self.user,
                                                     maxmcmc,
                                                     verbose=verbose,
@@ -117,7 +117,7 @@ class CPNest(object):
 
         for i in range(self.nthreads-nhamiltonian, self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-            if not (os.path.exists(resume_file) and resume ):
+            if not (os.path.exists(resume_file) and resume):
                 sampler = HamiltonianMonteCarloSampler(self.user,
                                                        maxmcmc,
                                                        verbose=verbose,
