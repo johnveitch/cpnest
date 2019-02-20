@@ -27,7 +27,8 @@ class Model(object):
             True: if all dimensions are within the bounds
             False: otherwise
         """
-        return all(self.bounds[i][0] < param.values[i] < self.bounds[i][1] for i in range(param.dimension))
+        return all(self.bounds[i][0] < param.values[i] < self.bounds[i][1]
+                for i in range(param.dimension))
 
     def new_point(self):
         """
@@ -39,8 +40,9 @@ class Model(object):
         """
         logP = -inf
         while(logP == -inf):
-            p = LivePoint(self.names, [uniform(
-                self.bounds[i][0], self.bounds[i][1]) for i, _ in enumerate(self.names)])
+            p = LivePoint(self.names,
+                    [uniform(self.bounds[i][0], self.bounds[i][1])
+                        for i, _ in enumerate(self.names)])
             logP = self.log_prior(p)
         return p
 
