@@ -12,6 +12,7 @@ from .proposal import DefaultProposalCycle
 from . import proposal
 from .cpnest import CheckPoint, RunManager
 from tqdm import tqdm
+from operator import attrgetter
 
 import pickle
 __checkpoint_flag = False
@@ -107,7 +108,6 @@ class Sampler(object):
         for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             while True: # Generate an in-bounds sample
-                #if self.verbose > 2: sys.stderr.write("process {0!s} --> generating pool of {1:d} points for evolution --> {2:.0f} % complete\r".format(os.getpid(), self.poolsize, 100.0*float(n+1)/float(self.poolsize)))
                 p = self.model.new_point()
                 p.logP = self.model.log_prior(p)
                 if np.isfinite(p.logP): break
@@ -123,7 +123,6 @@ class Sampler(object):
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
 
-    
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
@@ -167,6 +166,7 @@ class Sampler(object):
         self.counter=1
         __checkpoint_flag=False
         while True:
+            
             if self.manager.checkpoint_flag.value:
                 self.checkpoint()
                 sys.exit()
@@ -186,6 +186,7 @@ class Sampler(object):
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize//10))==0:
                 self.proposal.set_ensemble(self.evolution_points)
+
             self.counter += 1
 
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
@@ -292,17 +293,18 @@ class HamiltonianMonteCarloSampler(Sampler):
             
             sub_accepted    = 0
             sub_counter     = 0
-            oldparam        = self.evolution_points.popleft()
-            
+            oldparam        = self.evolution_points.pop()
+
             while sub_accepted == 0:
 
                 sub_counter += 1
                 newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
                 
                 if self.proposal.log_J > np.log(random()):
-                    oldparam        = newparam.copy()
-                    sub_accepted   += 1
-
+                    if newparam.logL > logLmin:
+                        oldparam        = newparam.copy()
+                        sub_accepted   += 1
+            
             self.evolution_points.append(oldparam)
 
             if self.verbose >= 3:
@@ -312,12 +314,12 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            
+#
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
 
             yield (sub_counter, oldparam)
-            
+
     def insert_sample(self, p):
         # if we did not accept, inject a new particle in the system (gran-canonical) from the prior
         # by picking one from the existing pool and giving it a random trajectory
