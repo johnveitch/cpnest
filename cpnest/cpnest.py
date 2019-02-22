@@ -8,7 +8,7 @@ import os
 import sys
 import signal
 
-from multiprocessing.sharedctypes import Value
+from multiprocessing.sharedctypes import Value, Array
 from multiprocessing import Lock
 from multiprocessing.managers import SyncManager
 
@@ -208,7 +208,7 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
         return posterior_samples
 
-    def plot(self):
+    def plot(self, corner = False):
         """
         Make diagnostic plots of the posterior and nested samples
         """
@@ -220,7 +220,7 @@ class CPNest(object):
             plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
         import numpy as np
         plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-        plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
+        if corner: plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
