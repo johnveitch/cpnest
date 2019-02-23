@@ -302,7 +302,7 @@ class NestedSampler(object):
             self.write_chain_to_file()
             self.write_evidence_to_file()
             self.logLmin.value = np.inf
-            for c in consumer_pipes:
+            for c in self.manager.consumer_pipes:
                 c.send(None)
             print("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
