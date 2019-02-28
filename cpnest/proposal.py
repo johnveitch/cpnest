@@ -131,7 +131,7 @@ class EnsembleWalk(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        subset = sample(self.ensemble,self.Npoints)
+        subset = sample(list(self.ensemble),self.Npoints)
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
         for x in subset:
@@ -185,7 +185,7 @@ class DifferentialEvolution(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        a,b = sample(self.ensemble,2)
+        a,b = sample(list(self.ensemble),2)
         sigma = 1e-4 # scatter around difference vector by this factor
         out = old + (b-a)*gauss(1.0,sigma)
         return out
@@ -292,11 +292,14 @@ class HamiltonianProposal(EnsembleEigenVector):
         energy and the :obj:`cpnest.Model.potential`.
         """
         super(HamiltonianProposal, self).__init__(**kwargs)
-        self.T      = self.kinetic_energy
-        self.V      = model.potential
-        self.normal = None
-        self.dt     = 3e-4
-        self.TARGET = 0.654
+        self.T              = self.kinetic_energy
+        self.V              = model.potential
+        self.normal         = None
+        self.dt             = 1.
+        self.scale          = 1.
+        self.TARGET         = 0.654
+        self.ADAPTATIONSIZE = 0.05
+        self.center_of_mass = None
     
     def set_ensemble(self, ensemble):
         """
@@ -309,7 +312,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.update_mass()
         self.update_normal_vector()
         self.update_momenta_distribution()
-        self.set_time_step()
+        self.set_time_step_and_trajectory_length()
     
     def update_normal_vector(self):
         """
@@ -328,6 +331,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.normal = []
         for i,x in enumerate(tracers_array.T):
             # sort the values
+#            self.normal.append(lambda x: -x)
             idx = x.argsort()
             xs = x[idx]
             Vs = V_vals[idx]
@@ -395,13 +399,13 @@ class HamiltonianProposal(EnsembleEigenVector):
         """
         dV = self.dV(q)
         return dV.view(np.float64)
-    
+        
     def update_momenta_distribution(self):
         """
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#np.identity(self.d))#
 
     def update_mass(self):
         """
@@ -409,19 +413,28 @@ class HamiltonianProposal(EnsembleEigenVector):
         inverse mass matrix (precision matrix)
         from the ensemble, allowing for correlated momenta
         """
-        self.mass_matrix            = np.linalg.inv(np.atleast_2d(self.covariance))
         self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
+        self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
         self.d                      = len(self.inverse_mass)
+        self.set_time_step_and_trajectory_length()
     
-    def set_time_step(self):
+    def set_time_step_and_trajectory_length(self):
         """
-        Set the initial time step
-        Step size: dimension^-(1/4) based on
-        http://www.homepages.ucl.ac.uk/~ucakabe/papers/Bernoulli_11b.pdf
+        Set the time step and trajectory length.
+        Time step based on the smallest dimension (quantified by the
+        smallest eigen value of the covariance matrix).
+        Trajectory length empirically tuned to be sampled between
+        50 and 500
         """
-        self.dt = self.d**(-0.25)
-    
+        if self.d == 1:
+            eigen_values, eigen_vectors = np.sqrt(self.covariance), [1]
+            self.dt = self.scale*np.sqrt(np.min(eigen_values))
+        else:
+            eigen_values, eigen_vectors = np.linalg.eigh(self.covariance)
+            self.dt = self.scale*np.sqrt(np.min(eigen_values))
+        self.set_trajectory_length(np.sqrt(np.max(eigen_values)))
+
     def update_time_step(self, acceptance):
         """
         Update the time step according to the
@@ -431,20 +444,18 @@ class HamiltonianProposal(EnsembleEigenVector):
         acceptance : :obj:'numpy.float'
         """
         if acceptance <= self.TARGET:
-            self.dt *= 0.95
-
+            self.scale *= (1.0-self.ADAPTATIONSIZE)
         else:
-            self.dt *= 1.05
+            self.scale *= (1.0+self.ADAPTATIONSIZE)
+        
+        if self.scale > 2.0: self.scale = 2.0
+        if self.scale < 1e-3: self.scale = 1e-3
 
-        if self.dt > self.d**(-0.25): self.dt = self.d**(-0.25)
-        if self.dt < 1e-5*self.d**(-0.25): self.dt = 1e-5*self.d**(-0.25)
-
-    def set_trajectory_length(self):
+    def set_trajectory_length(self, maxd):
         """
-        Set the trajectory length bbbased on the current parameter
-        range
+        Set the trajectory length
         """
-        self.L = int(0.5*np.std(self.inverse_mass_matrix))+int(self.d**0.25)
+        self.L = np.random.randint(50, 500)
 
     def kinetic_energy(self,p):
         """
@@ -491,17 +502,17 @@ class LeapFrog(HamiltonianProposal):
         """
         # generate a canonical momentum
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
+        T0 = self.T(p0)
+        V0 = -q0.logP
         # evolve along the trajectory
         q, p = self.evolve_trajectory(p0, q0, *args)
-        q0.logP = -self.V(q0)
         # minus sign from the definition of the potential
-        initial_energy = self.T(p0) - q0.logP
-        q.logP = -self.V(q)
+        initial_energy = T0 + V0
         final_energy   = self.T(p)  - q.logP
-        self.log_J = min(0.0, initial_energy - final_energy)
+        self.log_J = min(0.0, initial_energy-final_energy)
         return q
     
-    def evolve_trajectory(self, p0, q0):
+    def evolve_trajectory(self, p0, q0, *args):
         """
         Hamiltonian leap frog trajectory subject to the
         hard boundary defined by the parameters prior bounds.
@@ -520,23 +531,24 @@ class LeapFrog(HamiltonianProposal):
         q: :obj:`cpnest.parameter.LivePoint`
             position
         """
-        self.set_trajectory_length()
         # Updating the momentum a half-step
-        p = p0-0.5 * self.dt * self.gradient(q0)
-        q = q0
+        p = p0 - 0.5 * self.dt * self.gradient(q0)
+        q = q0.copy()
+        
         for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
                 u,l = self.prior_bounds[j][1], self.prior_bounds[j][0]
-                q[k] += self.dt[j] * p[j] * self.inverse_mass[j]
+                q[k] += self.dt * p[j] * self.inverse_mass[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
-                if q[k] > u:
-                    q[k] = u - (q[k] - u)
-                    p[j] *= -1
-                if q[k] < l:
-                    q[k] = l + (l - q[k])
-                    p[j] *= -1
+                while q[k] <= l or q[k] >= u:
+                    if q[k] > u:
+                        q[k] = u - (q[k] - u)
+                        p[j] *= -1
+                    if q[k] < l:
+                        q[k] = l + (l - q[k])
+                        p[j] *= -1
         
             dV = self.gradient(q)
             # take a full momentum step
@@ -577,7 +589,7 @@ class ConstrainedLeapFrog(LeapFrog):
         q: :obj:`cpnest.parameter.LivePoint`
             position
         """
-        return super(ConstrainedLeapFrog,self).get_sample(q0,logLmin)
+        return super(ConstrainedLeapFrog,self).get_sample(q0, logLmin)
     
     def evolve_trajectory(self, p0, q0, logLmin):
         """
@@ -594,76 +606,63 @@ class ConstrainedLeapFrog(LeapFrog):
         Returns
         ----------
         p: :obj:`numpy.ndarray` updated momentum vector
-        q: :obj:`cpnest.parameter.LivePoint`
-            position
+        q: :obj:`cpnest.parameter.LivePoint` position
         """
-        
-#        f = open("trajectory.txt","w")
-#        for j,k in enumerate(q0.names):
-#            f.write("%s\t"%k)
-#        f.write("barrier\t")
-#        f.write("logL\n")
-#        # Updating the momentum a half-step
-#        for j,k in enumerate(q0.names):
-#            f.write("%e\t"%q0[k])
-#        f.write("%e\t"%logLmin)
-#        f.write("%e\n"%q0.logL)
-        self.set_trajectory_length()
-        # First half-step in momentum
-        p = p0 - 0.5 * self.dt * self.gradient(q0)
-        q = q0
-#        for j,k in enumerate(q.names):
-#            f.write("%e\t"%q[k])
-#        f.write("%e\t"%logLmin)
-#        f.write("%e\n"%q.logL)
-        for i in range(self.L):
+        dt = np.abs(np.random.normal(self.dt,0.1*self.dt))
+        p = p0 - 0.5 * dt * self.gradient(q0)
+        q = q0.copy()
+        i = 0
+        reflected   = 0
+#        f = open('trajectory.txt','w')
+#        for n in q.names: f.write(n+'\t')
+#        f.write('logP\tlogL\n')
+#        for n in q0.names: f.write(repr(q0[n])+'\t')
+#        f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
+
+        while (i < self.L) or reflected or (constraint < 0):
+            logLi = q.logL
             # do a full step in position
             for j,k in enumerate(q.names):
-                
-                u,l = self.prior_bounds[j][1], self.prior_bounds[j][0]
-                q[k] += self.dt * p[j] * self.inverse_mass[j]
+                u, l  = self.prior_bounds[j][1], self.prior_bounds[j][0]
+                q[k] += dt * p[j] * self.inverse_mass[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
                 while q[k] < l or q[k] > u:
-#                    nbounce = 0
                     if q[k] > u:
-#                        nbounce += 1
-#                        print "================"
-#                        print "upper:"
-#                        print "before",k,q[k],u,'b:',nbounce
                         q[k] = u - (q[k] - u)
-#                        print "after",k,q[k],u,'b:',nbounce
                         p[j] *= -1
-#                    nbounce = 0
                     if q[k] < l:
-#                        nbounce += 1
-#                        print "================"
-#                        print "lower:"
-#                        print "before",k,q[k],l,'b:',nbounce
                         q[k] = l + (l - q[k])
-#                        print "after",k,q[k],l,'b:',nbounce
                         p[j] *= -1
-        
-            dV = self.gradient(q)
-            logL    = self.log_likelihood(q)
-            q.logL  = logL
+            
+#                f.write(repr(q[k])+'\t')
+
+            dV      = self.gradient(q)
+            q.logP  = -self.V(q)
+            q.logL  = self.log_likelihood(q)
+#            f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
+
+            constraint = q.logL - logLmin
+            # if we are moving towards an increasing likelihood
+            # region, keep moving
+            if constraint > 0 or q.logL > logLi:
+                # take a full momentum step
+                p += - dt * dV
+                reflected = 0
+
             # if the trajectory led us outside the likelihood bound,
             # reflect the momentum orthogonally to the surface
-            if np.isfinite(logLmin):
-                
-                if (logL - logLmin) < 0:
-                    normal = self.unit_normal(q)
-                    p      = p - 2.0*np.dot(p,normal)*normal
-                else:
-                    # take a full momentum step
-                    p += - self.dt * dV
-            else:
-                p += - self.dt * dV
-#            for j,k in enumerate(q.names):
-#                f.write("%e\t"%q[k])
-#            f.write("%e\t"%logLmin)
-#            f.write("%e\n"%q.logL)
+            elif constraint <= 0:
+                normal          = self.unit_normal(q)
+                p               = p - 2.0*np.dot(p,normal)*normal
+                reflected = 1
+
+            i += 1
+    
+            if i == 10*self.L:
+                break
         # Do a final update of the momentum for a half step
-        p += - 0.5 * self.dt * dV
+        p += - 0.5 * dt * dV
 #        f.close()
+
         return q, -p
