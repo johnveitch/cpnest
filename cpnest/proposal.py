@@ -295,11 +295,12 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.T              = self.kinetic_energy
         self.V              = model.potential
         self.normal         = None
-        self.dt             = 1.
-        self.scale          = 1.
+        self.dt             = 0.1
+        self.scale          = 0.1
+        self.L              = 10
         self.TARGET         = 0.654
         self.ADAPTATIONSIZE = 0.05
-        self.center_of_mass = None
+        self.c              = self.counter()
     
     def set_ensemble(self, ensemble):
         """
@@ -312,7 +313,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.update_mass()
         self.update_normal_vector()
         self.update_momenta_distribution()
-        self.set_time_step_and_trajectory_length()
+        self.set_time_step()
     
     def update_normal_vector(self):
         """
@@ -417,9 +418,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
         self.d                      = len(self.inverse_mass)
-        self.set_time_step_and_trajectory_length()
+        self.set_time_step()
     
-    def set_time_step_and_trajectory_length(self):
+    def set_time_step(self):
         """
         Set the time step and trajectory length.
         Time step based on the smallest dimension (quantified by the
@@ -429,33 +430,36 @@ class HamiltonianProposal(EnsembleEigenVector):
         """
         if self.d == 1:
             eigen_values, eigen_vectors = np.sqrt(self.covariance), [1]
-            self.dt = self.scale*np.sqrt(np.min(eigen_values))
+            self.base_dt = self.scale*np.sqrt(np.min(eigen_values))
         else:
             eigen_values, eigen_vectors = np.linalg.eigh(self.covariance)
-            self.dt = self.scale*np.sqrt(np.min(eigen_values))
-        self.set_trajectory_length(np.sqrt(np.max(eigen_values)))
+            self.base_dt = self.scale*np.sqrt(np.min(eigen_values))
 
-    def update_time_step(self, acceptance):
+    def update_time_step(self, acceptance, nmcmc):
         """
         Update the time step according to the
         acceptance rate
         Parameters
         ----------
         acceptance : :obj:'numpy.float'
+        nmcmc      : :obj:'numpy.int'
         """
+
         if acceptance <= self.TARGET:
             self.scale *= (1.0-self.ADAPTATIONSIZE)
         else:
             self.scale *= (1.0+self.ADAPTATIONSIZE)
         
         if self.scale > 2.0: self.scale = 2.0
-        if self.scale < 1e-3: self.scale = 1e-3
+        if self.scale < 0.1: self.scale = 0.1
+        self.dt = self.base_dt * self.scale
+        self.set_trajectory_length(nmcmc)
 
-    def set_trajectory_length(self, maxd):
+    def set_trajectory_length(self, nmcmc):
         """
         Set the trajectory length
         """
-        self.L = np.random.randint(50, 500)
+        self.L = nmcmc*(1+int(self.d**(0.25)))//2
 
     def kinetic_energy(self,p):
         """
@@ -591,6 +595,12 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         return super(ConstrainedLeapFrog,self).get_sample(q0, logLmin)
     
+    def counter(self):
+        n = 0
+        while True:
+            yield n
+            n += 1
+
     def evolve_trajectory(self, p0, q0, logLmin):
         """
         Evolve point according to Hamiltonian method in
@@ -613,13 +623,13 @@ class ConstrainedLeapFrog(LeapFrog):
         q = q0.copy()
         i = 0
         reflected   = 0
-#        f = open('trajectory.txt','w')
+#        f = open('trajectory_'+str(next(self.c))+'.txt','w')
 #        for n in q.names: f.write(n+'\t')
-#        f.write('logP\tlogL\n')
+#        f.write('logP\tlogL\tlogLmin\n')
 #        for n in q0.names: f.write(repr(q0[n])+'\t')
 #        f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
 
-        while (i < self.L) or reflected or (constraint < 0):
+        while (i < self.L) or reflected:
             logLi = q.logL
             # do a full step in position
             for j,k in enumerate(q.names):
@@ -645,7 +655,7 @@ class ConstrainedLeapFrog(LeapFrog):
             constraint = q.logL - logLmin
             # if we are moving towards an increasing likelihood
             # region, keep moving
-            if constraint > 0 or q.logL > logLi:
+            if constraint > 0:
                 # take a full momentum step
                 p += - dt * dV
                 reflected = 0
@@ -659,7 +669,7 @@ class ConstrainedLeapFrog(LeapFrog):
 
             i += 1
     
-            if i == 10*self.L:
+            if i == 5*self.L:
                 break
         # Do a final update of the momentum for a half step
         p += - 0.5 * dt * dV

@@ -298,14 +298,14 @@ class HamiltonianMonteCarloSampler(Sampler):
             while sub_accepted == 0:
 
                 sub_counter += 1
-                newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
+                newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = np.minimum(oldparam.logL,logLmin))
                 
                 if self.proposal.log_J > np.log(random()):
                     if newparam.logL > logLmin:
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
-            
-            self.evolution_points.append(oldparam)
+        
+            self.evolution_points.appendleft(oldparam)
 
             if self.verbose >= 3:
                 self.samples.append(oldparam)
@@ -316,7 +316,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
 #
             for p in self.proposal.proposals:
-                p.update_time_step(self.acceptance)
+                p.update_time_step(self.acceptance, self.estimate_nmcmc())
 
             yield (sub_counter, oldparam)
 
