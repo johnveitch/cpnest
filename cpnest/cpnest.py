@@ -52,7 +52,7 @@ class CPNest(object):
                  nthreads     = None,
                  nhamiltonian = 0,
                  resume       = False,
-                 proposal     = None):
+                 proposals     = None):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -61,13 +61,13 @@ class CPNest(object):
         print('Running with {0} parallel threads'.format(self.nthreads))
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
-        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
-        if proposal is None:
-            proposal = dict(mhs=DefaultProposalCycle,
-                            hmc=HamiltonianProposalCycle)
-        elif type(proposal) == list:
-            proposal = dict(mhs=proposal[0],
-                            hmc=proposal[1])
+        from .proposals import DefaultProposalCycle, HamiltonianProposalCycle
+        if proposals is None:
+            proposals = dict(mhs=DefaultProposalCycle,
+                             hmc=HamiltonianProposalCycle)
+        elif type(proposals) == list:
+            proposals = dict(mhs=proposals[0],
+                             hmc=proposals[1])
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
@@ -102,15 +102,15 @@ class CPNest(object):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 sampler = MetropolisHastingsSampler(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+i,
-                                  proposal    = proposal['mhs'](),
-                                  resume_file = resume_file,
-                                  manager     = self.manager
-                                  )
+                                                    maxmcmc,
+                                                    verbose     = verbose,
+                                                    output      = output,
+                                                    poolsize    = poolsize,
+                                                    seed        = self.seed+i,
+                                                    proposal    = proposals['mhs'](),
+                                                    resume_file = resume_file,
+                                                    manager     = self.manager
+                                                    )
             else:
                 sampler = MetropolisHastingsSampler.resume(resume_file,
                                                            self.manager,
@@ -123,15 +123,15 @@ class CPNest(object):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 sampler = HamiltonianMonteCarloSampler(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+i,
-                                  proposal    = proposal['hmc'](model=self.user),
-                                  resume_file = resume_file,
-                                  manager     = self.manager
-                                  )
+                                                       maxmcmc,
+                                                       verbose     = verbose,
+                                                       output      = output,
+                                                       poolsize    = poolsize,
+                                                       seed        = self.seed+i,
+                                                       proposal    = proposals['hmc'](model=self.user),
+                                                       resume_file = resume_file,
+                                                       manager     = self.manager
+                                                       )
             else:
                 sampler = HamiltonianMonteCarloSampler.resume(resume_file,
                                                               self.manager,
