@@ -118,6 +118,7 @@ class Sampler(object):
             self.evolution_points.append(p)
 
         self.proposal.set_ensemble(self.evolution_points)
+
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -184,7 +185,7 @@ class Sampler(object):
             # Send the sample to the Nested Sampler
             self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize//10))==0:
+            if (self.counter%(self.poolsize))==0:
                 self.proposal.set_ensemble(self.evolution_points)
 
             self.counter += 1
@@ -298,14 +299,23 @@ class HamiltonianMonteCarloSampler(Sampler):
             while sub_accepted == 0:
 
                 sub_counter += 1
-                newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = np.minimum(oldparam.logL,logLmin))
+                newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
                 
                 if self.proposal.log_J > np.log(random()):
+                    
                     if newparam.logL > logLmin:
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
-        
-            self.evolution_points.appendleft(oldparam)
+#                    else:
+#                        print(oldparam,oldparam.logL)
+#                        print(newparam,newparam.logL)
+#                        print('logLmin was',logLmin,'dt:',self.proposal.proposals[0].dt,'L:',self.proposal.proposals[0].L)
+#                        print('covariance:',self.proposal.proposals[0].covariance)
+#                        try:
+#                            print('true covariance:',self.model.covariance)
+#                        except:
+#                            pass
+            self.evolution_points.append(oldparam)
 
             if self.verbose >= 3:
                 self.samples.append(oldparam)
@@ -314,9 +324,11 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-#
+
             for p in self.proposal.proposals:
-                p.update_time_step(self.acceptance, self.estimate_nmcmc())
+                p.update_time_step(self.acceptance)
+                p.update_trajectory_length(self.estimate_nmcmc())
+                print(p.dt,p.L)
 
             yield (sub_counter, oldparam)
 

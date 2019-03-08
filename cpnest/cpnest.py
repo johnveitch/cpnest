@@ -208,7 +208,7 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
         return posterior_samples
 
-    def plot(self, corner = False):
+    def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
         """

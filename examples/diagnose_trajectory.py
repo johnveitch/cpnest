@@ -1,16 +1,19 @@
 import numpy as np
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-import sys
+import sys, os
 
 np.seterr(all='raise')
 
 def log_likelihood(x):
     return np.sum([-0.5*x[n]**2-0.5*np.log(2.0*np.pi) for n in range(x.shape[0])])
 
-#plt.hist(np.exp(np.random.uniform(np.log(1),np.log(1000),size=10000)),bins=1000)
-#plt.show()
-
+mode = sys.argv[1]
+if mode == 'delete':
+    allfiles = os.listdir('.')
+    toremove = [a for a in allfiles if 'trajectory_' in a and '.py' not in a]
+    for f in toremove: os.remove(f)
+    exit()
 traj = np.genfromtxt('trajectory_'+sys.argv[1]+'.txt', names= True)
 npts = 256
 x = np.linspace(-10,10,npts)

@@ -94,6 +94,8 @@ class NestedSampler(object):
     Nested Sampler class.
     Initialisation arguments:
     
+    model: :obj:`cpnest.Model` user defined model
+    
     manager: `multiprocessing` manager instance which controls
         the shared objects.
         Default: None
@@ -125,7 +127,8 @@ class NestedSampler(object):
         Deafult: 0.1
     """
 
-    def __init__(self,usermodel,
+    def __init__(self,
+                 model,
                  manager        = None,
                  nlive          = 1024,
                  output         = None,
@@ -137,34 +140,34 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.model=usermodel
-        self.manager = manager
+        self.model          = model
+        self.manager        = manager
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
-        self.verbose = verbose
-        self.acceptance = 1.0
-        self.accepted = 0
-        self.rejected = 1
-        self.queue_counter = 0
-        self.Nlive = nlive
-        self.params = [None] * self.Nlive
-        self.tolerance = stopping
-        self.condition = np.inf
-        self.worst = 0
-        self.logLmax = -np.inf
-        self.logLmin = self.manager.logLmin
-        self.iteration = 0
-        self.nested_samples=[]
-        self.logZ=None
-        self.state = _NSintegralState(self.Nlive)
+        self.verbose        = verbose
+        self.acceptance     = 1.0
+        self.accepted       = 0
+        self.rejected       = 1
+        self.queue_counter  = 0
+        self.Nlive          = nlive
+        self.params         = [None] * self.Nlive
+        self.tolerance      = stopping
+        self.condition      = np.inf
+        self.worst          = 0
+        self.logLmax        = -np.inf
+        self.logLmin        = self.manager.logLmin
+        self.iteration      = 0
+        self.nested_samples = []
+        self.logZ           = None
+        self.state          = _NSintegralState(self.Nlive)
         sys.stdout.flush()
-        self.output_folder = output
+        self.output_folder  = output
         self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
-        header = open(os.path.join(output,'header.txt'),'w')
+        header              = open(os.path.join(output,'header.txt'),'w')
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
-        self.initialised=False
+        self.initialised    = False
 
     def setup_output(self,output):
         """

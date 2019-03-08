@@ -295,11 +295,13 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.T              = self.kinetic_energy
         self.V              = model.potential
         self.normal         = None
-        self.dt             = 0.1
-        self.scale          = 0.1
+        self.dt             = 1.0
+        self.base_dt        = 1.0
+        self.scale          = 1.0
         self.L              = 10
-        self.TARGET         = 0.654
-        self.ADAPTATIONSIZE = 0.05
+        self.base_L         = 10
+        self.TARGET         = 0.5
+        self.ADAPTATIONSIZE = 0.001
         self.c              = self.counter()
     
     def set_ensemble(self, ensemble):
@@ -313,7 +315,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.update_mass()
         self.update_normal_vector()
         self.update_momenta_distribution()
-        self.set_time_step()
+        self.set_integration_parameters()
     
     def update_normal_vector(self):
         """
@@ -406,7 +408,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#np.identity(self.d))#
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#
 
     def update_mass(self):
         """
@@ -414,28 +416,27 @@ class HamiltonianProposal(EnsembleEigenVector):
         inverse mass matrix (precision matrix)
         from the ensemble, allowing for correlated momenta
         """
+        self.d                      = self.covariance.shape[0]
         self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
         self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        self.d                      = len(self.inverse_mass)
-        self.set_time_step()
+        self.set_integration_parameters()
     
-    def set_time_step(self):
+    def set_integration_parameters(self):
         """
-        Set the time step and trajectory length.
-        Time step based on the smallest dimension (quantified by the
-        smallest eigen value of the covariance matrix).
-        Trajectory length empirically tuned to be sampled between
-        50 and 500
+        Set the integration length accccording to the N-dimensional ellipsoid
+        shortest and longest principal axes. The former sets to base time step
+        while the latter sets the trajectory length
         """
         if self.d == 1:
             eigen_values, eigen_vectors = np.sqrt(self.covariance), [1]
-            self.base_dt = self.scale*np.sqrt(np.min(eigen_values))
         else:
             eigen_values, eigen_vectors = np.linalg.eigh(self.covariance)
-            self.base_dt = self.scale*np.sqrt(np.min(eigen_values))
+        
+        self.base_dt = 1.0#np.sqrt(np.min(eigen_values))
+        self.base_L = 10+int(np.sqrt(np.max(eigen_values))/self.base_dt)
 
-    def update_time_step(self, acceptance, nmcmc):
+    def update_time_step(self, acceptance):
         """
         Update the time step according to the
         acceptance rate
@@ -450,16 +451,18 @@ class HamiltonianProposal(EnsembleEigenVector):
         else:
             self.scale *= (1.0+self.ADAPTATIONSIZE)
         
-        if self.scale > 2.0: self.scale = 2.0
-        if self.scale < 0.1: self.scale = 0.1
-        self.dt = self.base_dt * self.scale
-        self.set_trajectory_length(nmcmc)
-
-    def set_trajectory_length(self, nmcmc):
+        if self.scale > 1.99: self.scale = 1.99
+        if self.scale < 2e-2: self.scale = 2e-2
+        self.dt = self.base_dt * self.scale * self.d**(-0.25)
+        
+    def update_trajectory_length(self,nmcmc):
         """
-        Set the trajectory length
+        Update the trajectory length according to the estimated ACL
+        Parameters
+        ----------
+        nmcmc :`obj`:: int
         """
-        self.L = nmcmc*(1+int(self.d**(0.25)))//2
+        self.L = self.base_L + nmcmc
 
     def kinetic_energy(self,p):
         """
@@ -623,11 +626,11 @@ class ConstrainedLeapFrog(LeapFrog):
         q = q0.copy()
         i = 0
         reflected   = 0
-#        f = open('trajectory_'+str(next(self.c))+'.txt','w')
-#        for n in q.names: f.write(n+'\t')
-#        f.write('logP\tlogL\tlogLmin\n')
-#        for n in q0.names: f.write(repr(q0[n])+'\t')
-#        f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
+        f = open('trajectory_'+str(next(self.c))+'.txt','w')
+        for n in q.names: f.write(n+'\t')
+        f.write('logP\tlogL\tlogLmin\n')
+        for n in q0.names: f.write(repr(q0[n])+'\t')
+        f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
 
         while (i < self.L) or reflected:
             logLi = q.logL
@@ -645,34 +648,36 @@ class ConstrainedLeapFrog(LeapFrog):
                         q[k] = l + (l - q[k])
                         p[j] *= -1
             
-#                f.write(repr(q[k])+'\t')
+                f.write(repr(q[k])+'\t')
 
             dV      = self.gradient(q)
             q.logP  = -self.V(q)
             q.logL  = self.log_likelihood(q)
-#            f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
+            f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
 
             constraint = q.logL - logLmin
             # if we are moving towards an increasing likelihood
             # region, keep moving
-            if constraint > 0:
+            if constraint > 0 or q.logL > logLi:
                 # take a full momentum step
                 p += - dt * dV
                 reflected = 0
 
             # if the trajectory led us outside the likelihood bound,
             # reflect the momentum orthogonally to the surface
-            elif constraint <= 0:
+            else:
                 normal          = self.unit_normal(q)
                 p               = p - 2.0*np.dot(p,normal)*normal
                 reflected = 1
 
             i += 1
     
-            if i == 5*self.L:
+            if i == 10*self.L:
                 break
         # Do a final update of the momentum for a half step
         p += - 0.5 * dt * dV
-#        f.close()
+#        print('did',i,'steps instead of',self.L,'dt',dt)
+#        print('final momentum',p,'initial momentum',p0)
+        f.close()
 
         return q, -p

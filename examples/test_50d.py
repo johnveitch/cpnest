@@ -19,12 +19,12 @@ class GaussianModel(cpnest.model.Model):
     
     def log_prior(self,p):
         logP = super(GaussianModel,self).log_prior(p)
-#        for n in p.names: logP += -0.5*p[n]**2
+#        for n in p.names: logP += -0.5*(p[n]/1000.0)**2
         return logP
     
     def force(self, p):
         f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
-#        for n in p.names: f[n] = p[n]
+#        for n in p.names: f[n] = p[n]/1000.0
         return f
 
 class GaussianTestCase(unittest.TestCase):
@@ -33,7 +33,7 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel(dim = 3)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=4, nlive=1000, maxmcmc=500, poolsize=1000, nhamiltonian = 4)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=1, nlive=1000, maxmcmc=1000, poolsize=1000, nhamiltonian = 1)
 
     def test_run(self):
         self.work.run()
