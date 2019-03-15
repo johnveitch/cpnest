@@ -38,6 +38,8 @@ class CPNest(object):
     nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
     nhamiltomnian: number of sampler threads using an hamiltonian samplers. Default: 0
     resume: determines whether cpnest will resume a run or run from scratch. Default: False.
+    proposal: dictionary/list with custom jump proposals. key 'mhs' for the
+    Metropolis-Hastings sampler, 'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
     """
     def __init__(self,
                  usermodel,
@@ -49,15 +51,23 @@ class CPNest(object):
                  maxmcmc      = 100,
                  nthreads     = None,
                  nhamiltonian = 0,
-                 resume       = False):
+                 resume       = False,
+                 proposals     = None):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
             self.nthreads = nthreads
+
         print('Running with {0} parallel threads'.format(self.nthreads))
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
+        if proposals is None:
+            proposals = dict(mhs=DefaultProposalCycle,
+                             hmc=HamiltonianProposalCycle)
+        elif type(proposals) == list:
+            proposals = dict(mhs=proposals[0],
+                             hmc=proposals[1])
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
@@ -97,7 +107,7 @@ class CPNest(object):
                                   output      = output,
                                   poolsize    = poolsize,
                                   seed        = self.seed+i,
-                                  proposal    = DefaultProposalCycle(),
+                                  proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
                                   manager     = self.manager
                                   )
@@ -118,7 +128,7 @@ class CPNest(object):
                                   output      = output,
                                   poolsize    = poolsize,
                                   seed        = self.seed+i,
-                                  proposal    = HamiltonianProposalCycle(model=self.user),
+                                  proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
                                   manager     = self.manager
                                   )
