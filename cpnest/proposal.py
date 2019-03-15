@@ -5,9 +5,12 @@ from math import log,sqrt,fabs,exp
 from abc import ABCMeta,abstractmethod
 import random
 from random import sample,gauss,randrange,uniform
+from scipy.special import gamma
 from scipy.interpolate import LSQUnivariateSpline
 from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
+from scipy.stats.mstats import gmean
+from .neighbors import constructKDTree, queryKDTree
 
 class Proposal(object):
 	"""
@@ -40,7 +43,8 @@ class EnsembleProposal(Proposal):
 		"""
 		Set the ensemble of points to use
 		"""
-		self.ensemble=ensemble
+		self.ensemble	= ensemble
+		self.tree		= constructKDTree(ensemble)
 
 class ProposalCycle(EnsembleProposal):
 	"""
@@ -295,15 +299,16 @@ class HamiltonianProposal(EnsembleEigenVector):
 		self.T				= self.kinetic_energy
 		self.V				= model.potential
 		self.normal			= None
-		self.dt				= 1.0
-		self.base_dt		= 1.0
+		self.dt				= 0.3
+		self.base_dt		= None
 		self.scale			= 1.0
-		self.L				= 10
-		self.base_L			= 10
-		self.TARGET			= 0.8
+		self.L				= 100
+		self.base_L			= None
+		self.TARGET			= 0.654
 		self.ADAPTATIONSIZE = 0.001
 		self.c				= self.counter()
-	
+		self._initialised   = False
+
 	def set_ensemble(self, ensemble):
 		"""
 		override the set ensemble method
@@ -312,11 +317,8 @@ class HamiltonianProposal(EnsembleEigenVector):
 		hard boundary defined by logLmin.
 		"""
 		super(HamiltonianProposal,self).set_ensemble(ensemble)
-		self.update_mass()
 		self.update_normal_vector()
-		self.update_momenta_distribution()
-		self.set_integration_parameters()
-	
+
 	def update_normal_vector(self):
 		"""
 		update the constraint by approximating the
@@ -410,46 +412,60 @@ class HamiltonianProposal(EnsembleEigenVector):
 		"""
 		self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#
 
-	def update_mass(self):
+	def update_mass(self, point):
 		"""
 		Update the mass matrix (covariance matrix) and
 		inverse mass matrix (precision matrix)
 		from the ensemble, allowing for correlated momenta
 		"""
-		self.d						= self.covariance.shape[0]
-		self.inverse_mass_matrix	= np.atleast_2d(self.covariance)
+		self.d				= point.dimension
+		# select the closest 2D+1 samples
+		_, indeces 			= queryKDTree(self.tree, point, 2*self.d+1)
+		indeces 			= np.squeeze(indeces)
+		# construct the covariance of the selected samples 
+		tracers_array = np.zeros((len(indeces),self.ensemble[0].dimension))
+		for i,j in enumerate(indeces):
+			try:
+				tracers_array[i,:] = self.ensemble[j].values
+			except:
+				pass
+		
+		# remove the zeros, if there are
+		nonzero_row_indices 		= [i for i in range(tracers_array.shape[0]) if not np.allclose(tracers_array[i,:],0)]
+		tracers_array 				= tracers_array[nonzero_row_indices,:]
+		local_covariance 			= np.cov(tracers_array.T)
+		self.inverse_mass_matrix	= np.atleast_2d(local_covariance)
 		self.mass_matrix			= np.linalg.inv(self.inverse_mass_matrix)
 		self.inverse_mass			= np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-		self.logdeterminant			= np.log(np.linalg.det(self.mass_matrix)) 
+		sign, self.logdeterminant	= np.linalg.slogdet(self.mass_matrix)
+
 		self.set_integration_parameters()
 	
 	def set_integration_parameters(self):
 		"""
-		Set the integration length according to the N-dimensional ellipsoid
-		shortest and longest principal axes. The former sets the base time step
-		while the latter sets the trajectory length
+		Initialise the integration length according to the N-dimensional 
+		prior box, ignoring the manifold geometry. 
+		We set the path length self.base_dt*self.base_L to be equal to
+		twice the largest dimension, fixing the minimum number of steps to be 10.
 		"""
-		if self.d == 1:
-			eigen_values, eigen_vectors = np.sqrt(self.covariance), [1]
-		else:
-			eigen_values, eigen_vectors = np.linalg.eigh(self.covariance)
-		
-		self.base_dt = np.sqrt(np.min(eigen_values))
-		self.base_L  = 10+int(np.sqrt(np.max(eigen_values))/self.base_dt)
+		if self._initialised is False:
+			self.base_L 	= 10
+			self.base_dt    = 2*np.max([np.abs(b[1]-b[0]) for b in self.prior_bounds])/self.base_L
+			self._initialised = True
 
 	def update_time_step(self, acceptance):
 		"""
 		Update the time step according to the
 		acceptance rate
 		Parameters
-		----------
+		----------	
 		acceptance : :obj:'numpy.float'
 		"""
 		diff = acceptance - self.TARGET        
 		new_log_scale = np.log(self.scale) + self.ADAPTATIONSIZE * diff
 		self.scale = np.exp(new_log_scale)	
-		self.dt = self.base_dt * self.scale * self.d**(-0.25)
-
+		self.dt = self.base_dt * self.scale
+	
 	def update_trajectory_length(self,nmcmc):
 		"""
 		Update the trajectory length according to the estimated ACL
@@ -457,7 +473,7 @@ class HamiltonianProposal(EnsembleEigenVector):
 		----------
 		nmcmc :`obj`:: int
 		"""
-		self.L = self.base_L+np.random.randint(nmcmc)
+		self.L = self.base_L+nmcmc
 
 	def kinetic_energy(self,p):
 		"""
@@ -471,7 +487,7 @@ class HamiltonianProposal(EnsembleEigenVector):
 		----------
 		T: :float: kinetic energy
 		"""
-		return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p)) + 0.5 * self.logdeterminant
+		return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p)) - 0.5 * self.logdeterminant
 
 class LeapFrog(HamiltonianProposal):
 	"""
@@ -502,6 +518,11 @@ class LeapFrog(HamiltonianProposal):
 		q: :obj:`cpnest.parameter.LivePoint`
 			position
 		"""
+		# estimate the local metric and set the momenta distribution 
+		# accordingly
+		self.update_mass(q0)
+		self.update_momenta_distribution()
+		self.set_integration_parameters()
 		# generate a canonical momentum
 		p0 = np.atleast_1d(self.momenta_distribution.rvs())
 		T0 = self.T(p0)
@@ -616,10 +637,11 @@ class ConstrainedLeapFrog(LeapFrog):
 		p: :obj:`numpy.ndarray` updated momentum vector
 		q: :obj:`cpnest.parameter.LivePoint` position
 		"""
-		dt = self.dt 
-		p = p0 - 0.5 * dt * self.gradient(q0)
-		q = q0.copy()
-		i = 0
+		dt 			= np.abs(np.random.normal(self.dt,self.dt/10.0))
+		L  			= np.random.randint(self.L,2*self.L)
+		p  			= p0 - 0.5 * dt * self.gradient(q0)
+		q  			= q0.copy()
+		i  			= 0
 		reflected	= 0
 		#f = open('trajectory_'+str(next(self.c))+'.txt','w')
 		#for n in q.names: f.write(n+'\t')
@@ -627,7 +649,7 @@ class ConstrainedLeapFrog(LeapFrog):
 		#for n in q0.names: f.write(repr(q0[n])+'\t')
 		#f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
 
-		while (i < self.L) or reflected:
+		while (i < L) or reflected:
 			logLi = q.logL
 			# do a full step in position
 			for j,k in enumerate(q.names):
@@ -666,8 +688,9 @@ class ConstrainedLeapFrog(LeapFrog):
 				reflected = 1
 
 			i += 1
-	
-			if i == 10*self.L:
+			# if we spent too much time outside the 
+			# admitted region, quit 
+			if i == 10*L:
 				break
 		# Do a final update of the momentum for a half step
 		p += - 0.5 * dt * dV

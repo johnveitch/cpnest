@@ -116,7 +116,7 @@ class Sampler(object):
 				print("Warning: received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
 				print("You may want to check your likelihood function to improve sampling")
 			self.evolution_points.append(p)
-
+		
 		self.proposal.set_ensemble(self.evolution_points)
 
 		# Now, run evolution so samples are drawn from actual prior
@@ -181,7 +181,7 @@ class Sampler(object):
 				break
 		
 			self.evolution_points.append(p)
-			(Nmcmc, outParam) = next(self.yield_sample(p.logL))#self.logLmin.value))
+			(Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
 			# Send the sample to the Nested Sampler
 			self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
 			# Update the ensemble every now and again
@@ -303,9 +303,9 @@ class HamiltonianMonteCarloSampler(Sampler):
 				
 				if self.proposal.log_J > np.log(random()):
 					
-					if newparam.logL > logLmin:
-						oldparam		= newparam.copy()
-						sub_accepted   += 1
+					#if newparam.logL > logLmin:
+					oldparam		= newparam.copy()
+					sub_accepted   += 1
 			
 			self.sub_acceptance = float(sub_accepted)/float(sub_counter)
 			self.mcmc_accepted += sub_accepted
@@ -322,15 +322,3 @@ class HamiltonianMonteCarloSampler(Sampler):
 				self.samples.append(oldparam)
 			
 			yield (sub_counter, oldparam)
-
-	def insert_sample(self, p):
-		# if we did not accept, inject a new particle in the system (gran-canonical) from the prior
-		# by picking one from the existing pool and giving it a random trajectory
-		k = np.random.randint(self.evolution_points.maxlen)
-		self.evolution_points.rotate(k)
-		p  = self.evolution_points.pop()
-		self.evolution_points.append(p)
-		self.evolution_points.rotate(-k)
-		return self.proposal.get_sample(p.copy(),logLmin=p.logL)
-
-
