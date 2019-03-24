@@ -121,10 +121,15 @@ class NestedSampler(object):
     prior_sampling: boolean
         produce Nlive samples from the prior.
         Default: False
-        
+
     stopping: float
         Stop when remaining samples wouldn't change logZ estimate by this much.
         Deafult: 0.1
+
+    n_periodic_checkpoint: int
+        checkpoint the sampler every n_periodic_checkpoint iterations
+        Default: 100000
+ 
     """
 
     def __init__(self,
@@ -135,7 +140,8 @@ class NestedSampler(object):
                  verbose        = 1,
                  seed           = 1,
                  prior_sampling = False,
-                 stopping       = 0.1):
+                 stopping       = 0.1,
+                 n_periodic_checkpoint = 100000):
         """
         Initialise all necessary arguments and
         variables for the algorithm
@@ -151,6 +157,7 @@ class NestedSampler(object):
         self.queue_counter  = 0
         self.Nlive          = nlive
         self.params         = [None] * self.Nlive
+        self.n_periodic_checkpoint = n_periodic_checkpoint
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
@@ -312,7 +319,9 @@ class NestedSampler(object):
 
         try:
             while self.condition > self.tolerance:
-                self.consume_sample()
+                for _ in range(self.n_periodic_checkpoint):
+                    self.consume_sample()
+                self.checkpoint()
         except CheckPoint:
             self.checkpoint()
             sys.exit()
@@ -348,7 +357,6 @@ class NestedSampler(object):
         print('Checkpointing nested sampling')
         with open(self.resume_file,"wb") as f:
             pickle.dump(self, f)
-        sys.exit(0)
 
     @classmethod
     def resume(cls, filename, manager, usermodel):
