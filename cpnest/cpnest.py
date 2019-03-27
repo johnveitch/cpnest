@@ -57,7 +57,7 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
-                 n_periodic_checkpoint = 100000):
+                 n_periodic_checkpoint = 1000):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -117,6 +117,7 @@ class CPNest(object):
                                   resume_file = resume_file,
                                   manager     = self.manager
                                   )
+                sampler.checkpoint()
             else:
                 sampler = MetropolisHastingsSampler.resume(resume_file,
                                                            self.manager,

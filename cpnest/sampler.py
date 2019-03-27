@@ -210,7 +210,6 @@ class Sampler(object):
         print('Checkpointing Sampler')
         with open(self.resume_file, "wb") as f:
             pickle.dump(self, f)
-        sys.exit(0)
 
     @classmethod
     def resume(cls, resume_file, manager, model):

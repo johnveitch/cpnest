@@ -141,7 +141,7 @@ class NestedSampler(object):
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = 100000):
+                 n_periodic_checkpoint = 1000):
         """
         Initialise all necessary arguments and
         variables for the algorithm
@@ -319,7 +319,7 @@ class NestedSampler(object):
 
         try:
             while self.condition > self.tolerance:
-                for _ in range(self.n_periodic_checkpoint):
+                for i in range(self.n_periodic_checkpoint):
                     self.consume_sample()
                 self.checkpoint()
         except CheckPoint:
