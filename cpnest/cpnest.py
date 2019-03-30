@@ -57,7 +57,7 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposal     = None,
-                 n_periodic_checkpoint = 1000):
+                 n_periodic_checkpoint = 100):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:

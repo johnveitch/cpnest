@@ -168,9 +168,11 @@ class Sampler(object):
         __checkpoint_flag=False
         while True:
             
-            if self.manager.checkpoint_flag.value:
+            if self.manager.checkpoint_flag.value == 1:
                 self.checkpoint()
                 sys.exit()
+            elif self.manager.checkpoint_flag.value == 2:
+                self.checkpoint()
             
             if self.logLmin.value==np.inf:
                 break
