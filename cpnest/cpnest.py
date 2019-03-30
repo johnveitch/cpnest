@@ -42,7 +42,7 @@ class CPNest(object):
     Metropolis-Hastings sampler, 'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
     n_periodic_checkpoint: int
         checkpoint the sampler every n_periodic_checkpoint iterations
-        Default: 100000
+        Default: 1000
 
     """
     def __init__(self,
@@ -56,7 +56,7 @@ class CPNest(object):
                  nthreads     = None,
                  nhamiltonian = 0,
                  resume       = False,
-                 proposals     = None,
+                 proposal     = None,
                  n_periodic_checkpoint = 1000):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
