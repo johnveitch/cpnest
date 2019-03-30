@@ -40,6 +40,10 @@ class CPNest(object):
     resume: determines whether cpnest will resume a run or run from scratch. Default: False.
     proposal: dictionary/list with custom jump proposals. key 'mhs' for the
     Metropolis-Hastings sampler, 'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+    n_periodic_checkpoint: int
+        checkpoint the sampler every n_periodic_checkpoint iterations
+        Default: 100000
+
     """
     def __init__(self,
                  usermodel,
@@ -52,7 +56,8 @@ class CPNest(object):
                  nthreads     = None,
                  nhamiltonian = 0,
                  resume       = False,
-                 proposal     = None):
+                 proposals     = None,
+                 n_periodic_checkpoint = 1000):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -93,7 +98,8 @@ class CPNest(object):
                         verbose        = verbose,
                         seed           = self.seed,
                         prior_sampling = False,
-                        manager        = self.manager)
+                        manager        = self.manager,
+                        n_periodic_checkpoint = n_periodic_checkpoint)
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
@@ -111,6 +117,7 @@ class CPNest(object):
                                   resume_file = resume_file,
                                   manager     = self.manager
                                   )
+                sampler.checkpoint()
             else:
                 sampler = MetropolisHastingsSampler.resume(resume_file,
                                                            self.manager,
@@ -147,6 +154,7 @@ class CPNest(object):
             signal.signal(signal.SIGTERM, sighandler)
             signal.signal(signal.SIGQUIT, sighandler)
             signal.signal(signal.SIGINT, sighandler)
+            signal.signal(signal.SIGUSR1, sighandler)
             signal.signal(signal.SIGUSR2, sighandler)
         
         #self.p_ns.start()
