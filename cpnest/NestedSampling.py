@@ -16,6 +16,7 @@ from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint, RunManager
+from .manager import Worker
 
 from tqdm import tqdm
 
@@ -89,7 +90,7 @@ class _NSintegralState(object):
     print('Saved nested sampling plot as {0}'.format(filename))
 
 
-class NestedSampler(object):
+class NestedSampler(Worker):
     """
     Nested Sampler class.
     Initialisation arguments:
@@ -234,6 +235,7 @@ class NestedSampler(object):
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
+            # TODO: Update this
             self.manager.consumer_pipes[k].send(self.params[k])
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
@@ -247,16 +249,21 @@ class NestedSampler(object):
             loops           = 0
             while(True):
                 loops += 1
-                acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
+                job = self.manager.get_sample()
+                proposed = job.sample
+                acceptance = job.acceptance
+                sub_acceptance = job.sub_acceptance
+                jumps = job.jumps
+                
                 if proposed.logL > self.logLmin.value:
                     # replace worst point with new one
                     self.params[k]     = proposed
-                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                    #self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     self.accepted += 1
                     break
                 else:
                     # resend it to the producer
-                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
+                    #self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
                     self.rejected += 1
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
@@ -289,8 +296,12 @@ class NestedSampler(object):
                 for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
                 for j in range(nthreads):
                     while i < self.Nlive:
-                        acceptance,sub_acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
-                        self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                        job = self.manager.get_sample()
+                        self.params[i] = job.sample
+                        acceptance = job.acceptance
+                        sub_acceptance = job.sub_acceptance
+                        jumps = job.jumps
+                        #self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                         if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
                             i+=1
                             pbar.update()

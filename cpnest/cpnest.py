@@ -16,11 +16,17 @@ import cProfile
 import time
 import os
 
+from .managet import RunManager
+
 class CheckPoint(Exception):
-    pass
+    def __init__(self, exit=False):
+        self.exit=exit
 
 def sighandler(signal, frame):
-    raise CheckPoint
+    if signal==sys.SIGTERM or signal==sys.SIGQUIT or signal==sys.SIGINT:
+        raise CheckPoint(exit=True)
+    else:
+        raise CheckPoint(exit=False)
 
 class CPNest(object):
     """
@@ -164,8 +170,9 @@ class CPNest(object):
             self.NS.nested_sampling_loop()
             for each in self.process_pool:
                 each.join()
-        except CheckPoint:
-            self.checkpoint()
+        except CheckPoint as xcpt:
+            print('Checkpoint raised in nested sampling loop')
+            self.manager.checkpoint_all(exit=xcpt.exit)
             sys.exit()
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
@@ -257,32 +264,6 @@ class CPNest(object):
             each.start()
 
     def checkpoint(self):
-        self.manager.checkpoint_flag=1
+        self.manager.checkpoint_all()
 
-class RunManager(SyncManager):
-    def __init__(self, nthreads=None, **kwargs):
-        super(RunManager,self).__init__(**kwargs)
-        self.nconnected=mp.Value(c_int,0)
-        self.producer_pipes = list()
-        self.consumer_pipes = list()
-        for i in range(nthreads):
-            consumer, producer = mp.Pipe(duplex=True)
-            self.producer_pipes.append(producer)
-            self.consumer_pipes.append(consumer)
-        self.logLmin=None
-        self.nthreads=nthreads
 
-    def start(self):
-        super(RunManager, self).start()
-        self.logLmin = mp.Value(c_double,-np.inf)
-        self.checkpoint_flag=mp.Value(c_int,0)
-
-    def connect_producer(self):
-        """
-        Returns the producer's end of the pipe
-        """
-        with self.nconnected.get_lock():
-            n = self.nconnected.value
-            pipe = self.producer_pipes[n]
-            self.nconnected.value+=1
-        return pipe, n

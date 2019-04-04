@@ -11,6 +11,7 @@ from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
 from .cpnest import CheckPoint, RunManager
+from .manager import Worker
 from tqdm import tqdm
 from operator import attrgetter
 
@@ -18,7 +19,7 @@ import pickle
 __checkpoint_flag = False
 
 
-class Sampler(object):
+class Sampler(Worker):
     """
     Sampler class.
     ---------
@@ -190,6 +191,9 @@ class Sampler(object):
 
             self.counter += 1
 
+        self.finish()
+
+    def finish(self):
         sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
         self.samples.extend(self.evolution_points)
         import numpy.lib.recfunctions as rfn
@@ -201,7 +205,7 @@ class Sampler(object):
                        newline='\n',delimiter=' ')
             sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
-        return 0
+        return 0            
 
     def checkpoint(self):
         """
