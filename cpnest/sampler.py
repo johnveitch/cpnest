@@ -306,15 +306,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                     if newparam.logL > logLmin:
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
-#                    else:
-#                        print(oldparam,oldparam.logL)
-#                        print(newparam,newparam.logL)
-#                        print('logLmin was',logLmin,'dt:',self.proposal.proposals[0].dt,'L:',self.proposal.proposals[0].L)
-#                        print('covariance:',self.proposal.proposals[0].covariance)
-#                        try:
-#                            print('true covariance:',self.model.covariance)
-#                        except:
-#                            pass
+
             self.evolution_points.append(oldparam)
 
             if self.verbose >= 3:

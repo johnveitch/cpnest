@@ -300,8 +300,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.scale          = 1.0
         self.L              = 10
         self.base_L         = 10
-        self.TARGET         = 0.5
+        self.TARGET         = 0.654
         self.ADAPTATIONSIZE = 0.001
+        self._initialised   = False
         self.c              = self.counter()
     
     def set_ensemble(self, ensemble):
@@ -315,7 +316,6 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.update_mass()
         self.update_normal_vector()
         self.update_momenta_distribution()
-        self.set_integration_parameters()
     
     def update_normal_vector(self):
         """
@@ -420,11 +420,12 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
         self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        self.set_integration_parameters()
-    
+        _, self.logdeterminant      = np.linalg.slogdet(self.mass_matrix)
+        if self._initialised == False: self.set_integration_parameters()
+
     def set_integration_parameters(self):
         """
-        Set the integration length accccording to the N-dimensional ellipsoid
+        Set the integration length according to the N-dimensional ellipsoid
         shortest and longest principal axes. The former sets to base time step
         while the latter sets the trajectory length
         """
@@ -433,8 +434,13 @@ class HamiltonianProposal(EnsembleEigenVector):
         else:
             eigen_values, eigen_vectors = np.linalg.eigh(self.covariance)
         
-        self.base_dt = 1.0#np.sqrt(np.min(eigen_values))
-        self.base_L = 10+int(np.sqrt(np.max(eigen_values))/self.base_dt)
+        l, h = np.min(eigen_values), np.max(eigen_values)
+        
+        self.base_L         = int((h/l)*self.d**(1./4.))
+        self.base_dt        = l/self.base_L
+        self._initialised   = True
+#        print(self.base_dt,self.base_L)
+#        exit()
 
     def update_time_step(self, acceptance):
         """
@@ -443,17 +449,11 @@ class HamiltonianProposal(EnsembleEigenVector):
         Parameters
         ----------
         acceptance : :obj:'numpy.float'
-        nmcmc      : :obj:'numpy.int'
         """
-
-        if acceptance <= self.TARGET:
-            self.scale *= (1.0-self.ADAPTATIONSIZE)
-        else:
-            self.scale *= (1.0+self.ADAPTATIONSIZE)
-        
-        if self.scale > 1.99: self.scale = 1.99
-        if self.scale < 2e-2: self.scale = 2e-2
-        self.dt = self.base_dt * self.scale * self.d**(-0.25)
+        diff = acceptance - self.TARGET
+        new_log_scale = np.log(self.scale) + self.ADAPTATIONSIZE * diff
+        self.scale = np.exp(new_log_scale)
+        self.dt = self.base_dt * self.scale
         
     def update_trajectory_length(self,nmcmc):
         """
@@ -476,7 +476,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         ----------
         T: :float: kinetic energy
         """
-        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))
+        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))-self.logdeterminant-0.5*self.d*np.log(2.0*np.pi)
 
 class LeapFrog(HamiltonianProposal):
     """
@@ -621,23 +621,23 @@ class ConstrainedLeapFrog(LeapFrog):
         p: :obj:`numpy.ndarray` updated momentum vector
         q: :obj:`cpnest.parameter.LivePoint` position
         """
-        dt = np.abs(np.random.normal(self.dt,0.1*self.dt))
+        L  = np.random.randint(self.L//2, 2*self.L)
+        dt = self.dt+np.random.normal(0.0,0.1*self.dt)
         p = p0 - 0.5 * dt * self.gradient(q0)
         q = q0.copy()
         i = 0
         reflected   = 0
-        f = open('trajectory_'+str(next(self.c))+'.txt','w')
-        for n in q.names: f.write(n+'\t')
-        f.write('logP\tlogL\tlogLmin\n')
-        for n in q0.names: f.write(repr(q0[n])+'\t')
-        f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
+#        f = open('trajectory_'+str(next(self.c))+'.txt','w')
+#        for n in q.names: f.write(n+'\t')
+#        f.write('logP\tlogL\tlogLmin\n')
+#        for n in q0.names: f.write(repr(q0[n])+'\t')
+#        f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
 
-        while (i < self.L) or reflected:
-            logLi = q.logL
+        while (i < L) or reflected:
             # do a full step in position
             for j,k in enumerate(q.names):
                 u, l  = self.prior_bounds[j][1], self.prior_bounds[j][0]
-                q[k] += dt * p[j] * self.inverse_mass[j]
+                q[k]  = q0[k] + dt * p[j] * self.inverse_mass[j]
                 # check and reflect against the bounds
                 # of the allowed parameter range
                 while q[k] < l or q[k] > u:
@@ -648,36 +648,37 @@ class ConstrainedLeapFrog(LeapFrog):
                         q[k] = l + (l - q[k])
                         p[j] *= -1
             
-                f.write(repr(q[k])+'\t')
+#                f.write(repr(q[k])+'\t')
 
             dV      = self.gradient(q)
             q.logP  = -self.V(q)
             q.logL  = self.log_likelihood(q)
-            f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
+#            f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
 
             constraint = q.logL - logLmin
             # if we are moving towards an increasing likelihood
             # region, keep moving
-            if constraint > 0 or q.logL > logLi:
+            if constraint > 0:
                 # take a full momentum step
-                p += - dt * dV
+                p = p - dt * dV
+                q0 = q.copy()
                 reflected = 0
-
             # if the trajectory led us outside the likelihood bound,
             # reflect the momentum orthogonally to the surface
             else:
                 normal          = self.unit_normal(q)
                 p               = p - 2.0*np.dot(p,normal)*normal
-                reflected = 1
-
+                reflected       = 1
+            
             i += 1
     
-            if i == 10*self.L:
+            if i == 3*L:
                 break
+        
         # Do a final update of the momentum for a half step
         p += - 0.5 * dt * dV
-#        print('did',i,'steps instead of',self.L,'dt',dt)
+#        print('did',i,'steps instead of',L,'dt',dt)
 #        print('final momentum',p,'initial momentum',p0)
-        f.close()
+#        f.close()
 
         return q, -p
