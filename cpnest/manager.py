@@ -1,7 +1,11 @@
+from ctypes import c_double, c_int
 from abc import ABCMeta,abstractmethod
+import multiprocessing as mp
+from multiprocessing.managers import SyncManager,BaseManager
+import numpy as np
+import pickle
 
-
-class JobCommand(ABCMeta):
+class JobCommand(object):
     pass
 
 class CheckPointCommand(JobCommand):
@@ -20,11 +24,20 @@ class StopCommand(JobCommand):
     """
     Tell a worker thread to stop
     """
+    pass
 
 class StartCommand(JobCommand):
     """
     Tell a worker to start
     """
+    pass
+
+class TestCommand(JobCommand):
+    """
+    A command for testing
+    """
+    def __init__(self):
+        print('Created test command {}'.format(self))
 
 class ExitCommand(JobCommand):
     """
@@ -36,69 +49,95 @@ class ExitCommand(JobCommand):
 class CompletedSampleJob(object):
     def __init__(self, sample, acceptance=None, sub_acceptance=None,
                  jumps = None, proposed = None):
-        self.sample=samples
+        self.sample=sample
         self.acceptance=acceptance
         self.sub_acceptance=sub_acceptance
         self.jumps=jumps
         self.proposed=proposed
 
-class RunManager(SyncManager):
-    def __init__(self, timeout=60, **kwargs):
-        super(RunManager,self).__init__(**kwargs)
-        self.nconnected = mp.Value(c_int,0)
-        self.timeout = timeout
-        self.producer_pipes = self.list()
-        self.consumer_pipes = self.list()
-        self.q_counter=0
-        for i in range(nthreads):
-            consumer, producer = mp.Pipe(duplex=True)
-            self.producer_pipes.append(producer)
-            self.consumer_pipes.append(consumer)
-        self.logLmin=None
-        self.nthreads=nthreads
-        self.output_queue = self.Queue()
-        print('RunManager running at '+str(self.address))
-
-    def start(self):
-        super(RunManager, self).start()
-        self.logLmin = mp.Value(c_double,-np.inf)
-        self.checkpoint_flag=mp.Value(c_int,0)
-
+class conns(object):
+    connections=dict()
+    producers=dict()
+    def add_connection(self, thread, conn, prod):
+        self.connections[thread]=conn
+        self.producers[thread]=prod
+    def get_connection(self, thread):
+        return self.connections[thread]
+    def send_all(self, x):
+        for c in self.connections.values():
+            c.send(x)
+    def nclients(self):
+        return len(self.connections)
+    def get_all(self):
+        return self.connections
     def connect_producer(self):
         """
         Returns the producer's end of the pipe
         """
-        with self.nconnected.get_lock():
-            n = self.nconnected.value
-            pipe = self.producer_pipes[n]
-            self.nconnected.value+=1
-        return pipe, n
+        print('Connecting producer')
+        #print('selfconnections',self.connections)
+        con, prod = mp.Pipe()
+        n = self.nclients()
+        print('Connecting client {}'.format(n))
+        con, prod = mp.Pipe()
+        self.add_connection(n, con, prod)
+        return prod, n
+
+class RunManager(SyncManager):
+    def __init__(self, address=None, authkey=None, maxclients=100, timeout=10):
+        super(RunManager,self).__init__(address, authkey)
+        self.timeout = timeout
+        self.logLmin=mp.Value(c_double,-np.inf)
+        self.connection_lock=mp.Lock()
+        self.q_counter=0
+        self.maxclients=maxclients
+        self.checkpoint_flag=mp.Value(c_int,0)
+        self.nclients=mp.Value(c_int,0)
+
+    def start(self):
+        super(RunManager, self).start()
+
+        print('RunManager running at '+str(self.address))
+
+    def connect_producer(self):
+        return self.connections().connect_producer()
     
-    def update_logLmin(self, logLmin):
+    def set_logLmin(self, logLmin):
         self.logLmin.value=logLmin
         
     def checkpoint_all(self):
-        for p in self.producer_pipes:
-            p.send(CheckPointCommand())
+        self.send_all(CheckPointCommand())
 
     def exit_all(self):
-        for p in self.producer_pipes:
-            p.send(ExitCommand())
+        self.send_all(ExitCommand())
+            
+    def send_all(self, command):
+        self.connections().send_all(command)
+            
+    def start_all(self):
+        print('Sending start command to {} producers'.format(self.connections().nclients()))
+        self.send_all(StartCommand())
 
-    def get_sample(self, fair_queue=True, block=True, timeout=60):
+    def get_sample(self, fair_queue=False, block=True):
         """
         Return a sample from the output queue
         """
         while(True):
             try:
                 if fair_queue:
-                    self.consumer_pipes[self.q_counter].poll(self.timeout)
-                    s = self.consumer_pipes[self.q_counter].recv()
-                    self.q_counter = (self.q_counter + 1) % len(self.consumer_pipes)
+                    conn = self.connections().get_connection(self.q_counter)[1]
+                    if conn.poll(self.timeout):
+                        s = conn.recv()
+                        self.q_counter = (self.q_counter + 1) % self.nclients
+                        return s
+                    else: raise mp.TimeoutError
                 else:
-                    s = mp.connection.wait(self.consumer_pipes,
+                    consumer_pipes=[c for c in self.connections().get_all().values()]
+                    s = mp.connection.wait(consumer_pipes,
                                            timeout=self.timeout)
-                return s
+                    if s:
+                        return s[0].recv()
+                    else: raise mp.TimeoutError
             except mp.TimeoutError:
                 print('Timeout waiting for new sample, your code is slow!')
                 
@@ -107,35 +146,88 @@ class Worker(object):
     Class for worker threads that knows how to communicate with
     the RunManager
     """
-    def __init__(self, address=None, authkey=None):
-        self.manager=RunManager(address, authkey)
+    def __init__(self, address=None, authkey=None, timeout=10):
         self.exit=False
         self.running=False
+        self.conn=None
+        self.threadid=None
+        self.manager=None
+        self.timeout=timeout
+        self.address = address
+        self.authkey = authkey
+        self.connect(address=address, authkey=authkey)
+        
+    def connect(self, address=None, authkey=None):
+        print('Connecting to manager at {}'.format(address))
+        self.manager=RunManager(address, authkey)
+        #self.manager.start()
+        self.manager.connect() # called instead of start()
+        #self.manager.start()
+        print('connected logLmin, ',self.manager.logLmin)
+        self.conn, self.threadid = self.manager.connections().connect_producer()
+        print('Thread {} ({}) connected to manager at {}'.format(self.threadid,type(self),self.manager.address))
+        print('Connection: ',id(self.conn))
+        self.conn.send(TestCommand())
         
     def event_loop(self):
         """
         Main loop that processes job commands
         """
-        self.manager.connect()
-        self.running=False
-
-        while not self.exit:
-            c = self.producer_pipe.recv()
-            if c: self.process_command(c)
+        print(type(self),'in event_loop')
+        #print(self.conn.fileno())
+        while True:
+                #print('Polling self.conn {}'.format(type(self.conn)))
+                polling = self.conn.poll(1)
+                #print('Polled ',polling)
+                if polling:
+                    c = self.conn.recv()
+                    print('Received {}'.format(c))
+                    if c: self.process_command(c)
+                else:
+                    print('Sampler: No data read')
+                    self.manager.start_all()
+        print('Exiting event loop')
         return 0
 
     def process_command(self, command):
         """
         Process a command from `cpnest.manager`
         """
-        if not isinstance(command, manager.JobCommand):
+        print('Thread {} received {}'.format(self.threadid, command))
+        if not isinstance(command, JobCommand):
             raise TypeError
-        if isinstance(command, manager.StartCommand):
+        if isinstance(command, StartCommand):
             self.running=True
             self.do_work()
-        if isinstance(command, manager.CheckPointCommand):
+        if isinstance(command, CheckPointCommand):
             self.checkpoint()
-        if isinstance(command, manager.ExitCommand):
+        if isinstance(command, ExitCommand):
             if command.checkpoint:
                 self.checkpoint()
             self.finish()
+        if isinstance(command, TestCommand):
+            print('TestCommand {} received by thread {} ({})'.format(command,
+                                                                     self.threadid,
+                                                                     type(self)
+                                                                     )
+                )
+    
+    def checkpoint(self, exit=False):
+        """
+        Checkpoint its internal state
+        """
+        with open(self.resume_file,"wb") as f:
+            pickle.dump(self, f)
+    
+    @classmethod
+    def resume(cls, resume_file, model, address, authkey):
+        print('Resuming thread {} from '.format(self.threadid) + resume_file)
+        with open(resume_file, "rb") as f:
+            obj = pickle.load(f)
+        obj.model   = model
+        obj.connect(address, authkey) 
+        return(obj)
+
+#RunManager.register('producer_pipes')
+#RunManager.register('consumer_pipes')
+RunManager.register('connections',conns)

@@ -16,7 +16,7 @@ from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint, RunManager
-from .manager import Worker
+from .manager import Worker, CompletedSampleJob
 
 from tqdm import tqdm
 
@@ -135,7 +135,8 @@ class NestedSampler(Worker):
 
     def __init__(self,
                  model,
-                 manager        = None,
+                 address        = None,
+                 authkey        = None,
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
@@ -147,8 +148,8 @@ class NestedSampler(Worker):
         Initialise all necessary arguments and
         variables for the algorithm
         """
+        super(NestedSampler,self).__init__(address, authkey)
         self.model          = model
-        self.manager        = manager
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose        = verbose
@@ -290,13 +291,18 @@ class NestedSampler(Worker):
         """
         # send all live points to the samplers for start
         i = 0
-        nthreads=self.manager.nthreads
-        with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
+        with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers') as pbar:
             while i < self.Nlive:
-                for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
-                for j in range(nthreads):
-                    while i < self.Nlive:
-                        job = self.manager.get_sample()
+                #print('Sending samples')
+                #for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
+                print('Receiving live points')
+                #for j in range(nthreads):
+                while i < self.Nlive:
+                        job = self.manager.get_sample(fair_queue=False)
+                        if not isinstance(job, CompletedSampleJob):
+                            self.process_command(job)
+                            continue
+                        print('Received job ',job)
                         self.params[i] = job.sample
                         acceptance = job.acceptance
                         sub_acceptance = job.sub_acceptance
@@ -306,6 +312,7 @@ class NestedSampler(Worker):
                             i+=1
                             pbar.update()
                             break
+                print('Done resetting nested sampler')
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -339,8 +346,9 @@ class NestedSampler(Worker):
 
 	    # Signal worker threads to exit
         self.logLmin.value = np.inf
-        for c in self.manager.consumer_pipes:
-            c.send(None)
+        self.manager.exit_all()
+        #for c in self.manager.consumer_pipes:
+        #    c.send(None)
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
@@ -360,14 +368,6 @@ class NestedSampler(Worker):
         if self.verbose>1 :
           self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
         return self.state.logZ, self.nested_samples
-
-    def checkpoint(self):
-        """
-        Checkpoint its internal state
-        """
-        print('Checkpointing nested sampling')
-        with open(self.resume_file,"wb") as f:
-            pickle.dump(self, f)
 
     @classmethod
     def resume(cls, filename, manager, usermodel):

@@ -11,7 +11,7 @@ from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
 from .cpnest import CheckPoint, RunManager
-from .manager import Worker
+from .manager import Worker, CompletedSampleJob
 from tqdm import tqdm
 from operator import attrgetter
 
@@ -69,14 +69,15 @@ class Sampler(Worker):
                  poolsize    = 1000,
                  proposal    = None,
                  resume_file = None,
-                 manager     = None):
+                 address     = None,
+                 authkey     = None):
 
+        super(Sampler,self).__init__(address, authkey)
         self.seed = seed
         self.model = model
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
         self.resume_file = resume_file
-        self.manager = manager
         self.logLmin = self.manager.logLmin
         
         if proposal is None:
@@ -98,7 +99,7 @@ class Sampler(Worker):
         self.output             = output
         self.samples            = [] # the list of samples from the mcmc chain
         self.ACLs               = [] # the history of the ACL of the chain, will be used to thin the output, if requested
-        self.producer_pipe, self.thread_id = self.manager.connect_producer()
+        self.do_work = self.produce_sample
         
     def reset(self):
         """
@@ -106,8 +107,8 @@ class Sampler(Worker):
         and distributing them according to :obj:`cpnest.model.Model.log_prior`
         """
         np.random.seed(seed=self.seed)
-        for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
-                disable= not self.verbose, position=self.thread_id, leave=False):
+        for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.threadid),
+                disable= not self.verbose, position=self.threadid, leave=False):
             while True: # Generate an in-bounds sample
                 p = self.model.new_point()
                 p.logP = self.model.log_prior(p)
@@ -121,8 +122,8 @@ class Sampler(Worker):
         self.proposal.set_ensemble(self.evolution_points)
 
         # Now, run evolution so samples are drawn from actual prior
-        for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
-                disable= not self.verbose, position=self.thread_id, leave=False):
+        for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.threadid),
+                disable= not self.verbose, position=self.threadid, leave=False):
             _, p = next(self.yield_sample(-np.inf))
 
         self.proposal.set_ensemble(self.evolution_points)
@@ -162,29 +163,31 @@ class Sampler(Worker):
         evolves it. Proposed sample is then sent back
         to :obj:`cpnest.NestedSampler`.
         """
+        print('In _produce_sample')
         if not self.initialised:
+            print('\n sampler resetting')
             self.reset()
 
         self.counter=1
         __checkpoint_flag=False
-        while True:
-            
-            if self.manager.checkpoint_flag.value:
-                self.checkpoint()
-                sys.exit()
+        while self.running:
             
             if self.logLmin.value==np.inf:
                 break
             
-            p = self.producer_pipe.recv()
-
-            if p is None:
-                break
+            if self.conn.poll():
+                p = self.conn.recv()
+                self.process_command(p)
         
-            self.evolution_points.append(p)
+            #self.evolution_points.append(p)
             (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
             # Send the sample to the Nested Sampler
-            self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
+            self.conn.send(
+                CompletedSampleJob(outParam, acceptance=self.acceptance,
+                                    sub_acceptance=self.sub_acceptance,
+                                    jumps = Nmcmc, proposed = None
+                                    )
+                )
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize))==0:
                 self.proposal.set_ensemble(self.evolution_points)
@@ -207,27 +210,14 @@ class Sampler(Worker):
         sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0            
 
-    def checkpoint(self):
-        """
-        Checkpoint its internal state
-        """
-        print('Checkpointing Sampler')
-        with open(self.resume_file, "wb") as f:
-            pickle.dump(self, f)
-
     @classmethod
-    def resume(cls, resume_file, manager, model):
+    def resume(cls, resume_file, address, authkey, model):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        print('Resuming Sampler from '+resume_file)
-        with open(resume_file, "rb") as f:
-            obj = pickle.load(f)
-        obj.model   = model
-        obj.manager = manager
+        super(Sampler, self).resume(model, resume_file)
         obj.logLmin = obj.manager.logLmin
-        obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         return(obj)
 
     def __getstate__(self):
@@ -236,13 +226,15 @@ class Sampler(Worker):
         del state['model']
         del state['logLmin']
         del state['manager']
-        del state['producer_pipe']
-        del state['thread_id']
+        del state['conn']
+        del state['threadid']
         return state
     
     def __setstate__(self, state):
         self.__dict__ = state
-        self.manager = None
+        self.manager = RunManager(state['address'],state['authkey'])
+        self.logLmin = self.manager.logLmin
+        self.connect(state['address'],state['authkey'])
 
 class MetropolisHastingsSampler(Sampler):
     """

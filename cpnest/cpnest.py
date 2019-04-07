@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import multiprocessing as mp
-from ctypes import c_double, c_int
 import numpy as np
 import os
 import sys
@@ -10,13 +9,13 @@ import signal
 
 from multiprocessing.sharedctypes import Value, Array
 from multiprocessing import Lock
-from multiprocessing.managers import SyncManager
+from multiprocessing.pool import Pool
 
 import cProfile
 import time
 import os
 
-from .managet import RunManager
+from .manager import RunManager, TestCommand
 
 class CheckPoint(Exception):
     def __init__(self, exit=False):
@@ -60,6 +59,7 @@ class CPNest(object):
                  seed         = None,
                  maxmcmc      = 100,
                  nthreads     = None,
+                 process_pool = None,
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
@@ -79,21 +79,26 @@ class CPNest(object):
         elif type(proposals) == list:
             proposals = dict(mhs=proposals[0],
                              hmc=proposals[1])
+        if process_pool:
+            self.process_pool = process_pool
+        else:
+            self.process_pool = Pool(self.nthreads)
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
         self.poolsize = poolsize
         self.posterior_samples = None
-        self.manager = RunManager(nthreads=self.nthreads)
+        self.manager = RunManager()
         self.manager.start()
+        self.address  = self.manager.address
+        self.authkey  = None
         self.user     = usermodel
         self.resume = resume
+        
 
         if seed is None: self.seed=1234
         else:
             self.seed=seed
-        
-        self.process_pool = []
         
         # instantiate the nested sampler class
         resume_file = os.path.join(output, "nested_sampler_resume.pkl")
@@ -104,10 +109,11 @@ class CPNest(object):
                         verbose        = verbose,
                         seed           = self.seed,
                         prior_sampling = False,
-                        manager        = self.manager,
+                        address        = self.manager.address,
+                        authkey        = self.authkey,
                         n_periodic_checkpoint = n_periodic_checkpoint)
         else:
-            self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
+            self.NS = NestedSampler.resume(resume_file, self.user, self.manager.address,self.authkey)
 
         # instantiate the sampler class
         for i in range(self.nthreads-nhamiltonian):
@@ -121,16 +127,17 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
-                                  manager     = self.manager
+                                  address        = self.manager.address,
+                                  authkey        = self.authkey,
                                   )
                 sampler.checkpoint()
             else:
                 sampler = MetropolisHastingsSampler.resume(resume_file,
-                                                           self.manager,
-                                                           self.user)
+                                                           self.user,
+                                                           self.manager.address,
+                                                           self.authkey)
 
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+            self.process_pool.apply_async(sampler.event_loop).get()
         
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
@@ -143,14 +150,16 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
-                                  manager     = self.manager
+                                  address     = self.manager.address,
+                                  authkey     = self.authkey
                                   )
             else:
                 sampler = HamiltonianMonteCarloSampler.resume(resume_file,
-                                                              self.manager,
-                                                              self.user)
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+                                                              self.user,
+                                                              self.manager.address,
+                                                              self.authkey)
+            self.process_pool.apply_async(sampler.event_loop)
+
 
     def run(self):
         """
@@ -163,17 +172,19 @@ class CPNest(object):
             signal.signal(signal.SIGUSR1, sighandler)
             signal.signal(signal.SIGUSR2, sighandler)
         
-        #self.p_ns.start()
-        for each in self.process_pool:
-            each.start()
+        import time
+        time.sleep(2)
+        #self.manager.send_all(TestCommand())
+        self.manager.start_all()
+
         try:
             self.NS.nested_sampling_loop()
-            for each in self.process_pool:
-                each.join()
+            #self.process_pool.join()
         except CheckPoint as xcpt:
             print('Checkpoint raised in nested sampling loop')
             self.manager.checkpoint_all(exit=xcpt.exit)
-            sys.exit()
+            self.NS.checkpoint()
+            if xcpt.exit: sys.exit()
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
         if self.verbose>1: self.plot()
