@@ -42,7 +42,7 @@ class CPNest(object):
     Metropolis-Hastings sampler, 'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
     n_periodic_checkpoint: int
         checkpoint the sampler every n_periodic_checkpoint iterations
-        Default: 1000
+        Default: 100000
 
     """
     def __init__(self,
@@ -56,8 +56,8 @@ class CPNest(object):
                  nthreads     = None,
                  nhamiltonian = 0,
                  resume       = False,
-                 proposal     = None,
-                 n_periodic_checkpoint = 100):
+                 proposals     = None,
+                 n_periodic_checkpoint = 1000):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -67,12 +67,12 @@ class CPNest(object):
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
-        if proposal is None:
-            proposal = dict(mhs=DefaultProposalCycle,
-                            hmc=HamiltonianProposalCycle)
-        elif type(proposal) == list:
-            proposal = dict(mhs=proposal[0],
-                            hmc=proposal[1])
+        if proposals is None:
+            proposals = dict(mhs=DefaultProposalCycle,
+                             hmc=HamiltonianProposalCycle)
+        elif type(proposals) == list:
+            proposals = dict(mhs=proposals[0],
+                             hmc=proposals[1])
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
@@ -113,7 +113,7 @@ class CPNest(object):
                                   output      = output,
                                   poolsize    = poolsize,
                                   seed        = self.seed+i,
-                                  proposal    = proposal['mhs'](),
+                                  proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
                                   manager     = self.manager
                                   )
@@ -135,7 +135,7 @@ class CPNest(object):
                                   output      = output,
                                   poolsize    = poolsize,
                                   seed        = self.seed+i,
-                                  proposal    = proposal['hmc'](model=self.user),
+                                  proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
                                   manager     = self.manager
                                   )
@@ -226,7 +226,7 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
         return posterior_samples
 
-    def plot(self):
+    def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
         """
@@ -238,7 +238,7 @@ class CPNest(object):
             plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.png'.format(n)))
         import numpy as np
         plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-        plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
+        if corner: plot.plot_corner(plotting_posteriors,labels=pos.dtype.names,filename=os.path.join(self.output,'corner.png'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
