@@ -128,7 +128,7 @@ class NestedSampler(object):
 
     n_periodic_checkpoint: int
         checkpoint the sampler every n_periodic_checkpoint iterations
-        Default: 100000
+        Default: None (disabled)
  
     """
 
@@ -141,7 +141,7 @@ class NestedSampler(object):
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = 1000):
+                 n_periodic_checkpoint = None):
         """
         Initialise all necessary arguments and
         variables for the algorithm
@@ -318,10 +318,11 @@ class NestedSampler(object):
             return 0
 
         try:
+            i=0
             while self.condition > self.tolerance:
-                for i in range(self.n_periodic_checkpoint):
-                    self.consume_sample()
-                self.checkpoint()
+                self.consume_sample()
+                if self.n_periodic_checkpoint and i % self.n_periodic_checkpoint == 1:
+                    self.checkpoint()
         except CheckPoint:
             self.checkpoint()
             sys.exit()
