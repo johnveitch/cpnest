@@ -1,6 +1,7 @@
 # encoding: utf-8
 # cython: profile=False
 # cython: linetrace=False
+# cython: language_level=3, boundscheck=False, wraparound=False
 
 from __future__ import division
 from numpy.math cimport INFINITY
