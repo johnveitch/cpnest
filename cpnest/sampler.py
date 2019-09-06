@@ -5,7 +5,6 @@ import numpy as np
 from math import log
 from collections import deque
 from random import random,randrange
-import signal
 
 from . import parameter
 from .proposal import DefaultProposalCycle
@@ -153,6 +152,7 @@ class Sampler(object):
         try:
             self._produce_sample()
         except CheckPoint:
+            print("Checkpoint excepted in sampler")
             self.checkpoint()
     
     def _produce_sample(self):
@@ -179,6 +179,9 @@ class Sampler(object):
 
             if p is None:
                 break
+            if p == "checkpoint":
+                self.checkpoint()
+                sys.exit()
         
             self.evolution_points.append(p)
             (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))

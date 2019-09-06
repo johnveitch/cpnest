@@ -13,14 +13,17 @@ from multiprocessing import Lock
 from multiprocessing.managers import SyncManager
 
 import cProfile
-import time
-import os
+
 
 class CheckPoint(Exception):
+    print("Checkpoint exception raise")
     pass
 
+
 def sighandler(signal, frame):
-    raise CheckPoint
+    print("Handling signal {}".format(signal))
+    raise CheckPoint()
+
 
 class CPNest(object):
     """
@@ -258,6 +261,7 @@ class CPNest(object):
 
     def checkpoint(self):
         self.manager.checkpoint_flag=1
+
 
 class RunManager(SyncManager):
     def __init__(self, nthreads=None, **kwargs):
