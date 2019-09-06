@@ -151,6 +151,7 @@ class CPNest(object):
         """
         if self.resume:
             signal.signal(signal.SIGTERM, sighandler)
+            signal.signal(signal.SIGALRM, sighandler)
             signal.signal(signal.SIGQUIT, sighandler)
             signal.signal(signal.SIGINT, sighandler)
             signal.signal(signal.SIGUSR1, sighandler)

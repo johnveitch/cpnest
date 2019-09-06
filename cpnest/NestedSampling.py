@@ -321,8 +321,9 @@ class NestedSampler(object):
             i=0
             while self.condition > self.tolerance:
                 self.consume_sample()
-                if self.n_periodic_checkpoint and i % self.n_periodic_checkpoint == 1:
+                if self.n_periodic_checkpoint is not None and i % self.n_periodic_checkpoint == 1:
                     self.checkpoint()
+                i += 1
         except CheckPoint:
             self.checkpoint()
             sys.exit()
