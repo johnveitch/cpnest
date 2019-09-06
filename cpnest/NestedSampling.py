@@ -329,7 +329,7 @@ class NestedSampler(object):
             # Run each pipe to get it to checkpoint
             for c in self.manager.consumer_pipes:
                 c.send("checkpoint")
-            sys.exit()
+            sys.exit(130)
 
         # Signal worker threads to exit
         self.logLmin.value = np.inf

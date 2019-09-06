@@ -170,7 +170,7 @@ class Sampler(object):
             
             if self.manager.checkpoint_flag.value:
                 self.checkpoint()
-                sys.exit()
+                sys.exit(130)
             
             if self.logLmin.value==np.inf:
                 break
@@ -181,7 +181,7 @@ class Sampler(object):
                 break
             if p == "checkpoint":
                 self.checkpoint()
-                sys.exit()
+                sys.exit(130)
         
             self.evolution_points.append(p)
             (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))

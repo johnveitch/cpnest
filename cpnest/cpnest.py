@@ -169,7 +169,7 @@ class CPNest(object):
                 each.join()
         except CheckPoint:
             self.checkpoint()
-            sys.exit()
+            sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
         if self.verbose>1: self.plot()
