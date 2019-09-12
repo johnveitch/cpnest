@@ -13,14 +13,17 @@ from multiprocessing import Lock
 from multiprocessing.managers import SyncManager
 
 import cProfile
-import time
-import os
+
 
 class CheckPoint(Exception):
+    print("Checkpoint exception raise")
     pass
 
+
 def sighandler(signal, frame):
-    raise CheckPoint
+    print("Handling signal {}".format(signal))
+    raise CheckPoint()
+
 
 class CPNest(object):
     """
@@ -151,6 +154,7 @@ class CPNest(object):
         """
         if self.resume:
             signal.signal(signal.SIGTERM, sighandler)
+            signal.signal(signal.SIGALRM, sighandler)
             signal.signal(signal.SIGQUIT, sighandler)
             signal.signal(signal.SIGINT, sighandler)
             signal.signal(signal.SIGUSR1, sighandler)
@@ -165,7 +169,7 @@ class CPNest(object):
                 each.join()
         except CheckPoint:
             self.checkpoint()
-            sys.exit()
+            sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
         if self.verbose>1: self.plot()
@@ -257,6 +261,7 @@ class CPNest(object):
 
     def checkpoint(self):
         self.manager.checkpoint_flag=1
+
 
 class RunManager(SyncManager):
     def __init__(self, nthreads=None, **kwargs):
