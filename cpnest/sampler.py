@@ -136,15 +136,15 @@ class Sampler(object):
         
         Taken from http://github.com/farr/Ensemble.jl
         """
-        if tau is None: tau = self.maxmcmc/safety#self.poolsize
+        if tau is None: tau = self.poolsize/float(safety)
 
-        if self.sub_acceptance == 0.0:
+        if self.acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
-            self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.sub_acceptance - 1.0)
+            self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (float(safety)/tau)*(2.0/self.sub_acceptance - 1.0)
         
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
-        self.Nmcmc = max(safety,int(self.Nmcmc_exact))
+        self.Nmcmc       = max(safety,int(self.Nmcmc_exact))
 
         return self.Nmcmc
 
@@ -321,19 +321,5 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
-                p.update_trajectory_length(self.estimate_nmcmc())
-                #print(p.dt,p.L)
 
             yield (sub_counter, oldparam)
-
-    def insert_sample(self, p):
-        # if we did not accept, inject a new particle in the system (gran-canonical) from the prior
-        # by picking one from the existing pool and giving it a random trajectory
-        k = np.random.randint(self.evolution_points.maxlen)
-        self.evolution_points.rotate(k)
-        p  = self.evolution_points.pop()
-        self.evolution_points.append(p)
-        self.evolution_points.rotate(-k)
-        return self.proposal.get_sample(p.copy(),logLmin=p.logL)
-
-

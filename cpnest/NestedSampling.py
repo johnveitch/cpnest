@@ -234,7 +234,7 @@ class NestedSampler(object):
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
-            self.manager.consumer_pipes[k].send(self.params[k])
+            self.manager.consumer_pipes[k].send(self.params[np.random.randint(self.Nlive)])
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
@@ -256,7 +256,7 @@ class NestedSampler(object):
                     break
                 else:
                     # resend it to the producer
-                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
+                    self.manager.consumer_pipes[self.queue_counter].send(self.params[np.random.randint(self.Nlive)])
                     self.rejected += 1
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:

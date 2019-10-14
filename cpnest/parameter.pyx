@@ -10,8 +10,8 @@ cimport numpy as np
 import numpy as np
 
 cpdef LivePoint rebuild_livepoint(names):
-  cdef LivePoint lp=LivePoint(names)
-  return lp
+    cdef LivePoint lp=LivePoint(names)
+    return lp
 
 cdef class LivePoint:
     """
@@ -28,9 +28,9 @@ cdef class LivePoint:
         self.names = names
         self.dimension = len(names)
         if d is not None:
-          self.values = array.array('d',d)
+            self.values = array.array('d',d)
         else:
-          self.values = array.array('d',[0]*self.dimension)
+            self.values = array.array('d',[0]*self.dimension)
 
     def keys(self):
         return self.names
@@ -42,12 +42,12 @@ cdef class LivePoint:
         return self.__class__.__name__+'({0:s}, d={1:s}, logL={2:f}, logP={3:f})'.format(str(self.names),str(self.values),self.logL,self.logP)
 
     def __getstate__(self):
-      return (self.logL,self.logP,self.values)
+        return (self.logL,self.logP,self.values)
     
     def __setstate__(self,state):
-      self.logL=state[0]
-      self.logP=state[1]
-      self.values=array.array('d',state[2])
+        self.logL=state[0]
+        self.logP=state[1]
+        self.values=array.array('d',state[2])
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})
@@ -150,5 +150,3 @@ cdef class LivePoint:
         x['logL'] = self.logL
         x['logPrior'] = self.logP
         return x
-                
-
