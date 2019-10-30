@@ -31,19 +31,44 @@ class CPNest(object):
     cp = CPNest(usermodel,nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,nthreads=None,balanced_sampling = True)
     
     Input variables:
-    usermodel : an object inheriting cpnest.model.Model that defines the user's problem
-    nlive : Number of live points (100)
-    poolsize: Number of objects in the sampler pool (100)
-    output : output directory (./)
-    verbose: Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
-    seed: random seed (default: 1234)
-    maxmcmc: maximum MCMC points for sampling chains (100)
-    nthreads: number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
-    nhamiltomnian: number of sampler threads using an hamiltonian samplers. Default: 0
-    resume: determines whether cpnest will resume a run or run from scratch. Default: False.
-    proposal: dictionary/list with custom jump proposals. key 'mhs' for the
-    Metropolis-Hastings sampler, 'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
-    n_periodic_checkpoint: int
+    =====
+
+    usermodel: :obj:`cpnest.Model`
+        a user-defined model to analyse
+    
+    nlive: `int`
+        Number of live points (100)
+
+    poolsize: `int`
+        Number of objects in the sampler pool (100)
+
+    output : `str`
+        output directory (./)
+    
+    verbose: `int` 
+        Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
+
+    seed: `int`
+        random seed (default: 1234)
+
+    maxmcmc: `int`
+        maximum MCMC points for sampling chains (100)
+    
+    nthreads: `int` or `None`
+        number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
+    
+    nhamiltomnian: `int`
+        number of sampler threads using an hamiltonian samplers. Default: 0
+    
+    resume: `boolean`
+        determines whether cpnest will resume a run or run from scratch. Default: False.
+    
+    proposal: `dict`
+        dictionary of lists with custom jump proposals.
+        key 'mhs' for the Metropolis-Hastings sampler,
+        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+
+    n_periodic_checkpoint: `int`
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
  
