@@ -16,6 +16,12 @@ except:
     FINITEDIFFERENCING = True
     pass
 
+if FINITEDIFFERENCING is True:
+    try:
+        from .interpolant import NNGradientInterpolant
+    except:
+        pass
+
 class Proposal(object):
     """
     Base abstract class for jump proposals
