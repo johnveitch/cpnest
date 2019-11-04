@@ -7,7 +7,6 @@ import random
 from random import sample,gauss,randrange,uniform
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
-from .neighbors import constructKDTree, queryKDTree
 
 try:
     from jax import grad, jit
@@ -16,11 +15,11 @@ except:
     FINITEDIFFERENCING = True
     pass
 
-if FINITEDIFFERENCING is True:
-    try:
-        from .interpolant import NNGradientInterpolant
-    except:
-        pass
+#if FINITEDIFFERENCING is True:
+#    try:
+#        from .interpolant import NNGradientInterpolant
+#    except:
+#        pass
 
 class Proposal(object):
     """
