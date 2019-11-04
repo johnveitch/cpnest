@@ -1,7 +1,5 @@
 import unittest
 import numpy as np
-import jax.numpy as jnp
-import jax
 import cpnest.model
 
 class EggboxModel(cpnest.model.Model):
@@ -22,7 +20,7 @@ class EggboxModel(cpnest.model.Model):
 def log_eggbox(p, dim = 1):
     tmp = 1.0
     for i in range(dim):
-        tmp *= jnp.cos(p['{0:d}'.format(i)]/2.)
+        tmp *= np.cos(p['{0:d}'.format(i)]/2.)
     return (tmp+2.0)**5.0
 
 class EggboxTestCase(unittest.TestCase):
@@ -39,6 +37,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-        work=cpnest.CPNest(EggboxModel(),verbose=3,nthreads=4,nlive=1000,maxmcmc=1000,poolsize=1000, nhamiltonian=4)
-        work.run()
+    work=cpnest.CPNest(EggboxModel(),verbose=3,nthreads=4,nlive=1000,maxmcmc=1000,poolsize=1000)
+    work.run()
 
