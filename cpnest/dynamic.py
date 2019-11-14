@@ -11,7 +11,6 @@ from functools import reduce
 import itertools as it
 from bisect import bisect_left
 import time
-from scipy.misc import logsumexp
 from ctypes import c_int, c_double
 import types
 import multiprocessing as mp
