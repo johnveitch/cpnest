@@ -299,11 +299,13 @@ class RunManager(SyncManager):
             self.producer_pipes.append(producer)
             self.consumer_pipes.append(consumer)
         self.logLmin=None
+        self.logLmax = None
         self.nthreads=nthreads
 
     def start(self):
         super(RunManager, self).start()
         self.logLmin = mp.Value(c_double,-np.inf)
+        self.logLmax = mp.Value(c_double,-np.inf)
         self.checkpoint_flag=mp.Value(c_int,0)
 
     def connect_producer(self):

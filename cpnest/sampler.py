@@ -76,6 +76,7 @@ class Sampler(object):
         self.resume_file = resume_file
         self.manager = manager
         self.logLmin = self.manager.logLmin
+        self.logLmax = self.manager.logLmax
         
         if proposal is None:
             self.proposal = DefaultProposalCycle()
@@ -226,6 +227,7 @@ class Sampler(object):
         obj.model   = model
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
+        obj.logLmax = obj.manager.logLmax
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         return(obj)
 
@@ -234,6 +236,7 @@ class Sampler(object):
         # Remove the unpicklable entries.
         del state['model']
         del state['logLmin']
+        del state['logLmax']
         del state['manager']
         del state['producer_pipe']
         del state['thread_id']
@@ -266,6 +269,7 @@ class MetropolisHastingsSampler(Sampler):
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.model.log_likelihood(newparam)
                     if newparam.logL > logLmin:
+                        self.logLmax.value = max(self.logLmax.value, newparam.logL)
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
@@ -291,6 +295,8 @@ class HamiltonianMonteCarloSampler(Sampler):
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
     def yield_sample(self, logLmin):
+
+        global_lmax = self.logLmax.value
         
         while True:
             
@@ -306,6 +312,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                 if self.proposal.log_J > np.log(random()):
                     
                     if newparam.logL > logLmin:
+                        global_lmax = max(global_lmax, newparam.logL)
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
 
@@ -318,6 +325,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+            self.logLmax.value = global_lmax
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)

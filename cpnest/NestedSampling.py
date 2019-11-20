@@ -161,8 +161,8 @@ class NestedSampler(object):
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
-        self.logLmax        = -np.inf
         self.logLmin        = self.manager.logLmin
+        self.logLmax        = self.manager.logLmax
         self.iteration      = 0
         self.nested_samples = []
         self.logZ           = None
@@ -215,7 +215,7 @@ class NestedSampler(object):
         Write the evidence logZ and maximum likelihood to the evidence_file
         """
         with open(self.evidence_file,"w") as f:
-            f.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax))
+            f.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax.value))
 
     def setup_random_seed(self,seed):
         """
@@ -237,7 +237,7 @@ class NestedSampler(object):
             self.manager.consumer_pipes[k].send(self.params[k])
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
-        self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
+        self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
         
         # Replace the points we just consumed with the next acceptable ones
         # Make sure we are mixing the chains
@@ -262,7 +262,7 @@ class NestedSampler(object):
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}\n"\
                 .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
+                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax.value))
                 sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
@@ -273,7 +273,6 @@ class NestedSampler(object):
         self.params.sort(key=attrgetter('logL'))
         self.worst = np.arange(n)
         self.logLmin.value = np.float128(self.params[n-1].logL)
-        self.logLmax = self.params[-1].logL
         return np.float128(self.logLmin.value)
 
     def reset(self):
@@ -311,6 +310,7 @@ class NestedSampler(object):
                 self.nested_samples.append(self.params[i])
             self.write_chain_to_file()
             self.write_evidence_to_file()
+            self.logLmin.value = np.inf
             self.logLmin.value = np.inf
             for c in self.manager.consumer_pipes:
                 c.send(None)
@@ -375,6 +375,8 @@ class NestedSampler(object):
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.logLmin.value = obj.llmin
+        obj.logLmax = obj.manager.logLmax
+        obj.logLmax.value = obj.llmax
         obj.model = usermodel
         del obj.__dict__['llmin']
         return(obj)
@@ -382,8 +384,10 @@ class NestedSampler(object):
     def __getstate__(self):
         state = self.__dict__.copy()
         state['llmin']=self.logLmin.value
+        state['llmax'] = self.logLmax.value
         # Remove the unpicklable entries.
         del state['logLmin']
+        del state['logLmax']
         del state['manager']
         del state['model']
         return state
