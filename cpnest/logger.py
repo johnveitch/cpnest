@@ -31,7 +31,7 @@ def start_logger(output=None, verbose=0):
     if output is not None:
         # log to file
         fh = logging.FileHandler(output + 'cpnest.log')
-        fh.setFormatter(logging.Formatter(fmt))
+        fh.setFormatter(logging.Formatter(fmt, datefmt='%Y-%m-%d, %H:%M:%S'))
         logger.addHandler(fh)
     print(logger.critical('Logging level: {}'.format(level)))
     return logger
