@@ -12,8 +12,6 @@ from multiprocessing.sharedctypes import Value, Array
 from multiprocessing import Lock
 from multiprocessing.managers import SyncManager
 
-import multiprocessing_logging
-
 import cProfile
 
 from .logger import start_logger
