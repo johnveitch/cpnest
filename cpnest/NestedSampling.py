@@ -2,6 +2,7 @@ from __future__ import division, print_function
 import sys
 import os
 import pickle
+import logging
 import numpy as np
 import multiprocessing as mp
 from numpy import logaddexp, exp
@@ -26,6 +27,7 @@ class _NSintegralState(object):
   def __init__(self, nlive):
     self.nlive = nlive
     self.reset()
+    self.logger = logging.getLogger('CPNest')
   def reset(self):
     """
     Reset the sampler to its initial state at logZ = -infinity
@@ -44,7 +46,7 @@ class _NSintegralState(object):
     Simply uses rectangle rule for initial estimate
     """
     if(logL<=self.logLs[-1]):
-      print('WARNING: NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1],logL))
+      self.logger.warning('NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1],logL))
     if nlive is None:
       nlive = self.nlive
     oldZ = self.logZ
@@ -56,7 +58,7 @@ class _NSintegralState(object):
         self.info = np.exp(Wt - self.logZ)*logL + np.exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
         if isnan(self.info):
             self.info=0
-    
+
     # Update history
     self.logw += logt
     self.iteration += 1
@@ -86,38 +88,38 @@ class _NSintegralState(object):
     plt.ylabel('log likelihood')
     plt.xlim([self.log_vols[-1],self.log_vols[0]])
     plt.savefig(filename)
-    print('Saved nested sampling plot as {0}'.format(filename))
+    self.logger.info('Saved nested sampling plot as {0}'.format(filename))
 
 
 class NestedSampler(object):
     """
     Nested Sampler class.
     Initialisation arguments:
-    
+
     model: :obj:`cpnest.Model` user defined model
-    
+
     manager: `multiprocessing` manager instance which controls
         the shared objects.
         Default: None
-    
+
     Nlive: int
         number of live points to be used for the integration
         Default: 1024
-    
+
     output: string
         folder where the output will be stored
         Default: None
-        
+
     verbose: int
         0: Nothing
         1: display information on screen
         2: (1) + diagnostic plots
         Default: 1
-        
+
     seed: int
         seed for the initialisation of the pseudorandom chain
         Default: 1234
-    
+
     prior_sampling: boolean
         produce Nlive samples from the prior.
         Default: False
@@ -129,7 +131,7 @@ class NestedSampler(object):
     n_periodic_checkpoint: int
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
- 
+
     """
 
     def __init__(self,
@@ -146,6 +148,7 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
+        self.logger         = logging.getLogger('CPNest')
         self.model          = model
         self.manager        = manager
         self.prior_sampling = prior_sampling
@@ -179,7 +182,7 @@ class NestedSampler(object):
     def setup_output(self,output):
         """
         Set up the output folder
-        
+
         -----------
         Parameters:
         output: string
@@ -191,12 +194,11 @@ class NestedSampler(object):
                 evidence_file: file where the evidence will be written
                 resume_file:   file used for checkpointing the algorithm
         """
-        os.system("mkdir -p {0!s}".format(output))
         chain_filename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
         output_file   = os.path.join(output,chain_filename)
         evidence_file = os.path.join(output,chain_filename+"_evidence.txt")
         resume_file  = os.path.join(output,"nested_sampler_resume.pkl")
-        
+
         return output_file, evidence_file, resume_file
 
 
@@ -238,7 +240,7 @@ class NestedSampler(object):
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
-        
+
         # Replace the points we just consumed with the next acceptable ones
         # Make sure we are mixing the chains
         np.random.shuffle(self.worst)
@@ -260,10 +262,10 @@ class NestedSampler(object):
                     self.rejected += 1
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
-                sys.stderr.write("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}\n"\
+                self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                 .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
                   logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax.value))
-                sys.stderr.flush()
+                #sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
         """
@@ -298,7 +300,7 @@ class NestedSampler(object):
             sys.stderr.write("\n")
             sys.stderr.flush()
         self.initialised=True
-    
+
     def nested_sampling_loop(self):
         """
         main nested sampling loop
@@ -314,7 +316,7 @@ class NestedSampler(object):
             self.logLmin.value = np.inf
             for c in self.manager.consumer_pipes:
                 c.send(None)
-            print("Nested Sampling process {0!s}, exiting".format(os.getpid()))
+            self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
 
         try:
@@ -348,8 +350,9 @@ class NestedSampler(object):
         # output the chain and evidence
         self.write_chain_to_file()
         self.write_evidence_to_file()
-        print('Final evidence: {0:0.2f}\nInformation: {1:.2f}'.format(self.state.logZ,self.state.info))
-        
+        self.logger.critical('Final evidence: {0:0.2f}'.format(self.state.logZ))
+        self.logger.critical('Information: {0:.2f}'.format(self.state.info))
+
         # Some diagnostics
         if self.verbose>1 :
           self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
@@ -359,7 +362,7 @@ class NestedSampler(object):
         """
         Checkpoint its internal state
         """
-        print('Checkpointing nested sampling')
+        self.logger.critical('Checkpointing nested sampling')
         with open(self.resume_file,"wb") as f:
             pickle.dump(self, f)
 
@@ -369,7 +372,7 @@ class NestedSampler(object):
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        print('Resuming NestedSampler from '+filename)
+        self.logger.critical('Resuming NestedSampler from '+filename)
         with open(filename,"rb") as f:
             obj = pickle.load(f)
         obj.manager = manager

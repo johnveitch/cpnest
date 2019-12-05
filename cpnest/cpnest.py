@@ -12,7 +12,11 @@ from multiprocessing.sharedctypes import Value, Array
 from multiprocessing import Lock
 from multiprocessing.managers import SyncManager
 
+import multiprocessing_logging
+
 import cProfile
+
+from .logger import start_logger
 
 
 class CheckPoint(Exception):
@@ -24,18 +28,17 @@ def sighandler(signal, frame):
     print("Handling signal {}".format(signal))
     raise CheckPoint()
 
-
 class CPNest(object):
     """
     Class to control CPNest sampler
     cp = CPNest(usermodel,nlive=100,output='./',verbose=0,seed=None,maxmcmc=100,nthreads=None,balanced_sampling = True)
-    
+
     Input variables:
     =====
 
     usermodel: :obj:`cpnest.Model`
         a user-defined model to analyse
-    
+
     nlive: `int`
         Number of live points (100)
 
@@ -44,8 +47,8 @@ class CPNest(object):
 
     output : `str`
         output directory (./)
-    
-    verbose: `int` 
+
+    verbose: `int`
         Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
 
     seed: `int`
@@ -53,16 +56,16 @@ class CPNest(object):
 
     maxmcmc: `int`
         maximum MCMC points for sampling chains (100)
-    
+
     nthreads: `int` or `None`
         number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
-    
+
     nhamiltomnian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
-    
+
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
-    
+
     proposal: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
@@ -71,7 +74,7 @@ class CPNest(object):
     n_periodic_checkpoint: `int`
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
- 
+
     """
     def __init__(self,
                  usermodel,
@@ -91,7 +94,12 @@ class CPNest(object):
         else:
             self.nthreads = nthreads
 
-        print('Running with {0} parallel threads'.format(self.nthreads))
+        output = os.path.join(output, '')
+        os.system("mkdir -p {0!s}".format(output))
+
+        self.logger = start_logger(output, verbose=verbose)
+
+        self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
@@ -114,9 +122,9 @@ class CPNest(object):
         if seed is None: self.seed=1234
         else:
             self.seed=seed
-        
+
         self.process_pool = []
-        
+
         # instantiate the nested sampler class
         resume_file = os.path.join(output, "nested_sampler_resume.pkl")
         if not os.path.exists(resume_file) or resume == False:
@@ -152,7 +160,7 @@ class CPNest(object):
 
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
-        
+
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
@@ -184,7 +192,7 @@ class CPNest(object):
             signal.signal(signal.SIGINT, sighandler)
             signal.signal(signal.SIGUSR1, sighandler)
             signal.signal(signal.SIGUSR2, sighandler)
-        
+
         #self.p_ns.start()
         for each in self.process_pool:
             each.start()
@@ -198,7 +206,7 @@ class CPNest(object):
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
         if self.verbose>1: self.plot()
-    
+
         #TODO: Clean up the resume pickles
 
     def get_nested_samples(self, filename='nested_samples.dat'):
@@ -270,7 +278,7 @@ class CPNest(object):
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
-    
+
     def worker_ns(self):
         cProfile.runctx('self.NS.nested_sampling_loop(self.consumer_pipes)', globals(), locals(), 'prof_nested_sampling.prof')
 
