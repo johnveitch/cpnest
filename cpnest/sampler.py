@@ -1,6 +1,7 @@
 from __future__ import division
 import sys
 import os
+import logging
 import numpy as np
 from math import log
 from collections import deque
@@ -21,38 +22,38 @@ class Sampler(object):
     """
     Sampler class.
     ---------
-    
+
     Initialisation arguments:
-    
+
     args:
     model: :obj:`cpnest.Model` user defined model to sample
-    
+
     maxmcmc:
         :int: maximum number of mcmc steps to be used in the :obj:`cnest.sampler.Sampler`
-    
+
     ----------
     kwargs:
-    
+
     verbose:
         :int: display debug information on screen
         Default: 0
-    
+
     poolsize:
         :int: number of objects for the affine invariant sampling
         Default: 1000
-    
+
     seed:
         :int: random seed to initialise the pseudo-random chain
         Default: None
-    
+
     proposal:
         :obj:`cpnest.proposals.Proposal` to use
         Defaults: :obj:`cpnest.proposals.DefaultProposalCycle`)
-    
+
     resume_file:
         File for checkpointing
         Default: None
-    
+
     manager:
         :obj:`multiprocessing.Manager` hosting all communication objects
         Default: None
@@ -77,7 +78,9 @@ class Sampler(object):
         self.manager = manager
         self.logLmin = self.manager.logLmin
         self.logLmax = self.manager.logLmax
-        
+
+        self.logger         = logging.getLogger('CPNest')
+
         if proposal is None:
             self.proposal = DefaultProposalCycle()
         else:
@@ -98,7 +101,7 @@ class Sampler(object):
         self.samples            = [] # the list of samples from the mcmc chain
         self.ACLs               = [] # the history of the ACL of the chain, will be used to thin the output, if requested
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
-        
+
     def reset(self):
         """
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
@@ -113,8 +116,8 @@ class Sampler(object):
                 if np.isfinite(p.logP): break
             p.logL=self.model.log_likelihood(p)
             if p.logL is None or not np.isfinite(p.logL):
-                print("Warning: received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
-                print("You may want to check your likelihood function to improve sampling")
+                self.logger.warning("Received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
+                self.logger.warning("You may want to check your likelihood function to improve sampling")
             self.evolution_points.append(p)
 
         self.proposal.set_ensemble(self.evolution_points)
@@ -134,7 +137,7 @@ class Sampler(object):
         multiplied by a safety margin of 5
         Uses moving average with decay time tau iterations
         (default: :int:`self.poolsize`)
-        
+
         Taken from http://github.com/farr/Ensemble.jl
         """
         if tau is None: tau = self.maxmcmc/safety#self.poolsize
@@ -143,7 +146,7 @@ class Sampler(object):
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
             self.Nmcmc_exact = (1.0 - 1.0/tau)*self.Nmcmc_exact + (safety/tau)*(2.0/self.sub_acceptance - 1.0)
-        
+
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
 
@@ -153,9 +156,9 @@ class Sampler(object):
         try:
             self._produce_sample()
         except CheckPoint:
-            print("Checkpoint excepted in sampler")
+            self.logger.critical("Checkpoint excepted in sampler")
             self.checkpoint()
-    
+
     def _produce_sample(self):
         """
         main loop that takes the worst :obj:`cpnest.parameter.LivePoint` and
@@ -168,14 +171,14 @@ class Sampler(object):
         self.counter=1
         __checkpoint_flag=False
         while True:
-            
+
             if self.manager.checkpoint_flag.value:
                 self.checkpoint()
                 sys.exit(130)
-            
+
             if self.logLmin.value==np.inf:
                 break
-            
+
             p = self.producer_pipe.recv()
 
             if p is None:
@@ -183,7 +186,7 @@ class Sampler(object):
             if p == "checkpoint":
                 self.checkpoint()
                 sys.exit(130)
-        
+
             self.evolution_points.append(p)
             (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
             # Send the sample to the Nested Sampler
@@ -194,7 +197,7 @@ class Sampler(object):
 
             self.counter += 1
 
-        sys.stderr.write("Sampler process {0!s}: MCMC samples accumulated = {1:d}\n".format(os.getpid(),len(self.samples)))
+        self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
         self.samples.extend(self.evolution_points)
         import numpy.lib.recfunctions as rfn
         if self.verbose >=3:
@@ -203,15 +206,15 @@ class Sampler(object):
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
                        self.mcmc_samples.ravel(),header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
-            sys.stderr.write("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}\n".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
-        sys.stderr.write("Sampler process {0!s} - mean acceptance {1:.3f}: exiting\n".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
+            self.logger.critical("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
+        self.logger.critical("Sampler process {0!s} - mean acceptance {1:.3f}: exiting".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0
 
     def checkpoint(self):
         """
         Checkpoint its internal state
         """
-        print('Checkpointing Sampler')
+        self.logger.info('Checkpointing Sampler')
         with open(self.resume_file, "wb") as f:
             pickle.dump(self, f)
 
@@ -221,7 +224,7 @@ class Sampler(object):
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        print('Resuming Sampler from '+resume_file)
+        self.logger.info('Resuming Sampler from '+resume_file)
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         obj.model   = model
@@ -241,7 +244,7 @@ class Sampler(object):
         del state['producer_pipe']
         del state['thread_id']
         return state
-    
+
     def __setstate__(self, state):
         self.__dict__ = state
         self.manager = None
@@ -252,20 +255,20 @@ class MetropolisHastingsSampler(Sampler):
     for :obj:`cpnest.proposal.EnembleProposal`
     """
     def yield_sample(self, logLmin):
-        
+
         while True:
-            
+
             sub_counter = 0
             sub_accepted = 0
             oldparam = self.evolution_points.popleft()
             logp_old = self.model.log_prior(oldparam)
 
             while True:
-                
+
                 sub_counter += 1
                 newparam = self.proposal.get_sample(oldparam.copy())
                 newparam.logP = self.model.log_prior(newparam)
-                
+
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.model.log_likelihood(newparam)
                     if newparam.logL > logLmin:
@@ -273,10 +276,10 @@ class MetropolisHastingsSampler(Sampler):
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
-            
+
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
-        
+
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
             if self.verbose >=3:
@@ -297,9 +300,9 @@ class HamiltonianMonteCarloSampler(Sampler):
     def yield_sample(self, logLmin):
 
         global_lmax = self.logLmax.value
-        
+
         while True:
-            
+
             sub_accepted    = 0
             sub_counter     = 0
             oldparam        = self.evolution_points.pop()
@@ -308,9 +311,9 @@ class HamiltonianMonteCarloSampler(Sampler):
 
                 sub_counter += 1
                 newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
-                
+
                 if self.proposal.log_J > np.log(random()):
-                    
+
                     if newparam.logL > logLmin:
                         global_lmax = max(global_lmax, newparam.logL)
                         oldparam        = newparam.copy()
@@ -320,7 +323,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             if self.verbose >= 3:
                 self.samples.append(oldparam)
-            
+
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
