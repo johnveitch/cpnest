@@ -93,7 +93,7 @@ class CPNest(object):
             self.nthreads = nthreads
 
         output = os.path.join(output, '')
-        os.system("mkdir -p {0!s}".format(output))
+        os.makedirs(output, exist_ok=True)
 
         self.logger = start_logger(output, verbose=verbose)
 
