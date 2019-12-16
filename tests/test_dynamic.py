@@ -31,7 +31,7 @@ def sample_above(l):
     #print(l,x)
     return np.random.uniform(-x,x)
     #dx = 2*norm.isf(np.exp(l))
-    
+
 
 logLtest=norm.logpdf
 
@@ -97,7 +97,7 @@ while it<10000:
         plt.ylabel('logZ error')
         plt.draw()
         plt.pause(0.03)
-    
+
 #plt.plot([a.a for a in i],[a.logX() for a in i])
 ps=[p for p in i.points()]
 M=[x.logt() for x in i]
