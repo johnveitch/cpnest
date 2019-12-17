@@ -35,14 +35,33 @@ def start_logger(output=None, verbose=0, name='CPNest'):
     return logger
 
 def add_file_handler(logger, output):
-    """Add a file handler to a logger"""
+    """
+    Add a file handler to a logger
+
+    logger : `obj`
+        Instance of logging.Logger
+
+    output : `str`
+        Output directory
+    """
     fh = logging.FileHandler(output + 'cpnest.log')
     fh.setFormatter(logging.Formatter(FMT, datefmt='%Y-%m-%d, %H:%M:%S'))
     logger.addHandler(fh)
     return logger
 
 def update_logger(logger, verbose=None, output=None):
-    """Update the verbosity and/or add an output file"""
+    """
+    Update the verbosity and/or add an output file
+
+    logger : `obj`
+        Instance of logging.Logger
+
+    verbose: `int`
+        Verbosity, 0=CRITICAL, 1=WARNING, 2=INFO, 3=DEBUG
+
+    output : `str`
+        Output directory
+    """
     if output is not None:
         add_file_handler(logger, output)
     if verbose is not None:
@@ -52,4 +71,3 @@ def update_logger(logger, verbose=None, output=None):
         for handler in logger.handlers:
             handler.setLevel(level)
     return logger
-
