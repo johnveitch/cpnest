@@ -14,7 +14,10 @@ from multiprocessing.managers import SyncManager
 
 import cProfile
 
-from .logger import start_logger
+from .logger import start_logger, update_logger
+
+
+LOGGER = start_logger()
 
 
 class CheckPoint(Exception):
@@ -25,6 +28,7 @@ class CheckPoint(Exception):
 def sighandler(signal, frame):
     print("Handling signal {}".format(signal))
     raise CheckPoint()
+
 
 class CPNest(object):
     """
@@ -95,9 +99,9 @@ class CPNest(object):
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
-        self.logger = start_logger(output, verbose=verbose)
-
+        self.logger = update_logger(LOGGER, output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
