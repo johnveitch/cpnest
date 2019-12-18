@@ -1,73 +1,52 @@
 import logging
 
-FMT = '%(asctime)s - %(name)-8s: %(message)s'
-LEVELS = ['CRITICAL', 'WARNING', 'INFO', 'DEBUG']
+class CPNestLogger(logging.Logger):
 
-def start_logger(output=None, verbose=0, name='CPNest'):
-    """
-    Start an instance of Logger for logging
+    def __init__(self, name):
 
-    output : `str`
-        output directory (./)
+        super(CPNestLogger, self).__init__(name)
 
-    verbose: `int`
-        Verbosity, 0=CRITICAL, 1=WARNING, 2=INFO, 3=DEBUG
+        self.fmt = '%(asctime)s - %(name)-8s: %(message)s'
+        self.date_fmt = '%Y-%m-%d, %H:%M:%S'
+        self.levels = ['CRITICAL', 'WARNING', 'INFO', 'DEBUG']
+        self.add_stream_handler()
 
-    name   : `str`
-        Name of the logger (CPnest)
-    """
-    verbose = min(verbose, 3)
-    # levels 0, 1, 2, 3
-    level = LEVELS[verbose]
-    # setup logger
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    # handle command line output
-    ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter(FMT, datefmt='%Y-%m-%d, %H:%M:%S'))
-    logger.addHandler(ch)
+    def add_file_handler(self, output):
+        """
+        Add a file handler
 
-    # log to file
-    if output is not None:
-        add_file_handler(logger, output)
+        output : `str`
+            Output directory
+        """
+        fh = logging.FileHandler(output + 'cpnest.log')
+        fh.setFormatter(logging.Formatter(self.fmt, datefmt=self.date_fmt))
+        self.addHandler(fh)
 
-    logger.warning('Logging level: {}'.format(level))
-    return logger
+    def add_stream_handler(self):
+        """
+        Add a stream handler
+        """
+        sh = logging.StreamHandler()
+        sh.setFormatter(logging.Formatter(self.fmt, datefmt=self.date_fmt))
+        self.addHandler(sh)
 
-def add_file_handler(logger, output):
-    """
-    Add a file handler to a logger
+    def update(self, output=None, verbose=0):
+        """
+        Update the verbosity and/or add an output file
 
-    logger : `obj`
-        Instance of logging.Logger
+        verbose: `int`
+            Verbosity, 0=CRITICAL, 1=WARNING, 2=INFO, 3=DEBUG
 
-    output : `str`
-        Output directory
-    """
-    fh = logging.FileHandler(output + 'cpnest.log')
-    fh.setFormatter(logging.Formatter(FMT, datefmt='%Y-%m-%d, %H:%M:%S'))
-    logger.addHandler(fh)
-    return logger
-
-def update_logger(logger, verbose=None, output=None):
-    """
-    Update the verbosity and/or add an output file
-
-    logger : `obj`
-        Instance of logging.Logger
-
-    verbose: `int`
-        Verbosity, 0=CRITICAL, 1=WARNING, 2=INFO, 3=DEBUG
-
-    output : `str`
-        Output directory
-    """
-    if output is not None:
-        add_file_handler(logger, output)
-    if verbose is not None:
-        level = LEVELS[verbose]
-        logger.setLevel(level)
-        # update any handlers
-        for handler in logger.handlers:
-            handler.setLevel(level)
-    return logger
+        output : `str`
+            Output directory
+        """
+        verbose = min(verbose, 3)
+        if output is not None:
+            self.add_file_handler(output)
+        if verbose is not None:
+            level = self.levels[verbose]
+            self.setLevel(level)
+            # update any handlers
+            for handler in self.handlers:
+                handler.setLevel(level)
+        self.warning('Setting verbosity to {}'.format(verbose))
