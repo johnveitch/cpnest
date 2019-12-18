@@ -7,7 +7,7 @@ from functools import reduce
 if not logging.Logger.manager.loggerDict:
     LOGGER = logging.getLogger('nest2pos')
 else:
-    LOGGER = logging.getLogger('cpnest')
+    LOGGER = logging.getLogger('CPNest')
 
 def logsubexp(x,y):
     """
