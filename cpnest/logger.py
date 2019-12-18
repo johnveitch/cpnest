@@ -1,6 +1,21 @@
 import logging
 
 class CPNestLogger(logging.Logger):
+    """
+    Custom logger class that inherits from the Logger class and is called when
+    instantiating a logger with the logging package in CPNest.
+
+    It includes a stream handler by default and can be updated to change
+    verbosity and/or log to a file.
+    ---------
+
+    Initialisation arguments:
+
+    args:
+
+    name:
+        :str: name of the logger
+    """
 
     def __init__(self, name):
 
