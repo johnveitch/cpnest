@@ -7,17 +7,13 @@ import numpy as np
 import os
 import sys
 import signal
+import logging
 
 from multiprocessing.sharedctypes import Value, Array
 from multiprocessing import Lock
 from multiprocessing.managers import SyncManager
 
 import cProfile
-
-from .logger import start_logger, update_logger
-
-
-LOGGER = start_logger()
 
 
 class CheckPoint(Exception):
@@ -99,7 +95,8 @@ class CPNest(object):
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
-        self.logger = update_logger(LOGGER, output=output, verbose=verbose)
+        self.logger = logging.getLogger('CPNest')
+        self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
 
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler

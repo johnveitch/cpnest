@@ -4,7 +4,10 @@ from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
 
-LOGGER = logging.getLogger("CPNest")
+if not logging.Logger.manager.loggerDict:
+    LOGGER = logging.getLogger('nest2pos')
+else:
+    LOGGER = logging.getLogger('cpnest')
 
 def logsubexp(x,y):
     """
@@ -20,6 +23,7 @@ def logsubexp(x,y):
         z: :float: x + np.log1p(-np.exp(y-x))
     """
     assert np.all(x >= y), 'cannot take log of negative number {0!s} - {1!s}'.format(str(x), str(y))
+    LOGGER.critical([x, y])
     return x + np.log1p(-np.exp(y-x))
 
 def log_integrate_log_trap(log_func,log_support):

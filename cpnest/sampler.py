@@ -79,7 +79,7 @@ class Sampler(object):
         self.logLmin = self.manager.logLmin
         self.logLmax = self.manager.logLmax
 
-        self.logger         = logging.getLogger('CPNest')
+        self.logger = logging.getLogger('CPNest')
 
         if proposal is None:
             self.proposal = DefaultProposalCycle()
