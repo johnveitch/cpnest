@@ -117,14 +117,14 @@ cdef class LivePoint:
     def __len__(LivePoint self):
         return self.dimension
     
-    def __getitem__(LivePoint self, str name):
+    def __getitem__(LivePoint self, name):
         cdef unsigned int i
         for i in range(self.dimension):
             if self.names[i] == name:
                 return self.values[i]
         raise KeyError
 
-    def __setitem__(LivePoint self, str name, double value):
+    def __setitem__(LivePoint self, name, double value):
         cdef unsigned int i
         for i in range(self.dimension):
             if self.names[i] == name:

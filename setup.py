@@ -7,6 +7,9 @@ from setuptools.command.build_ext import build_ext as _build_ext
 from codecs import open
 import os
 import re
+import platform
+
+WINDOWS = platform.system().lower() == "windows"
 
 
 # see https://stackoverflow.com/a/21621689/1862861 for why this is here
@@ -27,18 +30,19 @@ else:
     have_cython = True
 
 # set extension
+libraries = [] if WINDOWS else ["m"]
 if have_cython:  # convert the pyx file to a .c file if cython is available
     ext_modules = [Extension("cpnest.parameter",
-                             sources=["cpnest/parameter.pyx"],
-                             include_dirs=['cpnest/'],
-                             libraries=['m'])]
+                             sources=[os.path.join("cpnest", "parameter.pyx")],
+                             include_dirs=['cpnest'],
+                             libraries=libraries)]
 else:
     # just compile the included parameter.c (already converted from
     # parameter.pyx) file
     ext_modules = [Extension("cpnest.parameter",
-                             sources=["cpnest/parameter.c"],
-                             include_dirs=['cpnest/'],
-                             libraries=['m'])]
+                             sources=[os.path.join("cpnest", "parameter.c")],
+                             include_dirs=['cpnest'],
+                             libraries=libraries)]
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -73,19 +77,19 @@ setup(
         classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: MIT License',
-            'Programming Language :: Python :: 2',
-            'Programming Language :: Python :: 2.6',
-            'Programming Language :: Python :: 2.7',
             'Programming Language :: Python :: 3',
             'Programming Language :: Python :: 3.2',
             'Programming Language :: Python :: 3.3',
             'Programming Language :: Python :: 3.4',
-            'Programming Language :: Python :: 3.5'],
+            'Programming Language :: Python :: 3.5',
+            'Programming Language :: Python :: 3.6',
+            'Programming Language :: Python :: 3.7',
+            'Programming Language :: Python :: 3.8'],
         keywords='nested sampling bayesian inference',
         packages=['cpnest'],
-        install_requires=['numpy', 'scipy', 'corner', 'tqdm'],
+        install_requires=['numpy', 'scipy', 'corner', 'tqdm', 'cython'],
 
-        setup_requires=['numpy'],
+        setup_requires=['numpy', 'scipy', 'cython'],
         tests_require=['corner','tqdm'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
         entry_points={},
