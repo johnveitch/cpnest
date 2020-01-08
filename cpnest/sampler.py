@@ -224,7 +224,6 @@ class Sampler(object):
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        self.logger.info('Resuming Sampler from '+resume_file)
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         obj.model   = model
@@ -232,7 +231,8 @@ class Sampler(object):
         obj.logLmin = obj.manager.logLmin
         obj.logLmax = obj.manager.logLmax
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
-        return(obj)
+        obj.logger.info('Resuming Sampler from ' + resume_file)
+        return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
