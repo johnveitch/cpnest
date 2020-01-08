@@ -375,7 +375,6 @@ class NestedSampler(object):
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        self.logger.critical('Resuming NestedSampler from '+filename)
         with open(filename,"rb") as f:
             obj = pickle.load(f)
         obj.manager = manager
@@ -385,7 +384,8 @@ class NestedSampler(object):
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
         del obj.__dict__['llmin']
-        return(obj)
+        obj.logger.critical('Resuming NestedSampler from ' + filename)
+        return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
