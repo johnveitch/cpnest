@@ -292,6 +292,9 @@ class NestedSampler(object):
                     while i < self.Nlive:
                         acceptance,sub_acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
                         self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                        if np.isnan(self.params[i].logL):
+                            self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
+                            self.logger.warn("You may want to check your likelihood function")
                         if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
                             i+=1
                             pbar.update()
@@ -372,7 +375,6 @@ class NestedSampler(object):
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        self.logger.critical('Resuming NestedSampler from '+filename)
         with open(filename,"rb") as f:
             obj = pickle.load(f)
         obj.manager = manager
@@ -382,7 +384,8 @@ class NestedSampler(object):
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
         del obj.__dict__['llmin']
-        return(obj)
+        obj.logger.critical('Resuming NestedSampler from ' + filename)
+        return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
