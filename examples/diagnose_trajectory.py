@@ -15,6 +15,7 @@ if mode == 'delete':
     for f in toremove: os.remove(f)
     exit()
 traj = np.genfromtxt('trajectory_'+sys.argv[1]+'.txt', names= True)
+
 npts = 256
 x = np.linspace(-10,10,npts)
 y = np.linspace(-10,10,npts)
@@ -26,9 +27,9 @@ for i in range(npts):
 
 C = plt.contour(X, Y, Z, levels = [traj['logLmin'][0]], linewidths=1.0,colors='k')
 plt.contourf(X, Y, Z, 6, cmap = cm.Greys_r)
-S = plt.scatter(traj['0'], traj['1'], c=traj['logL'], s = 8)
-plt.plot(traj['0'],traj['1'], color = 'k', lw = 0.5)
+S = plt.scatter(traj['x'], traj['y'], c=traj['logL'], s = 8)
+plt.plot(traj['x'],traj['y'], color = 'k', lw = 0.5)
 for k in range(traj.shape[0]):
-    plt.text(traj['0'][k],traj['1'][k], str(k), color="black", fontsize=8)
+    plt.text(traj['x'][k],traj['y'][k], str(k), color="black", fontsize=8)
 plt.colorbar(S)
 plt.show()

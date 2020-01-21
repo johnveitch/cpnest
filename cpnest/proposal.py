@@ -8,18 +8,15 @@ from random import sample,gauss,randrange,uniform
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
 
-try:
-    from jax import grad, jit
-    FINITEDIFFERENCING = False
-except:
-    FINITEDIFFERENCING = True
-    pass
+#try:
+#    from jax import grad, jit
+#    FINITEDIFFERENCING = False
+#except ImportError:
+#    FINITEDIFFERENCING = True
+#    pass
 
-#if FINITEDIFFERENCING is True:
-#    try:
-#        from .interpolant import NNGradientInterpolant
-#    except:
-#        pass
+FINITEDIFFERENCING = True
+from .numerical_grad import numerical_gradient
 
 class Proposal(object):
     """
@@ -302,22 +299,34 @@ class HamiltonianProposal(Proposal):
         self.V                      = model.potential
         self.normal                 = None
         self.scale                  = 1.0
-        self.TARGET                 = 0.8
-        self.ADAPTATIONSIZE         = 0.001
+        self.TARGET                 = 1.0
         self.c                      = self.counter()
         self.DEBUG                  = 0
-        self.constraint             = jit(grad(self.model.log_likelihood))
-        self.finite_differencing    = FINITEDIFFERENCING
         self.d                      = len(self.model.names)
         self.inverse_mass_matrix    = np.identity(self.d)
         self.mass_matrix            = np.identity(self.d)
         self.inverse_mass           = np.ones(self.d)
         self.logdeterminant         = 0.0
         self.momenta_distribution   = multivariate_normal(cov=self.mass_matrix)#
-        self.base_dt, self.base_L   = self.set_integration_parameters()
-        self.dt                     = self.base_dt
-        self.L                      = self.base_L
+        self.dt, self.L             = self.set_integration_parameters()
+        self.time_step              = DualAveragingStepSize(self.dt,
+                                                            target_accept = self.TARGET,
+                                                            gamma         = 0.5,
+                                                            t0            = 10.0,
+                                                            kappa         = 0.75)
         
+        self.finite_differencing    = FINITEDIFFERENCING
+        if self.finite_differencing == False:
+            self.constraint         = grad(self.model.log_likelihood)
+        else:
+            self.constraint         = numerical_gradient(self.d, self.model.log_likelihood, cache_size = 1000)
+    
+    def counter(self):
+        n = 0
+        while True:
+            yield n
+            n += 1
+            
     def set_integration_parameters(self):
         """
         Finds the smallest and largest dimensions and use them
@@ -331,11 +340,11 @@ class HamiltonianProposal(Proposal):
         
         largest_dimension  = np.max([b[1]-b[0] for b in self.model.bounds])
         smallest_dimension = np.min([b[1]-b[0] for b in self.model.bounds])
-        base_dt = smallest_dimension/largest_dimension
-        base_L  = int(largest_dimension/base_dt)
-        print('Set up initial time step = {0}'.format(base_dt))
-        print('Set up initial trajectory length = {0}'.format(base_L))
-        return base_dt, base_L
+        dt   = 0.3/self.d
+        L    = int(10*self.d**0.25)
+        print('Set up initial time step = {0}'.format(dt))
+        print('Set up initial trajectory length = {0}'.format(L))
+        return dt, L
         
     def unit_normal(self, q):
         """
@@ -355,20 +364,13 @@ class HamiltonianProposal(Proposal):
         ----------
         n: :obj:`numpy.ndarray` unit normal to the logLmin contour evaluated at q
         """
-        try:
+        if self.finite_differencing == False:
             v    = self.constraint({n:q[n] for n in q.names})
             norm = np.sqrt(np.sum([v[vi]**2 for vi in v]))
             for vi in v: v[vi]/=norm
             normal_vector = np.array([v[vi] for vi in v])
-        except:
-            if self.finite_differencing == FINITEDIFFERENCING:
-                print('autodifferentiation failed, reverting to finite differencing')
-                self.finite_differencing = FINITEDIFFERENCING
-            qh = q.copy()
-            v  = np.zeros(len(qh.names),dtype = np.float64)
-            for i,n in enumerate(qh.names):
-                qh[n] += 1e-7
-                v[i] = (self.model.log_likelihood(qh)-q.logL)/(1e-7)
+        else:
+            v    = self.constraint(q)
             normal_vector = v/np.linalg.norm(v)
         
         return normal_vector
@@ -388,7 +390,7 @@ class HamiltonianProposal(Proposal):
         dV = self.dV(q)
         return dV.view(np.float64)
 
-    def update_time_step(self, acceptance):
+    def update_time_step(self, acceptance, initialised = False):
         """
         Update the time step according to the
         acceptance rate. Correct also the trajectory length
@@ -398,11 +400,11 @@ class HamiltonianProposal(Proposal):
         ----------
         acceptance : :obj:'numpy.float'
         """
-        diff          = acceptance - self.TARGET
-        new_log_scale = np.log(self.scale) + self.ADAPTATIONSIZE * diff
-        self.scale    = np.exp(new_log_scale)
-        self.dt       = self.base_dt * self.scale
-
+        if initialised == False:  self.dt, _  = self.time_step.update(acceptance)
+        elif initialised == True: _, self.dt  = self.time_step.update(acceptance)
+        # if we are not accepting much, switch back to the finite differencing
+#        if acceptance < 0.3 and self.constraint.brute_force == False: self.constraint.update_state()
+    
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian.
@@ -549,12 +551,6 @@ class ConstrainedLeapFrog(LeapFrog):
             position
         """
         return super(ConstrainedLeapFrog,self).get_sample(q0, logLmin)
-    
-    def counter(self):
-        n = 0
-        while True:
-            yield n
-            n += 1
 
     def evolve_trajectory_one_step_position(self, p, q):
         """
@@ -605,16 +601,18 @@ class ConstrainedLeapFrog(LeapFrog):
         reflected = 0
         dV        = self.gradient(q)
         if half is True:
-            p += - 0.5 * self.dt * dV
-            return p, q, reflected
+            factor = 0.5
         else:
-            c = self.check_constraint(q, logLmin)
-            if c > 0:
-                p += - self.dt * dV
-            else:
-                normal = self.unit_normal(q)
-                p += - 2.0*np.dot(p,normal)*normal
-                reflected = 1
+            factor = 1.0
+
+        c = self.check_constraint(q, logLmin)
+        if c > 0:
+            p += - factor * self.dt * dV
+        else:
+            normal = self.unit_normal(q)
+            p += - 2.0*np.dot(p,normal)*normal
+            reflected = 1
+                
         return p, q, reflected
 
     def check_constraint(self, q, logLmin):
@@ -654,29 +652,34 @@ class ConstrainedLeapFrog(LeapFrog):
         """
 
         trajectory = [(q0,p0)]
-        self.L     = np.random.randint(self.base_L, 10*self.base_L)
         # evolve forward in time
         i = 0
         p, q, reflected = self.evolve_trajectory_one_step_momentum(p0.copy(), q0.copy(), logLmin, half = True)
-        while (i < self.L//2):
+        while (i < self.L):
+            ll              = q.logL
+            p, q            = self.evolve_trajectory_one_step_position(p, q)
+#            print(i,'forward position: logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll,q.logL, logLmin, reflected))
+            p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
+            trajectory.append((q.copy(),p.copy()))
+#            print(i,'forward momentum: logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll,q.logL, logLmin, reflected))
+            i += 1
+        
+        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
+        trajectory.append((q.copy(),p.copy()))
+        # evolve backward in time
+        i = 0
+        p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
+        while (i < self.L):
             ll              = q.logL
             p, q            = self.evolve_trajectory_one_step_position(p, q)
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
             trajectory.append((q.copy(),p.copy()))
-            i += 1
-#            print('logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll,q.logL, logLmin, reflected))
-        
-        # evolve backward in time
-        i = 0
-        p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
-        while (i < self.L//2):
-            p, q            = self.evolve_trajectory_one_step_position(p, q)
-            p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
-            trajectory.append((q.copy(),p.copy()))
+#            print(i,'backward : logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll, q.logL, logLmin, reflected))
             i += 1
 
         p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
-
+        trajectory.append((q.copy(),p.copy()))
+        
         if self.DEBUG: self.save_trajectory(trajectory, logLmin)
         return self.sample_trajectory(trajectory)
 
@@ -709,4 +712,32 @@ class ConstrainedLeapFrog(LeapFrog):
                 f.write(repr(q[n])+'\t'+repr(p[j])+'\t')
             f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
         f.close()
-        if self.c == 3: exit()
+
+class DualAveragingStepSize:
+    def __init__(self, initial_step_size, target_accept=0.65, gamma=0.05, t0=10.0, kappa=0.75):
+        self.mu = np.log(10 * initial_step_size)  # proposals are biased upwards to stay away from 0.
+        self.target_accept = target_accept
+        self.gamma = gamma
+        self.t = t0
+        self.kappa = kappa
+        self.error_sum = 0
+        self.log_averaged_step = 0
+
+    def update(self, p_accept):
+        # Running tally of absolute error. Can be positive or negative. Want to be 0.
+        self.error_sum += self.target_accept - p_accept
+
+        # This is the next proposed (log) step size. Note it is biased towards mu.
+        log_step = self.mu - self.error_sum / (np.sqrt(self.t) * self.gamma)
+
+        # Forgetting rate. As `t` gets bigger, `eta` gets smaller.
+        eta = self.t ** -self.kappa
+
+        # Smoothed average step size
+        self.log_averaged_step = eta * log_step + (1 - eta) * self.log_averaged_step
+
+        # This is a stateful update, so t keeps updating
+        self.t += 1
+
+        # Return both the noisy step size, and the smoothed step size
+        return np.exp(log_step), np.exp(self.log_averaged_step)

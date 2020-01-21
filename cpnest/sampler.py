@@ -297,6 +297,39 @@ class HamiltonianMonteCarloSampler(Sampler):
     HamiltonianMonteCarlo acceptance rule
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
+    burnin = 500
+    def reset(self):
+        """
+        Initialise the sampler by generating a sampler live point `cpnest.parameter.LivePoint`
+        and then run an initial tuning burn in to tune the sampler
+        over :obj:`cpnest.model.Model.log_prior`
+        """
+        np.random.seed(seed=self.seed)
+        for n in tqdm(range(1), desc='SMPLR {} init draw'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
+            while True: # Generate an in-bounds sample
+                p = self.model.new_point()
+                p.logP = self.model.log_prior(p)
+                if np.isfinite(p.logP): break
+            p.logL=self.model.log_likelihood(p)
+            if p.logL is None or not np.isfinite(p.logL):
+                self.logger.warning("Received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
+                self.logger.warning("You may want to check your likelihood function to improve sampling")
+            self.evolution_points.append(p)
+
+        self.proposal.set_ensemble(self.evolution_points)
+
+        # Now, run evolution so samples are drawn from actual prior
+        # Simulating the expected likelihood bounds
+
+        for k in tqdm(range(self.burnin), desc='SMPLR {} init evolve'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
+            _, p = next(self.yield_sample(-np.inf))
+
+        self.proposal.set_ensemble(self.evolution_points)
+        self.initialised=True
+
+
     def yield_sample(self, logLmin):
 
         global_lmax = self.logLmax.value
@@ -315,7 +348,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                 if self.proposal.log_J > np.log(random()):
 
                     if newparam.logL > logLmin:
-                        global_lmax = max(global_lmax, newparam.logL)
+                        global_lmax     = max(global_lmax, newparam.logL)
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
 
@@ -328,9 +361,18 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            self.logLmax.value = global_lmax
-
-            for p in self.proposal.proposals:
-                p.update_time_step(self.acceptance)
-
+            self.logLmax.value  = global_lmax
+            
+            if self.initialised == False:
+                for p in self.proposal.proposals:
+                    p.update_time_step(self.acceptance, initialised = self.initialised)
+#                print('dt = :', self.proposal.proposals[0].dt, "acceptance",
+#                                self.acceptance, "sub_acceptance", self.sub_acceptance, logLmin)
+            elif self.mcmc_counter%100 == 0:
+                for p in self.proposal.proposals:
+                    p.update_time_step(self.acceptance, initialised = self.initialised)
+#                print('dt = :', self.proposal.proposals[0].dt, "acceptance",
+#                                self.acceptance, "sub_acceptance", self.sub_acceptance, logLmin)
+#            else:
+                print('final dt = :', self.proposal.proposals[0].dt, self.acceptance )
             yield (sub_counter, oldparam)
