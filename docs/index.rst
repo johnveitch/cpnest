@@ -55,7 +55,7 @@ Quickstart
 ==========
 
 CPNest provides a nested sampling class that interfaces with a user-defined model,
-which much implement the interface defined in :class:`cpnest.model.Model`.
+which must implement the interface defined in :class:`cpnest.model.Model`.
 The simplest way to do this is for the user to inherit from this class, and implement
 the :func:`cpnest.model.Model.log_likelihood` function, and define the :obj:`cpnest.model.Model.names`
 and :obj:`cpnest.model.Model.bounds` for their model. Here is an example for a two-dimensional
@@ -94,13 +94,19 @@ After calling `run()`, the final evidence and information will be displayed on t
 
 Note that the final result will have some uncertainty that can be reduced by increasing the number of live points
 with the `nlive` keyword argument.
+
 The other keyword arguments for :obj:`cpnest.cpnest.CPNest`
 provide means of controlling the number of threads used, the verbosity of the output, setting the random seed,
 and so on. See the documentation for :obj:`cpnest.cpnest.CPNest` for more details. 
 
-The user can also retrieve the samples produced during the run, and samples from the posterior
+Retrieving output
+==================
+
+The log-evidence from the run is retrieved from :obj:`cpnest.NS.logZ`
+
+The user can retrieve the samples produced during the run, and samples from the posterior
 by calling the :func:`cpnest.cpnest.CPNest.get_nested_samples()` and :func:`cpnest.cpnest.CPNest.get_posterior_samples()`
-methods, which each return a numpy array.
+methods, which both return a numpy array.
 
 
 Indices and tables
