@@ -2,17 +2,20 @@
 The simplest way to install cpnest is via pip
   pip install cpnest
 
+It is also available from conda-forge
+  conda install cpnest
+
 --
 
 Install this package from source using setuptools:
-  python setup.py install
+  python3 setup.py install
 
 Tests can be run with:
-  python setup.py test
+  python3 setup.py test
 
 For developers, local install with:
-  python setup.py develop --user
+  python3 setup.py develop --user
 
 Documentation can be built in build/sphinx with
-  python setup.py build_sphinx -b html
+  python3 setup.py build_sphinx -b html
 
