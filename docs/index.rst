@@ -24,7 +24,7 @@ the marginal likelihood or evidence, $$ Z = \\int L ~dX. $$
 As a by-product the algorithm produces samples from the posterior probability distribution.
 
 The implementation is based on an ensemble MCMC sampler which can use multiple cores
-to parallelise computation. It is compatible with both python 2.7+ and 3.5+.
+to parallelise computation. It is compatible with python 3.
 
 Installation
 ============
@@ -32,20 +32,24 @@ Installation
 The CPNest module is Free Software under the MIT license, and available on `Github <https://github.com/johnveitch/cpnest>`_ The simplest way to install cpnest is via pip::
 
   pip install cpnest
+  
+If you are using conda it is possible to install from conda-forge
+
+  conda install cpnest
 
 This is usually the best way to install the program. Alternatively, to install this package from source using setuptools::
 
   git clone https://github.com/johnveitch/cpnest.git
   cd cpnest
-  python setup.py install
+  python3 setup.py install
 
 Tests can be run with::
 
-  python setup.py test
+  python3 setup.py test
 
 This documentation can be built in build/sphinx with::
 
-  python setup.py build_sphinx -b html
+  python3 setup.py build_sphinx -b html
 
 Quickstart
 ==========
