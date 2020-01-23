@@ -19,6 +19,9 @@ Documentation at `GitHub Pages <https://johnveitch.github.io/cpnest/>`_.
 
 The latest release is available from pip and conda
 
+.. image:: https://pypip.in/v/cpnest/badge.png
+    :target: https://pypi.python.org/pypi/cpnest
+    
 .. image:: https://anaconda.org/conda-forge/cpnest/badges/version.svg
    :target: https://anaconda.org/conda-forge/cpnest
 
