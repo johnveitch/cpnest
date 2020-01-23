@@ -3,7 +3,7 @@ The simplest way to install cpnest is via pip
   pip install cpnest
 
 It is also available from conda-forge
-  conda install cpnest
+  conda install -c conda-forge cpnest
 
 --
 
