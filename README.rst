@@ -17,6 +17,10 @@ john.veitch@ligo.org
 CPNest is a python module for performing Bayesian Inference.
 Documentation at `GitHub Pages <https://johnveitch.github.io/cpnest/>`_.
 
+The latest release is available from pip and conda
+
+.. image:: https://anaconda.org/conda-forge/cpnest/badges/version.svg
+   :target: https://anaconda.org/conda-forge/cpnest
 
 If you use this software, please cite our DOI:
 
