@@ -102,7 +102,7 @@ and so on. See the documentation for :obj:`cpnest.cpnest.CPNest` for more detail
 Retrieving output
 ==================
 
-The log-evidence from the run is retrieved from :obj:`cpnest.NS.logZ`
+The log-evidence from the run is retrieved from :obj:`cpnest.cpnest.CPNest.NS.logZ`
 
 The user can retrieve the samples produced during the run, and samples from the posterior
 by calling the :func:`cpnest.cpnest.CPNest.get_nested_samples()` and :func:`cpnest.cpnest.CPNest.get_posterior_samples()`
