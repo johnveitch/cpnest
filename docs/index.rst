@@ -24,7 +24,7 @@ the marginal likelihood or evidence, $$ Z = \\int L ~dX. $$
 As a by-product the algorithm produces samples from the posterior probability distribution.
 
 The implementation is based on an ensemble MCMC sampler which can use multiple cores
-to parallelise computation. It is compatible with python 3.
+to parallelise computation. It is compatible with python 3.5+.
 
 Installation
 ============
@@ -33,9 +33,9 @@ The CPNest module is Free Software under the MIT license, and available on `Gith
 
   pip install cpnest
   
-If you are using conda it is possible to install from conda-forge
+If you are using conda it is possible to install from conda-forge::
 
-  conda install cpnest
+  conda install -c conda-forge cpnest
 
 This is usually the best way to install the program. Alternatively, to install this package from source using setuptools::
 
