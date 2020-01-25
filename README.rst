@@ -5,7 +5,7 @@ Parallel nested sampling in python
 
 ----
 
-© 2015-2019 Walter Del Pozzo, John Veitch
+© 2015-2020 Walter Del Pozzo, John Veitch
 
 .. image:: https://img.shields.io/badge/license-MIT-blue.svg
    :alt: MIT license
