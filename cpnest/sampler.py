@@ -126,7 +126,22 @@ class Sampler(object):
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
-
+        if self.verbose >= 2:
+            # save the poolsize as prior samples
+            import numpy.lib.recfunctions as rfn
+            
+            prior_samples = []
+            for k in tqdm(range(10000), desc='SMPLR {} generating prior samples'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
+                _, p = next(self.yield_sample(-np.inf))
+                prior_samples.append(p)
+            prior_samples = rfn.stack_arrays([prior_samples[j].asnparray()
+                for j in range(0,len(prior_samples))],usemask=False)
+            np.savetxt(os.path.join(self.output,'prior_samples_%s.dat'%os.getpid()),
+                       prior_samples.ravel(),header=' '.join(prior_samples.dtype.names),
+                       newline='\n',delimiter=' ')
+            self.logger.critical("Sampler process {0!s}: saved {1:d} prior samples in {2!s}".format(os.getpid(),self.poolsize,'prior_samples_%s.dat'%os.getpid()))
+            self.prior_samples = prior_samples
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
@@ -199,8 +214,9 @@ class Sampler(object):
 
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
         self.samples.extend(self.evolution_points)
-        import numpy.lib.recfunctions as rfn
+        
         if self.verbose >=3:
+            
             self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray()
                                                   for j in range(0,len(self.samples))],usemask=False)
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
