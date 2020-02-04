@@ -131,7 +131,7 @@ class Sampler(object):
             import numpy.lib.recfunctions as rfn
             
             prior_samples = []
-            for k in tqdm(range(10000), desc='SMPLR {} generating prior samples'.format(self.thread_id),
+            for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
                 _, p = next(self.yield_sample(-np.inf))
                 prior_samples.append(p)
@@ -140,7 +140,7 @@ class Sampler(object):
             np.savetxt(os.path.join(self.output,'prior_samples_%s.dat'%os.getpid()),
                        prior_samples.ravel(),header=' '.join(prior_samples.dtype.names),
                        newline='\n',delimiter=' ')
-            self.logger.critical("Sampler process {0!s}: saved {1:d} prior samples in {2!s}".format(os.getpid(),self.poolsize,'prior_samples_%s.dat'%os.getpid()))
+            self.logger.critical("Sampler process {0!s}: saved {1:d} prior samples in {2!s}".format(os.getpid(),self.maxmcmc,'prior_samples_%s.dat'%os.getpid()))
             self.prior_samples = prior_samples
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
