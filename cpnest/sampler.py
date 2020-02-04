@@ -313,7 +313,7 @@ class HamiltonianMonteCarloSampler(Sampler):
     HamiltonianMonteCarlo acceptance rule
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
-    burnin = 500
+    burnin = 1
     def reset(self):
         """
         Initialise the sampler by generating a sampler live point `cpnest.parameter.LivePoint`
@@ -341,7 +341,22 @@ class HamiltonianMonteCarloSampler(Sampler):
         for k in tqdm(range(self.burnin), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
-
+        if self.verbose >= 2:
+            # save the poolsize as prior samples
+            import numpy.lib.recfunctions as rfn
+            
+            prior_samples = []
+            for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
+                _, p = next(self.yield_sample(-np.inf))
+                prior_samples.append(p)
+            prior_samples = rfn.stack_arrays([prior_samples[j].asnparray()
+                for j in range(0,len(prior_samples))],usemask=False)
+            np.savetxt(os.path.join(self.output,'prior_samples_%s.dat'%os.getpid()),
+                       prior_samples.ravel(),header=' '.join(prior_samples.dtype.names),
+                       newline='\n',delimiter=' ')
+            self.logger.critical("Sampler process {0!s}: saved {1:d} prior samples in {2!s}".format(os.getpid(),self.maxmcmc,'prior_samples_%s.dat'%os.getpid()))
+            self.prior_samples = prior_samples
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
@@ -390,5 +405,5 @@ class HamiltonianMonteCarloSampler(Sampler):
 #                print('dt = :', self.proposal.proposals[0].dt, "acceptance",
 #                                self.acceptance, "sub_acceptance", self.sub_acceptance, logLmin)
 #            else:
-                print('final dt = :', self.proposal.proposals[0].dt, self.acceptance )
+#                print('final dt = :', self.proposal.proposals[0].dt, self.acceptance )
             yield (sub_counter, oldparam)

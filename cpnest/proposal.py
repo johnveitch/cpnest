@@ -338,10 +338,11 @@ class HamiltonianProposal(Proposal):
         base_L:  :obj:`int`
         """
         
-        largest_dimension  = np.max([b[1]-b[0] for b in self.model.bounds])
-        smallest_dimension = np.min([b[1]-b[0] for b in self.model.bounds])
-        dt   = 0.3/self.d
-        L    = int(10*self.d**0.25)
+#        log_prior_cube_volume = 0.0
+#        for b in self.model.bounds: log_prior_cube_volume += np.log(b[1]-b[0])
+        
+        dt   = 0.003 #np.sqrt(self.d)*np.exp(log_prior_cube_volume/self.d)
+        L    = 20 #np.sqrt(self.d)*log_prior_cube_volume/self.d)
         print('Set up initial time step = {0}'.format(dt))
         print('Set up initial trajectory length = {0}'.format(L))
         return dt, L
