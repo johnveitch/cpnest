@@ -126,7 +126,7 @@ class Sampler(object):
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
-        if self.verbose >= 2:
+        if self.verbose >= 3:
             # save the poolsize as prior samples
             import numpy.lib.recfunctions as rfn
             
@@ -362,5 +362,3 @@ class HamiltonianMonteCarloSampler(Sampler):
         self.evolution_points.append(p)
         self.evolution_points.rotate(-k)
         return self.proposal.get_sample(p.copy(),logLmin=p.logL)
-
-
