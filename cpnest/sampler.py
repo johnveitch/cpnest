@@ -126,7 +126,7 @@ class Sampler(object):
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
-        if self.verbose >= 2:
+        if self.verbose >= 3:
             # save the poolsize as prior samples
             import numpy.lib.recfunctions as rfn
             
@@ -313,54 +313,6 @@ class HamiltonianMonteCarloSampler(Sampler):
     HamiltonianMonteCarlo acceptance rule
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
-    burnin = 1
-    def reset(self):
-        """
-        Initialise the sampler by generating a sampler live point `cpnest.parameter.LivePoint`
-        and then run an initial tuning burn in to tune the sampler
-        over :obj:`cpnest.model.Model.log_prior`
-        """
-        np.random.seed(seed=self.seed)
-        for n in tqdm(range(1), desc='SMPLR {} init draw'.format(self.thread_id),
-                disable= not self.verbose, position=self.thread_id, leave=False):
-            while True: # Generate an in-bounds sample
-                p = self.model.new_point()
-                p.logP = self.model.log_prior(p)
-                if np.isfinite(p.logP): break
-            p.logL=self.model.log_likelihood(p)
-            if p.logL is None or not np.isfinite(p.logL):
-                self.logger.warning("Received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
-                self.logger.warning("You may want to check your likelihood function to improve sampling")
-            self.evolution_points.append(p)
-
-        self.proposal.set_ensemble(self.evolution_points)
-
-        # Now, run evolution so samples are drawn from actual prior
-        # Simulating the expected likelihood bounds
-
-        for k in tqdm(range(self.burnin), desc='SMPLR {} init evolve'.format(self.thread_id),
-                disable= not self.verbose, position=self.thread_id, leave=False):
-            _, p = next(self.yield_sample(-np.inf))
-        if self.verbose >= 2:
-            # save the poolsize as prior samples
-            import numpy.lib.recfunctions as rfn
-            
-            prior_samples = []
-            for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
-                disable= not self.verbose, position=self.thread_id, leave=False):
-                _, p = next(self.yield_sample(-np.inf))
-                prior_samples.append(p)
-            prior_samples = rfn.stack_arrays([prior_samples[j].asnparray()
-                for j in range(0,len(prior_samples))],usemask=False)
-            np.savetxt(os.path.join(self.output,'prior_samples_%s.dat'%os.getpid()),
-                       prior_samples.ravel(),header=' '.join(prior_samples.dtype.names),
-                       newline='\n',delimiter=' ')
-            self.logger.critical("Sampler process {0!s}: saved {1:d} prior samples in {2!s}".format(os.getpid(),self.maxmcmc,'prior_samples_%s.dat'%os.getpid()))
-            self.prior_samples = prior_samples
-        self.proposal.set_ensemble(self.evolution_points)
-        self.initialised=True
-
-
     def yield_sample(self, logLmin):
 
         global_lmax = self.logLmax.value
@@ -369,7 +321,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             sub_accepted    = 0
             sub_counter     = 0
-            oldparam        = self.evolution_points.pop()
+            oldparam        = self.evolution_points.popleft()
 
             while sub_accepted == 0:
 
@@ -399,7 +351,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                     p.update_time_step(self.acceptance, initialised = self.initialised)
 #                print('dt = :', self.proposal.proposals[0].dt, "acceptance",
 #                                self.acceptance, "sub_acceptance", self.sub_acceptance, logLmin)
-            elif self.mcmc_counter%100 == 0:
+            elif self.mcmc_counter%10 == 0:
                 for p in self.proposal.proposals:
                     p.update_time_step(self.acceptance, initialised = self.initialised)
 #                print('dt = :', self.proposal.proposals[0].dt, "acceptance",

@@ -284,7 +284,7 @@ class HamiltonianProposalCycle(ProposalCycle):
         proposals = [ConstrainedLeapFrog(model=model)]
         super(HamiltonianProposalCycle,self).__init__(proposals, weights)
 
-class HamiltonianProposal(Proposal):
+class HamiltonianProposal(EnsembleProposal):
     """
     Base class for hamiltonian proposals
     """
@@ -299,7 +299,7 @@ class HamiltonianProposal(Proposal):
         self.V                      = model.potential
         self.normal                 = None
         self.scale                  = 1.0
-        self.TARGET                 = 1.0
+        self.TARGET                 = 0.65
         self.c                      = self.counter()
         self.DEBUG                  = 0
         self.d                      = len(self.model.names)
@@ -320,7 +320,32 @@ class HamiltonianProposal(Proposal):
             self.constraint         = grad(self.model.log_likelihood)
         else:
             self.constraint         = numerical_gradient(self.d, self.model.log_likelihood, cache_size = 1000)
-    
+            
+    def set_ensemble(self,ensemble):
+        """
+        Over-ride default set_ensemble so that the
+        eigenvectors are recomputed when it is updated
+        """
+        super(HamiltonianProposal,self).set_ensemble(ensemble)
+        # compute the metric
+        n   = len(self.ensemble)
+        cov_array = np.zeros((self.d,n))
+        if self.d == 1:
+            name=self.ensemble[0].names[0]
+            self.inverse_mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.mass_matrix         = np.linalg.inv(self.inverse_mass_matrix)
+            self.logdeterminant      = self.inverse_mass_matrix[0]
+        else:
+            for i,name in enumerate(self.ensemble[0].names):
+                for j in range(n):
+                    cov_array[i,j] = self.ensemble[j][name]
+            self.inverse_mass_matrix = np.cov(cov_array)
+            self.mass_matrix         = np.linalg.inv(self.inverse_mass_matrix)
+            self.logdeterminant      = np.linalg.slogdet(self.mass_matrix)[1]
+#        print('Inverse mass:',self.inverse_mass_matrix,'mass:',self.mass_matrix,self.logdeterminant)
+        # update the momenta distribution
+        self.momenta_distribution    = multivariate_normal(cov=self.mass_matrix)
+        
     def counter(self):
         n = 0
         while True:
@@ -338,11 +363,11 @@ class HamiltonianProposal(Proposal):
         base_L:  :obj:`int`
         """
         
-#        log_prior_cube_volume = 0.0
-#        for b in self.model.bounds: log_prior_cube_volume += np.log(b[1]-b[0])
+        log_prior_cube_volume = 0.0
+        for b in self.model.bounds: log_prior_cube_volume += np.log(b[1]-b[0])
         
-        dt   = 0.003 #np.sqrt(self.d)*np.exp(log_prior_cube_volume/self.d)
-        L    = 20 #np.sqrt(self.d)*log_prior_cube_volume/self.d)
+        dt   = 1e-3#np.sqrt(self.d)*np.exp(log_prior_cube_volume/self.d)
+        L    = 20#np.sqrt(self.d)*log_prior_cube_volume/self.d
         print('Set up initial time step = {0}'.format(dt))
         print('Set up initial trajectory length = {0}'.format(L))
         return dt, L
@@ -390,7 +415,7 @@ class HamiltonianProposal(Proposal):
         """
         dV = self.dV(q)
         return dV.view(np.float64)
-
+    
     def update_time_step(self, acceptance, initialised = False):
         """
         Update the time step according to the
@@ -403,9 +428,7 @@ class HamiltonianProposal(Proposal):
         """
         if initialised == False:  self.dt, _  = self.time_step.update(acceptance)
         elif initialised == True: _, self.dt  = self.time_step.update(acceptance)
-        # if we are not accepting much, switch back to the finite differencing
-#        if acceptance < 0.3 and self.constraint.brute_force == False: self.constraint.update_state()
-    
+
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian.
@@ -659,10 +682,8 @@ class ConstrainedLeapFrog(LeapFrog):
         while (i < self.L):
             ll              = q.logL
             p, q            = self.evolve_trajectory_one_step_position(p, q)
-#            print(i,'forward position: logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll,q.logL, logLmin, reflected))
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
             trajectory.append((q.copy(),p.copy()))
-#            print(i,'forward momentum: logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll,q.logL, logLmin, reflected))
             i += 1
         
         p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
@@ -675,7 +696,6 @@ class ConstrainedLeapFrog(LeapFrog):
             p, q            = self.evolve_trajectory_one_step_position(p, q)
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
             trajectory.append((q.copy(),p.copy()))
-#            print(i,'backward : logL = {0:f} --> logL = {1:f} logLmin = {2:f} reflected {3:d}'.format(ll, q.logL, logLmin, reflected))
             i += 1
 
         p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)

@@ -166,7 +166,7 @@ class CPNest(object):
                                   maxmcmc,
                                   verbose     = verbose,
                                   output      = output,
-                                  poolsize    = 1,
+                                  poolsize    = poolsize,
                                   seed        = self.seed+i,
                                   proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,

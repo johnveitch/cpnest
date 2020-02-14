@@ -31,7 +31,7 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.work=cpnest.CPNest(GaussianModel(),verbose=2,nthreads=1,nlive=1000,
-                                maxmcmc=5000,poolsize=1000,nhamiltonian=1)
+                                maxmcmc=100,poolsize=100,nhamiltonian=1)
 
 
     def test_run(self):
