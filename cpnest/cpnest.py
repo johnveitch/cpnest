@@ -62,20 +62,21 @@ class CPNest(object):
     nthreads: `int` or `None`
         number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
 
-    nhamiltomnian: `int`
+    nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
-
+        
+    nslice: `int`
+            number of sampler threads using an ensemble slice samplers. Default: 0
+            
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
 
     proposal: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
-        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
-    
-    prior_sampling: `boolean`
-        generates samples from the prior
-    
+        'hmc' for the Hamiltonian Monte-Carlo sampler,
+        'sli' for the slice sampler. Default: None
+
     n_periodic_checkpoint: `int`
         **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
@@ -100,6 +101,7 @@ class CPNest(object):
                  maxmcmc      = 100,
                  nthreads     = None,
                  nhamiltonian = 0,
+                 nslice       = 0,
                  resume       = False,
                  proposals     = None,
                  n_periodic_checkpoint = None,
@@ -127,15 +129,17 @@ class CPNest(object):
         if periodic_checkpoint_interval is None:
             periodic_checkpoint_interval = np.inf
 
-        from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
+        from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
         from .NestedSampling import NestedSampler
-        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
+        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
         if proposals is None:
             proposals = dict(mhs=DefaultProposalCycle,
-                             hmc=HamiltonianProposalCycle)
+                             hmc=HamiltonianProposalCycle,
+                             sli=EnsembleSliceProposalCycle)
         elif type(proposals) == list:
             proposals = dict(mhs=proposals[0],
-                             hmc=proposals[1])
+                             hmc=proposals[1],
+                             sli=proposals[2])
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
@@ -169,8 +173,9 @@ class CPNest(object):
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
+        nmhs = self.nthreads-nhamiltonian-nslice
         # instantiate the sampler class
-        for i in range(self.nthreads-nhamiltonian):
+        for i in range(nmhs):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 sampler = MetropolisHastingsSampler(self.user,
@@ -192,7 +197,7 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
 
-        for i in range(self.nthreads-nhamiltonian,self.nthreads):
+        for i in range(nmhs+nhamiltonian,self.nthreads-nslice):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 sampler = HamiltonianMonteCarloSampler(self.user,
@@ -208,6 +213,26 @@ class CPNest(object):
                                   )
             else:
                 sampler = HamiltonianMonteCarloSampler.resume(resume_file,
+                                                              self.manager,
+                                                              self.user)
+            p = mp.Process(target=sampler.produce_sample)
+            self.process_pool.append(p)
+
+        for i in range(nmhs+nhamiltonian,self.nthreads):
+            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+            if not os.path.exists(resume_file) or resume == False:
+                sampler = SliceSampler(self.user,
+                                  maxmcmc,
+                                  verbose     = verbose,
+                                  output      = output,
+                                  poolsize    = poolsize,
+                                  seed        = self.seed+i,
+                                  proposal    = proposals['sli'](),
+                                  resume_file = resume_file,
+                                  manager     = self.manager
+                                  )
+            else:
+                sampler = SliceSampler.resume(resume_file,
                                                               self.manager,
                                                               self.user)
             p = mp.Process(target=sampler.produce_sample)

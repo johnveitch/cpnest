@@ -126,10 +126,8 @@ class Sampler(object):
             self.evolution_points.append(p)
 
         self.proposal.set_ensemble(self.evolution_points)
-
         # initialise the structure to store the mcmc chain
         self.samples = []
-
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -404,3 +402,141 @@ class HamiltonianMonteCarloSampler(Sampler):
         self.evolution_points.append(p)
         self.evolution_points.rotate(-k)
         return self.proposal.get_sample(p.copy(),logLmin=p.logL)
+
+class SliceSampler(Sampler):
+    """
+    The Ensemble Slice sample from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    Ne = 0.0
+    Nc = 0.0
+    
+    def reset(self):
+        """
+        Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
+        """
+        np.random.seed(seed=self.seed)
+        for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
+                disable= not self.verbose, position=self.thread_id, leave=False):
+            while True: # Generate an in-bounds sample
+                p = self.model.new_point()
+                p.logP = self.model.log_prior(p)
+                if np.isfinite(p.logP): break
+            p.logL=self.model.log_likelihood(p)
+            if p.logL is None or not np.isfinite(p.logL):
+                self.logger.warning("Received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
+                self.logger.warning("You may want to check your likelihood function to improve sampling")
+            self.evolution_points.append(p)
+
+        self.proposal.set_ensemble(self.evolution_points)
+        self.mu = 1./len(self.evolution_points[0].names)
+        self.initialised=True
+
+    def adapt_length_scale(self):
+        self.Ne = max(1,self.Ne)
+        ratio = self.Ne/(self.Ne+self.Nc)
+        if np.abs(ratio - 0.5) > 0.05:
+            self.mu *= 2.0*ratio
+        
+    def yield_sample(self, logLmin):
+
+        global_lmax = self.logLmax.value
+        
+        while True:
+
+            sub_accepted    = 0
+            sub_counter     = 0
+            oldparam        = self.evolution_points.popleft()
+            
+            while sub_accepted == 0:
+                # Set Initial Interval Boundaries
+                self.L = - np.random.uniform(0.0,1.0)
+                self.R = self.L + 1.0
+                sub_counter += 1
+                # if loglmin is -infinity, we are always going to accept
+                # so pick a random vector and return it, if we are
+                # within the prior bounds
+                if not np.isfinite(logLmin):
+                    while True:
+                        direction_vector = self.proposal.get_direction(mu = self.mu)
+                        if not(isinstance(direction_vector,parameter.LivePoint)):
+                            direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                        Xprime = np.random.uniform(self.L,self.R)
+                        # compute the new value of Y
+                        newparam      = direction_vector * Xprime + oldparam
+                        newparam.logP = self.model.log_prior(newparam)
+                        newparam.logL = self.model.log_likelihood(newparam)
+                        if newparam.logP-oldparam.logP > np.log(random()):
+                            global_lmax = max(global_lmax, newparam.logL)
+                            oldparam        = newparam.copy()
+                            sub_accepted   += 1
+                            break
+                else:
+                    # pick a direction
+                    direction_vector = self.proposal.get_direction(mu = self.mu)
+                    if not(isinstance(direction_vector,parameter.LivePoint)):
+                        direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                    Y = logLmin
+                    # keep on expanding until we get outside the logLmin boundary from the left
+                    safety = 0
+                    while True:
+                        parameter_left = direction_vector * self.L + oldparam
+                        if Y > self.model.log_likelihood(parameter_left):
+                            break
+                        else:
+                            self.L = self.L - 1.0
+                            self.Ne = self.Ne + 1
+                        safety += 1
+                        if safety > 3: break
+                    # keep on expanding until we get outside the the logLmin boundary from the right
+                    safety = 0
+                    while True:
+                        parameter_right = direction_vector * self.R + oldparam
+                        if Y > self.model.log_likelihood(parameter_right):
+                            break
+                        else:
+                            self.R = self.R + 1.0
+                            self.Ne = self.Ne + 1
+                        safety += 1
+                        if safety > 3: break
+                    safety = 0
+                    while True:
+                        # generate a new point between the boundaries we identified
+                        Xprime = np.random.uniform(self.L,self.R)
+                        # compute the new value of Y
+                        newparam      = direction_vector * Xprime + oldparam
+                        newparam.logP = self.model.log_prior(newparam)
+                        if np.isfinite(newparam.logP):
+                            newparam.logL = self.model.log_likelihood(newparam)
+                            Yprime = newparam.logL
+                            if Y < Yprime:
+                                global_lmax  = max(global_lmax, newparam.logL)
+                                oldparam     = newparam.copy()
+                                sub_accepted += 1
+                                break
+                            # adapt the intervals shrinking them
+                            if Xprime < 0.0:
+                                self.L = Xprime
+                                self.Nc = self.Nc + 1
+                            else:
+                                self.R = Xprime
+                                self.Nc = self.Nc + 1
+                            if safety == 10: break
+                            safety+=1
+            
+            self.evolution_points.append(oldparam)
+
+            if self.verbose >= 3:
+                self.samples.append(oldparam)
+
+            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter  += sub_counter
+            self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+            self.logLmax.value = global_lmax
+#            if self.counter < 10:
+#                self.adapt_length_scale()
+#                print('adapted mu',self.mu,self.Ne,self.Nc,self.Ne/(self.Nc+self.Ne))
+#            else:exit()
+
+            yield (sub_counter, oldparam)
