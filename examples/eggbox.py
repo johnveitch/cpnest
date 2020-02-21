@@ -28,7 +28,7 @@ class EggboxTestCase(unittest.TestCase):
     Test the eggox model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(EggboxModel(),verbose=1,nthreads=1,nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(EggboxModel(),verbose=1,nthreads=1,nlive=1000,maxmcmc=1000,nslice=1)
 
     def test_run(self):
         self.work.run()
@@ -37,6 +37,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-        work=cpnest.CPNest(EggboxModel(),verbose=3,nthreads=1,nlive=1000,maxmcmc=1000,poolsize=1000)
+        work=cpnest.CPNest(EggboxModel(),verbose=3,nthreads=1,nlive=1000,maxmcmc=1000,poolsize=1000,nslice=1)
         work.run()
 
