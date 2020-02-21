@@ -426,12 +426,13 @@ class SliceSampler(Sampler):
                         # compute the new value of Y
                         newparam      = direction_vector * Xprime + oldparam
                         newparam.logP = self.model.log_prior(newparam)
-                        newparam.logL = self.model.log_likelihood(newparam)
-                        if newparam.logP-oldparam.logP > np.log(random()):
-                            global_lmax = max(global_lmax, newparam.logL)
-                            oldparam        = newparam.copy()
-                            sub_accepted   += 1
-                            break
+                        if np.isfinite(newparam.logP):
+                            newparam.logL = self.model.log_likelihood(newparam)
+                            if newparam.logP-oldparam.logP > np.log(random()):
+                                global_lmax = max(global_lmax, newparam.logL)
+                                oldparam        = newparam.copy()
+                                sub_accepted   += 1
+                                break
                 else:
                     # pick a direction
                     direction_vector = self.proposal.get_direction(mu = self.mu)
@@ -442,22 +443,24 @@ class SliceSampler(Sampler):
                     safety = 0
                     while True:
                         parameter_left = direction_vector * self.L + oldparam
-                        if Y > self.model.log_likelihood(parameter_left):
-                            break
-                        else:
-                            self.L = self.L - 1.0
-                            self.Ne = self.Ne + 1
+                        if np.isfinite(self.model.log_prior(parameter_left)):
+                            if Y > self.model.log_likelihood(parameter_left):
+                                break
+                            else:
+                                self.L = self.L - 1.0
+                                self.Ne = self.Ne + 1
                         safety += 1
                         if safety > 3: break
                     # keep on expanding until we get outside the the logLmin boundary from the right
                     safety = 0
                     while True:
                         parameter_right = direction_vector * self.R + oldparam
-                        if Y > self.model.log_likelihood(parameter_right):
-                            break
-                        else:
-                            self.R = self.R + 1.0
-                            self.Ne = self.Ne + 1
+                        if np.isfinite(self.model.log_prior(parameter_right)):
+                            if Y > self.model.log_likelihood(parameter_right):
+                                break
+                            else:
+                                self.R = self.R + 1.0
+                                self.Ne = self.Ne + 1
                         safety += 1
                         if safety > 3: break
                     safety = 0
