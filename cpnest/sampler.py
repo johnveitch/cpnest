@@ -369,9 +369,6 @@ class SliceSampler(Sampler):
     The Ensemble Slice sample from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
-    Ne = 0.0
-    Nc = 0.0
-    
     def reset(self):
         """
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
@@ -390,7 +387,7 @@ class SliceSampler(Sampler):
             self.evolution_points.append(p)
 
         self.proposal.set_ensemble(self.evolution_points)
-        self.mu = 1./len(self.evolution_points[0].names)
+        self.mu = len(self.evolution_points[0].names)
         self.initialised=True
 
     def adapt_length_scale(self):
@@ -398,6 +395,22 @@ class SliceSampler(Sampler):
         ratio = self.Ne/(self.Ne+self.Nc)
         if np.abs(ratio - 0.5) > 0.05:
             self.mu *= 2.0*ratio
+        if self.mu < 1e-3: self.mu = 1e-3
+        elif self.mu > 1e6: self.mu = 1e6
+    
+    def reset_boundaries(self):
+        self.L = - np.random.uniform(0.0,1.0)
+        self.R = self.L + 1.0
+        self.Ne = 0.0
+        self.Nc = 0.0
+        
+    def increase_left_boundary(self):
+        self.L  = self.L - 1.0
+        self.Ne = self.Ne + 1
+
+    def increase_right_boundary(self):
+        self.R  = self.R + 1.0
+        self.Ne = self.Ne + 1
         
     def yield_sample(self, logLmin):
 
@@ -411,8 +424,7 @@ class SliceSampler(Sampler):
             
             while sub_accepted == 0:
                 # Set Initial Interval Boundaries
-                self.L = - np.random.uniform(0.0,1.0)
-                self.R = self.L + 1.0
+                self.reset_boundaries()
                 sub_counter += 1
                 # if loglmin is -infinity, we are always going to accept
                 # so pick a random vector and return it, if we are
@@ -443,26 +455,32 @@ class SliceSampler(Sampler):
                     safety = 0
                     while True:
                         parameter_left = direction_vector * self.L + oldparam
-                        if np.isfinite(self.model.log_prior(parameter_left)):
+                        if self.model.in_bounds(parameter_left):
                             if Y > self.model.log_likelihood(parameter_left):
                                 break
                             else:
-                                self.L = self.L - 1.0
-                                self.Ne = self.Ne + 1
+                                self.increase_left_boundary()
+                        # if we get out of bounds, break out
+                        else:
+                            break
                         safety += 1
-                        if safety > 3: break
+                        if safety > self.poolsize/2+1: break
                     # keep on expanding until we get outside the the logLmin boundary from the right
                     safety = 0
                     while True:
                         parameter_right = direction_vector * self.R + oldparam
-                        if np.isfinite(self.model.log_prior(parameter_right)):
+                        if self.model.in_bounds(parameter_right):
                             if Y > self.model.log_likelihood(parameter_right):
                                 break
                             else:
-                                self.R = self.R + 1.0
-                                self.Ne = self.Ne + 1
+                                self.increase_right_boundary()
+                        # if we get out of bounds, break out
+                        else:
+                            break
                         safety += 1
-                        if safety > 3: break
+                        if safety > self.poolsize/2+1: break
+                    
+                    # slice sample the likelihood
                     safety = 0
                     while True:
                         # generate a new point between the boundaries we identified
@@ -485,8 +503,8 @@ class SliceSampler(Sampler):
                             else:
                                 self.R = Xprime
                                 self.Nc = self.Nc + 1
-                            if safety == 10: break
-                            safety+=1
+                        if safety == self.poolsize/2+1: break
+                        safety+=1
             
             self.evolution_points.append(oldparam)
 
@@ -498,8 +516,8 @@ class SliceSampler(Sampler):
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
             self.logLmax.value = global_lmax
-#            if self.counter < 10:
-#                self.adapt_length_scale()
+            if np.isfinite(logLmin):
+                self.adapt_length_scale()
 #                print('adapted mu',self.mu,self.Ne,self.Nc,self.Ne/(self.Nc+self.Ne))
 #            else:exit()
 
