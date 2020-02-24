@@ -160,7 +160,7 @@ class EnsembleSliceGaussian(EnsembleSlice):
         cov_array = np.zeros((dim,n))
         if dim == 1:
             name=self.ensemble[0].names[0]
-            self.covariance = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.covariance = np.atleast_2d(np.var([self.ensemble[j][name] for j in range(n)]))
             self.mean       = np.atleast_1d(np.mean([self.ensemble[j][name] for j in range(n)]))
         else:
             for i,name in enumerate(self.ensemble[0].names):
