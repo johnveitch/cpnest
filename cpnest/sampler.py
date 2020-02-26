@@ -13,6 +13,7 @@ from . import proposal
 from .cpnest import CheckPoint, RunManager
 from tqdm import tqdm
 from operator import attrgetter
+import numpy.lib.recfunctions as rfn
 
 import pickle
 __checkpoint_flag = False
@@ -129,7 +130,6 @@ class Sampler(object):
 
         if self.verbose >= 3:
             # save the poolsize as prior samples
-            import numpy.lib.recfunctions as rfn
             
             prior_samples = []
             for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
