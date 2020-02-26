@@ -116,9 +116,6 @@ class EnsembleSlice(EnsembleProposal):
     The Ensemble Slice proposal from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
-    
-    Ne = 0
-    Nc = 0
     log_J = 0.0 # Symmetric proposal
 
 class EnsembleSliceDifferential(EnsembleSlice):
@@ -137,7 +134,7 @@ class EnsembleSliceDifferential(EnsembleSlice):
 
 class EnsembleSliceGaussian(EnsembleSlice):
     """
-    The Ensemble Slice Differential move from Karamanis & Beutler
+    The Ensemble Slice Gaussian move from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mean = None
@@ -145,15 +142,15 @@ class EnsembleSliceGaussian(EnsembleSlice):
     def set_ensemble(self,ensemble):
         """
         Over-ride default set_ensemble so that the
-        eigenvectors are recomputed when it is updated
+        mean and covariance matrix are recomputed when it is updated
         """
         super(EnsembleSliceGaussian,self).set_ensemble(ensemble)
         self.update_mean_covariance()
 
     def update_mean_covariance(self):
         """
-        Recompute the eigenvectors and eigevalues
-        of the covariance matrix of the ensemble
+        Recompute mean and covariance matrix
+        of the ensemble
         """
         n   = len(self.ensemble)
         dim = self.ensemble[0].dimension
@@ -170,7 +167,7 @@ class EnsembleSliceGaussian(EnsembleSlice):
         
     def get_direction(self, mu = 1.0):
         """
-        Draws two random points and returns their direction
+        Draws a random guassian direction
         """
         direction = mu * np.random.multivariate_normal(self.mean,self.covariance)
         return direction
@@ -178,13 +175,10 @@ class EnsembleSliceGaussian(EnsembleSlice):
 class EnsembleSliceProposalCycle(ProposalCycle):
     def __init__(self, model=None):
         """
-        A proposal cycle that uses the slice sampler :obj:`EnsembleSliceDifferential`
+        A proposal cycle that uses the slice sampler :obj:`EnsembleSlice`
         proposal.
-        Requires a :obj:`cpnest.Model` to be passed for access to the user-defined
-        :obj:`cpnest.Model.force` (the gradient of :obj:`cpnest.Model.potential`) and
-        :obj:`cpnest.Model.log_likelihood` to define the reflective
         """
-        weights = [10,1]
+        weights = [5,1]
         proposals = [EnsembleSliceDifferential(),EnsembleSliceGaussian()]
         super(EnsembleSliceProposalCycle,self).__init__(proposals, weights)
         
