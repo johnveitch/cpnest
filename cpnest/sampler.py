@@ -193,19 +193,27 @@ class Sampler(object):
 
             if self.logLmin.value==np.inf:
                 break
+            
+            # if the nested sampler is requesting for an update
+            # produce a sample for it
+            if self.producer_pipe.poll():
+                p = self.producer_pipe.recv()
 
-            p = self.producer_pipe.recv()
+                if p is None:
+                    break
+                if p == "checkpoint":
+                    self.checkpoint()
+                    sys.exit(130)
 
-            if p is None:
-                break
-            if p == "checkpoint":
-                self.checkpoint()
-                sys.exit(130)
-
-            self.evolution_points.append(p)
-            (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
-            # Send the sample to the Nested Sampler
-            self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
+                self.evolution_points.append(p)
+                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
+                # Send the sample to the Nested Sampler
+                self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
+            
+            # otherwise, keep on sampling from the previous boundary
+            else:
+                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
+                
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize))==0:
                 self.proposal.set_ensemble(self.evolution_points)
