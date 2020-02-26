@@ -13,6 +13,7 @@ from . import proposal
 from .cpnest import CheckPoint, RunManager
 from tqdm import tqdm
 from operator import attrgetter
+import numpy.lib.recfunctions as rfn
 
 import pickle
 __checkpoint_flag = False
@@ -128,7 +129,6 @@ class Sampler(object):
             _, p = next(self.yield_sample(-np.inf))
         if self.verbose >= 3:
             # save the poolsize as prior samples
-            import numpy.lib.recfunctions as rfn
             
             prior_samples = []
             for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
@@ -213,7 +213,6 @@ class Sampler(object):
             # otherwise, keep on sampling from the previous boundary
             else:
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
-                
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize))==0:
                 self.proposal.set_ensemble(self.evolution_points)
