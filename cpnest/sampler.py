@@ -220,7 +220,7 @@ class Sampler(object):
 
             if self.logLmin.value==np.inf:
                 break
-
+            
             if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
                 self.checkpoint()
                 self.last_checkpoint_time = time.time()
@@ -430,24 +430,41 @@ class SliceSampler(Sampler):
         self.initialised=True
 
     def adapt_length_scale(self):
+        """
+        adapts the length scale of the expansion/contraction
+        following the rule in (Robbins and Monro, 1951) of Tibbits et al. (2014)
+        the scale is capped from both above and below
+        """
         self.Ne = max(1,self.Ne)
         ratio = self.Ne/(self.Ne+self.Nc)
         if np.abs(ratio - 0.5) > 0.05:
             self.mu *= 2.0*ratio
-        if self.mu < 1e-3: self.mu = 1e-3
+        if self.mu < 1e-2: self.mu = 1e-2
         elif self.mu > 1e6: self.mu = 1e6
     
     def reset_boundaries(self):
+        """
+        resets the boundaries and counts
+        for the slicing
+        """
         self.L = - np.random.uniform(0.0,1.0)
         self.R = self.L + 1.0
         self.Ne = 0.0
         self.Nc = 0.0
         
     def increase_left_boundary(self):
+        """
+        increase the left boundary and counts
+        by one unit
+        """
         self.L  = self.L - 1.0
         self.Ne = self.Ne + 1
 
     def increase_right_boundary(self):
+        """
+        increase the right boundary and counts
+        by one unit
+        """
         self.R  = self.R + 1.0
         self.Ne = self.Ne + 1
         
@@ -480,19 +497,24 @@ class SliceSampler(Sampler):
                         if np.isfinite(newparam.logP):
                             newparam.logL = self.model.log_likelihood(newparam)
                             if newparam.logP-oldparam.logP > np.log(random()):
-                                global_lmax = max(global_lmax, newparam.logL)
+                                global_lmax     = max(global_lmax, newparam.logL)
                                 oldparam        = newparam.copy()
                                 sub_accepted   += 1
                                 break
                 else:
                     # pick a direction
-                    direction_vector = self.proposal.get_direction(mu = self.mu)
-                    if not(isinstance(direction_vector,parameter.LivePoint)):
-                        direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                    while True:
+                        direction_vector = self.proposal.get_direction(mu = self.mu)
+                        if not(isinstance(direction_vector,parameter.LivePoint)):
+                            direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                        if np.any(direction_vector.values):
+                            break
                     Y = logLmin
                     # keep on expanding until we get outside the logLmin boundary from the left
+                    # or the prior bound, whichever comes first
                     safety = 0
                     while True:
+#                        print('inside the left boundary')
                         parameter_left = direction_vector * self.L + oldparam
                         if self.model.in_bounds(parameter_left):
                             if Y > self.model.log_likelihood(parameter_left):
@@ -502,11 +524,12 @@ class SliceSampler(Sampler):
                         # if we get out of bounds, break out
                         else:
                             break
-                        safety += 1
-                        if safety > self.poolsize/2+1: break
-                    # keep on expanding until we get outside the the logLmin boundary from the right
+
+                    # keep on expanding until we get outside the logLmin boundary from the right
+                    # or the prior bound, whichever comes first
                     safety = 0
                     while True:
+#                        print('inside the right boundary')
                         parameter_right = direction_vector * self.R + oldparam
                         if self.model.in_bounds(parameter_right):
                             if Y > self.model.log_likelihood(parameter_right):
@@ -516,12 +539,11 @@ class SliceSampler(Sampler):
                         # if we get out of bounds, break out
                         else:
                             break
-                        safety += 1
-                        if safety > self.poolsize/2+1: break
-                    
+
                     # slice sample the likelihood
                     safety = 0
                     while True:
+#                        print('inside the slicing')
                         # generate a new point between the boundaries we identified
                         Xprime = np.random.uniform(self.L,self.R)
                         # compute the new value of Y
@@ -542,9 +564,9 @@ class SliceSampler(Sampler):
                             else:
                                 self.R = Xprime
                                 self.Nc = self.Nc + 1
-                        if safety == self.poolsize/2+1: break
+                        if np.abs(self.R-self.L) < 1e-7 or safety == 10: break
                         safety+=1
-            
+
             self.evolution_points.append(oldparam)
 
             if self.verbose >= 3:
