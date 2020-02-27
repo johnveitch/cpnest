@@ -132,7 +132,7 @@ class EnsembleSliceDifferential(EnsembleSlice):
         direction = reduce(type(self.ensemble[0]).__sub__,subset)
         return direction * mu
 
-class EnsembleSliceGaussian(EnsembleSlice):
+class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
     """
     The Ensemble Slice Gaussian move from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
@@ -144,7 +144,7 @@ class EnsembleSliceGaussian(EnsembleSlice):
         Over-ride default set_ensemble so that the
         mean and covariance matrix are recomputed when it is updated
         """
-        super(EnsembleSliceGaussian,self).set_ensemble(ensemble)
+        super(EnsembleSliceCorrelatedGaussian,self).set_ensemble(ensemble)
         self.update_mean_covariance()
 
     def update_mean_covariance(self):
@@ -171,15 +171,29 @@ class EnsembleSliceGaussian(EnsembleSlice):
         """
         direction = mu * np.random.multivariate_normal(self.mean,self.covariance)
         return direction
+
+class EnsembleSliceGaussian(EnsembleSlice):
+    """
+    The Ensemble Slice Differential move from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
     
+    def get_direction(self, mu = 1.0):
+        """
+        Draw a random gaussian direction
+        """
+        direction  = np.random.normal(0.0,1.0,size=len(self.ensemble[0].names))
+        direction /= np.linalg.norm(direction)
+        return direction * mu
+
 class EnsembleSliceProposalCycle(ProposalCycle):
     def __init__(self, model=None):
         """
         A proposal cycle that uses the slice sampler :obj:`EnsembleSlice`
         proposal.
         """
-        weights = [5,1]
-        proposals = [EnsembleSliceDifferential(),EnsembleSliceGaussian()]
+        weights = [1,1,1]
+        proposals = [EnsembleSliceDifferential(),EnsembleSliceGaussian(),EnsembleSliceCorrelatedGaussian()]
         super(EnsembleSliceProposalCycle,self).__init__(proposals, weights)
         
     def get_direction(self, mu = 1.0, **kwargs):
@@ -188,7 +202,7 @@ class EnsembleSliceProposalCycle(ProposalCycle):
         """
         self.idx = (self.idx + 1) % self.N
         p = self.cycle[self.idx]
-        new = p.get_direction(**kwargs)
+        new = p.get_direction(mu = mu, **kwargs)
         self.log_J = p.log_J
         return new
         
