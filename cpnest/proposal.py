@@ -5,10 +5,18 @@ from math import log,sqrt,fabs,exp
 from abc import ABCMeta,abstractmethod
 import random
 from random import sample,gauss,randrange,uniform
-from scipy.interpolate import LSQUnivariateSpline
-from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
+
+#try:
+#    from jax import grad, jit
+#    FINITEDIFFERENCING = False
+#except ImportError:
+#    FINITEDIFFERENCING = True
+#    pass
+
+FINITEDIFFERENCING = True
+from .numerical_grad import numerical_gradient
 
 class Proposal(object):
     """
@@ -41,7 +49,7 @@ class EnsembleProposal(Proposal):
         """
         Set the ensemble of points to use
         """
-        self.ensemble=ensemble
+        self.ensemble = ensemble
 
 class ProposalCycle(EnsembleProposal):
     """
@@ -126,7 +134,7 @@ class EnsembleWalk(EnsembleProposal):
         """
         Parameters
         ----------
-        old : :obj:`cpnest.parameter.LivePoint`
+        old: :obj:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
@@ -148,7 +156,7 @@ class EnsembleStretch(EnsembleProposal):
         """
         Parameters
         ----------
-        old : :obj:`cpnest.parameter.LivePoint`
+        old: :obj:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
@@ -172,23 +180,20 @@ class DifferentialEvolution(EnsembleProposal):
     ensemble and adding it to the current point.
     See e.g. Exercise 30.12, p.398 in MacKay's book
     http://www.inference.phy.cam.ac.uk/mackay/itila/
-
-    We add a small perturbation around the exact step
     """
     log_J = 0.0 # Symmetric jump
     def get_sample(self,old):
         """
         Parameters
         ----------
-        old : :obj:`cpnest.parameter.LivePoint`
+        old: :obj:`cpnest.parameter.LivePoint`
         
         Returns
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
         a,b = sample(list(self.ensemble),2)
-        sigma = 1e-4 # scatter around difference vector by this factor
-        out = old + (b-a)*gauss(1.0,sigma)
+        out = old + (b-a)
         return out
 
 class EnsembleEigenVector(EnsembleProposal):
@@ -260,9 +265,9 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [3,
-                   3,
-                   1,
+        weights = [2,
+                   2,
+                   2,
                    10]
         super(DefaultProposalCycle,self).__init__(proposals, weights)
 
@@ -279,103 +284,103 @@ class HamiltonianProposalCycle(ProposalCycle):
         proposals = [ConstrainedLeapFrog(model=model)]
         super(HamiltonianProposalCycle,self).__init__(proposals, weights)
 
-class HamiltonianProposal(EnsembleEigenVector):
+class HamiltonianProposal(EnsembleProposal):
     """
     Base class for hamiltonian proposals
     """
-    mass_matrix = None
-    inverse_mass_matrix = None
-    momenta_distribution = None
-    
     def __init__(self, model=None, **kwargs):
         """
         Initialises the class with the kinetic
         energy and the :obj:`cpnest.Model.potential`.
         """
         super(HamiltonianProposal, self).__init__(**kwargs)
-        self.T              = self.kinetic_energy
-        self.V              = model.potential
-        self.normal         = None
-        self.dt             = 0.3
-        self.base_dt        = 0.3
-        self.scale          = 1.0
-        self.L              = 20
-        self.base_L         = 20
-        self.TARGET         = 0.500
-        self.ADAPTATIONSIZE = 0.001
-        self._initialised   = False
-        self.c              = self.counter()
-        self.DEBUG          = 0
-    
-    def set_ensemble(self, ensemble):
+        self.model                  = model
+        self.T                      = self.kinetic_energy
+        self.V                      = model.potential
+        self.normal                 = None
+        self.scale                  = 1.0
+        self.TARGET                 = 0.65
+        self.c                      = self.counter()
+        self.DEBUG                  = 0
+        self.d                      = len(self.model.names)
+        self.inverse_mass_matrix    = np.identity(self.d)
+        self.mass_matrix            = np.identity(self.d)
+        self.inverse_mass           = np.ones(self.d)
+        self.logdeterminant         = 0.0
+        self.momenta_distribution   = multivariate_normal(cov=self.mass_matrix)#
+        self.dt, self.L             = self.set_integration_parameters()
+        self.time_step              = DualAveragingStepSize(self.dt,
+                                                            target_accept = self.TARGET,
+                                                            gamma         = 0.5,
+                                                            t0            = 10.0,
+                                                            kappa         = 0.75)
+        
+        self.finite_differencing    = FINITEDIFFERENCING
+        if self.finite_differencing == False:
+            self.constraint         = grad(self.model.log_likelihood)
+        else:
+            self.constraint         = numerical_gradient(self.d, self.model.log_likelihood, cache_size = 1000)
+            
+    def set_ensemble(self,ensemble):
         """
-        override the set ensemble method
-        to update masses, momenta distribution
-        and to heuristically estimate the normal vector to the
-        hard boundary defined by logLmin.
+        Over-ride default set_ensemble so that the
+        eigenvectors are recomputed when it is updated
         """
         super(HamiltonianProposal,self).set_ensemble(ensemble)
-        self.update_mass()
-        self.update_normal_vector()
-        self.update_momenta_distribution()
-    
-    def update_normal_vector(self):
-        """
-        update the constraint by approximating the
-        loglikelihood hypersurface as a spline in
-        each dimension.
-        This is an approximation which
-        improves as the algorithm proceeds
-        """
-        n = self.ensemble[0].dimension
-        tracers_array = np.zeros((len(self.ensemble),n))
-        for i,samp in enumerate(self.ensemble):
-            tracers_array[i,:] = samp.values
-        V_vals = np.atleast_1d([p.logL for p in self.ensemble])
+        # compute the metric
+        n   = len(self.ensemble)
+        cov_array = np.zeros((self.d,n))
+        if self.d == 1:
+            name=self.ensemble[0].names[0]
+            self.inverse_mass_matrix = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.mass_matrix         = np.linalg.inv(self.inverse_mass_matrix)
+            self.logdeterminant      = self.inverse_mass_matrix[0]
+        else:
+            for i,name in enumerate(self.ensemble[0].names):
+                for j in range(n):
+                    cov_array[i,j] = self.ensemble[j][name]
+            self.inverse_mass_matrix = np.cov(cov_array)
+            self.mass_matrix         = np.linalg.inv(self.inverse_mass_matrix)
+            self.logdeterminant      = np.linalg.slogdet(self.mass_matrix)[1]
+#        print('Inverse mass:',self.inverse_mass_matrix,'mass:',self.mass_matrix,self.logdeterminant)
+        # update the momenta distribution
+        self.momenta_distribution    = multivariate_normal(cov=self.mass_matrix)
         
-        self.normal = []
-        for i,x in enumerate(tracers_array.T):
-            # sort the values
-#            self.normal.append(lambda x: -x)
-            idx = x.argsort()
-            xs = x[idx]
-            Vs = V_vals[idx]
-            # remove potential duplicate entries
-            xs, ids = np.unique(xs, return_index = True)
-            Vs = Vs[ids]
-            # pick only finite values
-            idx = np.isfinite(Vs)
-            Vs  = Vs[idx]
-            xs  = xs[idx]
-            # filter to within the 90% range of the Pvals
-            Vl,Vh = np.percentile(Vs,[5,95])
-            (idx,) = np.where(np.logical_and(Vs > Vl,Vs < Vh))
-            Vs = Vs[idx]
-            xs = xs[idx]
-            # Pick knots for this parameters: Choose 5 knots between
-            # the 1st and 99th percentiles (heuristic tuning WDP)
-            knots = np.percentile(xs,np.linspace(1,99,5))
-            # Guesstimate the length scale for numerical derivatives
-            dimwidth = knots[-1]-knots[0]
-            delta = 0.1 * dimwidth / len(idx)
-            # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
-            window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
-            if window_length%2 == 0: window_length += 1
-            f = savgol_filter(Vs, window_length,
-                              5, # Order of polynominal filter
-                              deriv=1, # Take first derivative
-                              delta=delta, # delta for numerical deriv
-                              mode='mirror' # Reflective boundary conds.
-                              )
-            # construct a LSQ spline interpolant
-            self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
-            if self.DEBUG: np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
-
+    def counter(self):
+        n = 0
+        while True:
+            yield n
+            n += 1
+            
+    def set_integration_parameters(self):
+        """
+        Finds the smallest and largest dimensions and use them
+        to set the time step and trajectory length
+        
+        Returns
+        ----------
+        base_dt: :obj:`float`
+        base_L:  :obj:`int`
+        """
+        
+        log_prior_cube_volume = 0.0
+        for b in self.model.bounds: log_prior_cube_volume += np.log(b[1]-b[0])
+        
+        dt   = 1e-3#np.sqrt(self.d)*np.exp(log_prior_cube_volume/self.d)
+        L    = 20#np.sqrt(self.d)*log_prior_cube_volume/self.d
+        print('Set up initial time step = {0}'.format(dt))
+        print('Set up initial trajectory length = {0}'.format(L))
+        return dt, L
+        
     def unit_normal(self, q):
         """
         Returns the unit normal to the iso-Likelihood surface
-        at x, obtained from the spline interpolation of the
-        directional derivatives of the likelihood
+        at x.
+        
+        It uses jax.grad for automatic differentiation, but reverts to
+        finite differencing whenever the auto diff fails or the
+        package is not found.
+        
         Parameters
         ----------
         q : :obj:`cpnest.parameter.LivePoint`
@@ -385,10 +390,16 @@ class HamiltonianProposal(EnsembleEigenVector):
         ----------
         n: :obj:`numpy.ndarray` unit normal to the logLmin contour evaluated at q
         """
-        v               = np.array([self.normal[i](q[n]) for i,n in enumerate(q.names)])
-        v[np.isnan(v)]  = -1.0
-        n               = v/np.linalg.norm(v)
-        return n
+        if self.finite_differencing == False:
+            v    = self.constraint({n:q[n] for n in q.names})
+            norm = np.sqrt(np.sum([v[vi]**2 for vi in v]))
+            for vi in v: v[vi]/=norm
+            normal_vector = np.array([v[vi] for vi in v])
+        else:
+            v    = self.constraint(q)
+            normal_vector = v/np.linalg.norm(v)
+        
+        return normal_vector
 
     def gradient(self, q):
         """
@@ -404,64 +415,19 @@ class HamiltonianProposal(EnsembleEigenVector):
         """
         dV = self.dV(q)
         return dV.view(np.float64)
-        
-    def update_momenta_distribution(self):
-        """
-        update the momenta distribution using the
-        mass matrix (precision matrix of the ensemble).
-        """
-        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#
-
-    def update_mass(self):
-        """
-        Update the mass matrix (covariance matrix) and
-        inverse mass matrix (precision matrix)
-        from the ensemble, allowing for correlated momenta
-        """
-        self.d                      = self.covariance.shape[0]
-        self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
-        self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
-        self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        _, self.logdeterminant      = np.linalg.slogdet(self.mass_matrix)
-        if self._initialised == False:
-            self.set_integration_parameters()
-
-    def set_integration_parameters(self):
-        """
-        Set the integration length according to the N-dimensional ellipsoid
-        shortest and longest principal axes. The former sets to base time step
-        while the latter sets the trajectory length
-        """
-        ranges = [self.prior_bounds[j][1] - self.prior_bounds[j][0] for j in range(self.d)]
-        
-        l, h = np.min(ranges), np.max(ranges)
-        
-        self.base_L         = 10+int((h/l)*self.d**(1./4.))
-        self.base_dt        = (1.0/self.base_L)*l/h
-        self._initialised   = True
-
-
-    def update_time_step(self, acceptance):
+    
+    def update_time_step(self, acceptance, initialised = False):
         """
         Update the time step according to the
-        acceptance rate
+        acceptance rate. Correct also the trajectory length
+        accordingly.
+        
         Parameters
         ----------
         acceptance : :obj:'numpy.float'
         """
-        diff = acceptance - self.TARGET
-        new_log_scale = np.log(self.scale) + self.ADAPTATIONSIZE * diff
-        self.scale = np.exp(new_log_scale)
-        self.dt = self.base_dt * self.scale
-
-    def update_trajectory_length(self,nmcmc):
-        """
-        Update the trajectory length according to the estimated ACL
-        Parameters
-        ----------
-        nmcmc :`obj`:: int
-        """
-        self.L = self.base_L + np.random.randint(nmcmc,5*nmcmc)
+        if initialised == False:  self.dt, _  = self.time_step.update(acceptance)
+        elif initialised == True: _, self.dt  = self.time_step.update(acceptance)
 
     def kinetic_energy(self,p):
         """
@@ -609,12 +575,6 @@ class ConstrainedLeapFrog(LeapFrog):
             position
         """
         return super(ConstrainedLeapFrog,self).get_sample(q0, logLmin)
-    
-    def counter(self):
-        n = 0
-        while True:
-            yield n
-            n += 1
 
     def evolve_trajectory_one_step_position(self, p, q):
         """
@@ -665,16 +625,18 @@ class ConstrainedLeapFrog(LeapFrog):
         reflected = 0
         dV        = self.gradient(q)
         if half is True:
-            p += - 0.5 * self.dt * dV
-            return p, q, reflected
+            factor = 0.5
         else:
-            c = self.check_constraint(q, logLmin)
-            if c > 0:
-                p += - self.dt * dV
-            else:
-                normal = self.unit_normal(q)
-                p += - 2.0*np.dot(p,normal)*normal
-                reflected = 1
+            factor = 1.0
+
+        c = self.check_constraint(q, logLmin)
+        if c > 0:
+            p += - factor * self.dt * dV
+        else:
+            normal = self.unit_normal(q)
+            p += - 2.0*np.dot(p,normal)*normal
+            reflected = 1
+                
         return p, q, reflected
 
     def check_constraint(self, q, logLmin):
@@ -718,26 +680,29 @@ class ConstrainedLeapFrog(LeapFrog):
         i = 0
         p, q, reflected = self.evolve_trajectory_one_step_momentum(p0.copy(), q0.copy(), logLmin, half = True)
         while (i < self.L):
+            ll              = q.logL
             p, q            = self.evolve_trajectory_one_step_position(p, q)
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
             trajectory.append((q.copy(),p.copy()))
             i += 1
         
+        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
+        trajectory.append((q.copy(),p.copy()))
         # evolve backward in time
         i = 0
         p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
         while (i < self.L):
+            ll              = q.logL
             p, q            = self.evolve_trajectory_one_step_position(p, q)
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
             trajectory.append((q.copy(),p.copy()))
             i += 1
-#            if i == 3*self.L: break
-        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
 
+        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
+        trajectory.append((q.copy(),p.copy()))
+        
         if self.DEBUG: self.save_trajectory(trajectory, logLmin)
         return self.sample_trajectory(trajectory)
-#        print("dt:",self.dt,"L:",self.L,"actual L:",i,"maxL:",3*self.L)
-#        return trajectory[-1]
 
     def sample_trajectory(self, trajectory):
         """
@@ -768,4 +733,32 @@ class ConstrainedLeapFrog(LeapFrog):
                 f.write(repr(q[n])+'\t'+repr(p[j])+'\t')
             f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
         f.close()
-        if self.c == 3: exit()
+
+class DualAveragingStepSize:
+    def __init__(self, initial_step_size, target_accept=0.65, gamma=0.05, t0=10.0, kappa=0.75):
+        self.mu = np.log(10 * initial_step_size)  # proposals are biased upwards to stay away from 0.
+        self.target_accept = target_accept
+        self.gamma = gamma
+        self.t = t0
+        self.kappa = kappa
+        self.error_sum = 0
+        self.log_averaged_step = 0
+
+    def update(self, p_accept):
+        # Running tally of absolute error. Can be positive or negative. Want to be 0.
+        self.error_sum += self.target_accept - p_accept
+
+        # This is the next proposed (log) step size. Note it is biased towards mu.
+        log_step = self.mu - self.error_sum / (np.sqrt(self.t) * self.gamma)
+
+        # Forgetting rate. As `t` gets bigger, `eta` gets smaller.
+        eta = self.t ** -self.kappa
+
+        # Smoothed average step size
+        self.log_averaged_step = eta * log_step + (1 - eta) * self.log_averaged_step
+
+        # This is a stateful update, so t keeps updating
+        self.t += 1
+
+        # Return both the noisy step size, and the smoothed step size
+        return np.exp(log_step), np.exp(self.log_averaged_step)

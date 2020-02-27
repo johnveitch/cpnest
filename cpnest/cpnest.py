@@ -93,7 +93,6 @@ class CPNest(object):
             self.nthreads = nthreads
 
         output = os.path.join(output, '')
-        os.makedirs(output, exist_ok=True)
 
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
