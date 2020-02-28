@@ -413,23 +413,9 @@ class SliceSampler(Sampler):
         """
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
         """
-        np.random.seed(seed=self.seed)
-        for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
-                disable= not self.verbose, position=self.thread_id, leave=False):
-            while True: # Generate an in-bounds sample
-                p = self.model.new_point()
-                p.logP = self.model.log_prior(p)
-                if np.isfinite(p.logP): break
-            p.logL=self.model.log_likelihood(p)
-            if p.logL is None or not np.isfinite(p.logL):
-                self.logger.warning("Received non-finite logL value {0} with parameters {1}".format(str(p.logL), str(p)))
-                self.logger.warning("You may want to check your likelihood function to improve sampling")
-            self.evolution_points.append(p)
-
-        self.proposal.set_ensemble(self.evolution_points)
-        self.mu = len(self.evolution_points[0].names)
-        self.w  = 1000 # maximum stepping out steps allowed
-        self.initialised=True
+        self.mu = 100.0
+        self.m  = 100 # maximum stepping out steps allowed
+        super(SliceSampler, self).reset()
 
     def adapt_length_scale(self):
         """
@@ -480,7 +466,7 @@ class SliceSampler(Sampler):
             sub_counter     = 0
             oldparam        = self.evolution_points.popleft()
             
-            while sub_accepted == 0:
+            while sub_accepted == 0 and sub_counter < self.m:
                 # Set Initial Interval Boundaries
                 self.reset_boundaries()
                 sub_counter += 1
@@ -493,8 +479,8 @@ class SliceSampler(Sampler):
                         break
                 
                 Y = logLmin
-                J = np.floor(self.w*np.random.uniform(0,1))
-                K = (self.w-1)-J
+                J = np.floor(self.m*np.random.uniform(0,1))
+                K = (self.m-1)-J
                 # keep on expanding until we get outside the logL boundary from the left
                 # or the prior bound, whichever comes first
                 while J > 0:
@@ -507,7 +493,6 @@ class SliceSampler(Sampler):
                         else:
                             self.increase_left_boundary()
                             J -= 1
-
                     # if we get out of bounds, break out
                     else:
                         break
@@ -530,6 +515,7 @@ class SliceSampler(Sampler):
                         break
 
                 # slice sample the likelihood
+                trials = 0
                 while True:
                     # generate a new point between the boundaries we identified
                     Xprime = np.random.uniform(self.L,self.R)
@@ -552,9 +538,10 @@ class SliceSampler(Sampler):
                             self.R = Xprime
                             self.Nc = self.Nc + 1
 
-                        #  if the search interval has shrunk  too much, break and start over
-                        if np.abs(self.R-self.L) < 1e-7:
-                            break
+                    #  if the search interval has shrunk  too much, break and start over
+                    if np.abs(self.R-self.L) < 1e-7 or trials >= self.m:
+                        break
+                    trials += 1
 
             self.evolution_points.append(oldparam)
 
