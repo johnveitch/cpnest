@@ -136,44 +136,45 @@ def draw_N_posterior_many(datas, Nlives, Npost, verbose=False):
     posts=[draw_N_posterior(data,logwt,N) for (data,logwt,N) in zip(datas,log_wts,Ns)]
     return vstack(posts).flatten()
 
-def redraw_mcmc_chain(chain, verbose=False, burnin=True):
+def resample_mcmc_chain(chain, verbose=False, burnin=False):
     """
     Draw samples from the mcmc chains posteriors by redrawing
     each one of them against the Metropolis-Hastings rule
     """
     LOGGER.critical('Number of input samples: {0!s}'.format(chain.shape[0]))
     if burnin: chain = chain[chain.shape[0]/2-1:]
+    # thin according to the autocorrelation length
     ACL = []
     for n in chain.dtype.names:
         if n != 'logL' and n != 'logPrior':
-            acf = 2*np.cumsum(autocorrelation(chain[n]))-1
-            ACL.append(acl(acf))
+            ACL.append(acl(autocorrelation(chain[n])))
     ACL = int(np.round(np.max(ACL)))
 
     LOGGER.critical('Measured autocorrelation length {0!s}'.format(str(ACL)))
+    # thin and shuffle the chain
     chain = chain[::ACL]
+    np.random.shuffle(chain)
+    # compute the normalised log posterior density
     logpost = chain['logL']+chain['logPrior']
-    # reweight using the MH rule
-    us = np.log(uniform(size=len(logpost)-1))
-    dlp = np.diff(logpost)
-    (idx,) = np.where(dlp > us)
-    chain = chain[idx+1]
-    LOGGER.critical('Returned number of samples {0!s}'.format(str(chain.shape[0])))
+    # resample using a Metropolis-Hastings rule
+    output =  [chain[0]]
+    for i in range(1,chain.shape[0]):
+        if logpost[i] - logpost[i-1] > np.log(uniform()):
+            output.append(chain[i])
 
-    return chain
+    output = np.array(output)
+    LOGGER.critical('Returned number of samples {0!s}'.format(str(output.shape[0])))
 
-def autocorrelation (x) :
+    return output
+
+def autocorrelation(x):
     """
-    Compute the autocorrelation of the signal, based on the properties of the
-    power spectral density of the signal.
+    Compute the autocorrelation of the chain
     """
-    xp = x-np.mean(x)
-    f = np.fft.fft(xp)
-    p = np.array([np.real(v)**2+np.imag(v)**2 for v in f])
-    pi = np.fft.ifft(p)
-    return np.real(pi)[:x.size/2]/np.sum(xp**2)
+    N = len(x)
+    return np.correlate(x, x, mode='full')[N-1:]/N
 
 def acl(acf):
-    for i in range(len(acf)/2):
+    for i in range(len(acf)):
         if acf[i] < i/5.0:
             return acf[i]+1
