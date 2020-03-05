@@ -289,7 +289,7 @@ class CPNest(object):
         if filename:
             np.savetxt(os.path.join(
                 self.NS.output_folder,'posterior.dat'),
-                self.posterior_samples.ravel(),
+                posterior_samples.ravel(),
                 header=' '.join(posterior_samples.dtype.names),
                 newline='\n',delimiter=' ')
         return posterior_samples
