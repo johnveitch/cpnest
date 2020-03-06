@@ -309,8 +309,8 @@ class CPNest(object):
         from . import plot
         for n in pos.dtype.names:
             plot.plot_hist(pos[n].ravel(), name = n,
-                           prior_samples = self.prior_samples[n].ravel() if pri else None,
-                           mcmc_samples = self.mcmc_samples[n].ravel() if mc else None,
+                           prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
+                           mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
                            filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
         for n in self.nested_samples.dtype.names:
             plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.pdf'.format(n)))
