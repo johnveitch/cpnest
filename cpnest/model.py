@@ -1,5 +1,6 @@
 from abc import ABCMeta,abstractmethod,abstractproperty
 from numpy import inf
+from array import array
 from .parameter import LivePoint
 from numpy.random import uniform
 
@@ -37,7 +38,7 @@ class Model(object):
         """
         logP=-inf
         while(logP==-inf):
-            p = LivePoint(self.names,[uniform(self.bounds[i][0],self.bounds[i][1]) for i,_ in enumerate(self.names)] )
+            p = LivePoint(self.names,self.bounds,d=array('d',[uniform(self.bounds[i][0],self.bounds[i][1]) for i,_ in enumerate(self.names)]) )
             logP=self.log_prior(p)
         return p
   
