@@ -22,7 +22,12 @@ cdef class LivePoint:
     logL: (optional) log likelihood of this sample
     logP: (optional) log prior of this sample
     """
-    def __cinit__(LivePoint self, list names, list bounds, array.array d=None, double logL=-INFINITY, double logP=-INFINITY):
+    def __cinit__(LivePoint self,
+                  list names,
+                  list bounds,
+                  array.array d=None,
+                  double logL=-INFINITY,
+                  double logP=-INFINITY):
         self.logL = logL
         self.logP = logP
         self.names = names
@@ -43,12 +48,13 @@ cdef class LivePoint:
         return self.__class__.__name__+'({0:s}, d={1:s}, logL={2:f}, logP={3:f})'.format(str(self.names),str(self.values),self.logL,self.logP)
 
     def __getstate__(self):
-        return (self.logL,self.logP,self.values)
+        return (self.logL,self.logP,self.bounds,self.values)
     
     def __setstate__(self,state):
           self.logL=state[0]
           self.logP=state[1]
-          self.values=array.array('d',state[2])
+          self.bounds=state[2]
+          self.values=array.array('d',state[3])
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})
@@ -149,7 +155,7 @@ cdef class LivePoint:
         cdef list names = self.names+['logL','logPrior']
         cdef np.ndarray x = np.zeros(1, dtype = {'names':names, 'formats':['f8' for _ in names]})
         for n in self.names: x[n] = self[n]
-        x['logL'] = self.logL
+        x['logL']     = self.logL
         x['logPrior'] = self.logP
         return x
 
