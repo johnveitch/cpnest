@@ -259,7 +259,7 @@ class CPNest(object):
         if self.verbose >= 3:
             from .nest2pos import resample_mcmc_chain
             from numpy.lib.recfunctions import stack_arrays
-            
+
             prior_samples = []
             mcmc_samples  = []
             for file in os.listdir(self.NS.output_folder):
@@ -269,7 +269,7 @@ class CPNest(object):
                 elif 'mcmc_chain' in file:
                     mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
                     os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
-            
+
             # first deal with the prior samples
             self.prior_samples = stack_arrays([p for p in prior_samples])
             np.savetxt(os.path.join(
@@ -281,7 +281,7 @@ class CPNest(object):
             self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
 #            mcmc_samples = resample_mcmc_chain(mcmc_samples)
             np.savetxt(os.path.join(
-                       self.NS.output_folder,'mcmc_posterior.dat'),
+                       self.NS.output_folder,filename),
                        self.mcmc_samples.ravel(),
                        header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
