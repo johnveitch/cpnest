@@ -36,9 +36,12 @@ class DyNest(object):
     Self-contained class for dynamic nested sampling
     on a single machine
     """
-    def __init__(self,usermodel, output='./',Nthreads=None, Ninit=100, maxmcmc=1000, verbose=1, Poolsize=100, seed=1):
+    def __init__(self,usermodel, output='./',Nthreads=None, Ninit=100, maxmcmc=1000, verbose=1, Poolsize=100, seed=None):
         self.process_pool=[]
-        self.seed=seed
+        if seed:
+            self.seed=seed
+        else:
+            self.seed = np.random.randint(2**32-1)
         if Nthreads is None:
             Nthreads = mp.cpu_count()
         print('Running with {0} parallel threads'.format(Nthreads))
@@ -172,7 +175,7 @@ class DynamicNestedSampler(NestedSampler):
         Push points to connected samplers
         If conn is None, will push to all known
         """
-        print('Pushing ',str(points))
+        print(__name__,'Pushing ',points)
         if conn is None:
             conns = self.pipes
         else:
@@ -191,20 +194,19 @@ class DynamicNestedSampler(NestedSampler):
         """
 
         point = None
-        while self.pipes:
+        while len(self.pipes)>0:
             for r in mp.connection.wait(self.pipes):
                 try:
                     data = r.recv()
-                except (EOFError,ConnectionResetError,BrokenPipeError):
+                except (EOFError,ConnectionResetError,BrokenPipeError,StopIteration):
                     r.close()
                     self.pipes.remove(r)                    
                 else:
                     if data is None:
+                        r.close()
                         self.pipes.remove(r)
                     else:
                         yield data
-                    
-        raise StopIteration
 
     def nested_sampling_loop(self):
         """
@@ -228,6 +230,13 @@ class DynamicNestedSampler(NestedSampler):
 	    # Signal worker threads to exit
         self.logLmin.value = np.inf
         self.push_points([None])
+        while True:
+            try:
+                x=next(self.recv_point())
+                print(__name__,'Recived ',str(x))
+            except StopIteration:
+                break
+            
 
 
     def evolve_classic(self, logLmin=-np.inf):
@@ -296,17 +305,17 @@ class Interval(object):
         if self.n==0:
             return 0.0
         else:
-            return -1.0/(self.n)
+            return np.log(self.n-1)-np.log(self.n)
     
     def readout(self):
         """
         Returns logX,logL
         """
         logX=[0.0]
-        logL=[self.a]
+        logL=[-np.inf]
         for i in self:
             logX.append(logX[-1]+i.logt())
-            logL.append(i.b)
+            logL.append(i.a)
         return (np.array(logX),np.array(logL))
     
     def logZ(self):
@@ -356,8 +365,8 @@ class Interval(object):
         
         if self.children:
             print(pref+str(self))
-            self.children[0].print_tree(pref=pref+u' ')
-            self.children[1].print_tree(pref=pref+u' ')
+            self.children[0].print_tree(pref=pref+u'|')
+            self.children[1].print_tree(pref=pref+u'|')
         else:
             print(pref+str(self))
 

@@ -205,9 +205,8 @@ class NestedSampler(object):
         
         # Replace the points we just consumed with the next acceptable ones
         for k in self.worst:
-            self.iteration+=1
             loops = 0
-            while(True):
+            while(self.condition):
                 loops += 1
                 self.acceptance, self.jumps, proposed = consumer_pipes[self.queue_counter].recv()
                 self.queue_counter = (self.queue_counter + 1) % len(consumer_pipes)
@@ -215,6 +214,8 @@ class NestedSampler(object):
                     # replace worst point with new one
                     self.params[k]=proposed
                     break
+            self.iteration+=1
+
 
             if self.verbose:
                 sys.stderr.write("{0:d}: n:{1:4d} acc:{2:.3f} sub_acc:{3:.3f} H: {4:.2f} logL {5:.5f} --> {6:.5f} dZ: {7:.3f} logZ: {8:.3f} logLmax: {9:.2f}\n"\
@@ -271,6 +272,8 @@ class NestedSampler(object):
         self.logLmin.value = np.inf
         for c in consumer_pipes:
             c.send(None)
+            c.recv()
+            c.close()
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))

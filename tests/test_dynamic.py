@@ -45,27 +45,22 @@ print('logZ true: {0}'.format(analytic_log_Z))
 
 from cpnest.dynamic import DynamicNestedSampler, DyNest
 
-class GaussianModel(cpnest.model.Model):
-    """
-    A simple gaussian model with parameters mean and sigma
-    """
-    def __init__(self):
-        self.distr = stats.norm(loc=0,scale=1.0)
-    names=['x']
-    bounds=[[-10,10]]
-    analytic_log_Z=0.0 - np.log(bounds[0][1] - bounds[0][0])
-
-    def log_likelihood(self,p):
-        return self.distr.logpdf(p['x'])
-        #return -0.5*(p['x']**2) - 0.5*np.log(2.0*np.pi)
+from test_2d import GaussianModel as TestModel
 
 if __name__=='__main__':
-
-    d = DyNest(GaussianModel(), Ninit = 1000, Nthreads=1, verbose=2, seed=0)
+    m = TestModel()
+    d = DyNest(m, Ninit = 100, Nthreads=1, verbose=2, seed=None)
     d.run()
     print(len([p for p in d.dnest.nested_intervals.points()]))
     #print(d.dnest.nested_intervals.print_leaves())
-    print(d.dnest.nested_intervals.logZ())
+    d.dnest.nested_intervals.print_tree(pref='')
+
+    print(f'Estimated logZ={d.dnest.nested_intervals.logZ()}')
+    try:
+        print(f'Analytic logZ={m.analytic_log_Z}')
+    except:
+        pass
+
     plt.figure()
     plt.plot(*d.dnest.nested_intervals.readout())
     plt.savefig('readout.png')

@@ -125,10 +125,12 @@ class Sampler(object):
             if logLmin.value==np.inf:
                 break
 
-            if producer_pipe.poll():
+
+
+            while producer_pipe.poll():
                 try:
                     data = producer_pipe.recv()
-                    print('Received ',str(data))
+                    print(__name__,  'Received ',str(data))
                     if data is None:
                         print(__name__, 'Sampler received None')
                         self.exit=True
@@ -140,14 +142,14 @@ class Sampler(object):
                     p.close()
                     self.exit=True
                     break
-
             try:
                 (acceptance,Nmcmc,outParam) = next(self.metropolis_hastings(logLmin.value))
+                # Send the sample to the Nested Sampler
+                if not self.exit: producer_pipe.send((acceptance,Nmcmc,outParam))
             except StopIteration:
+                self.exit=True
                 break
 
-            # Send the sample to the Nested Sampler
-            if not self.exit: producer_pipe.send((acceptance,Nmcmc,outParam))
             # Update the ensemble every now and again
 
             if (self.counter%(self.poolsize/10))==0 or acceptance < 1.0/float(self.poolsize):
