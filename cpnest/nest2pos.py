@@ -172,7 +172,7 @@ def autocorrelation(x):
     Compute the autocorrelation of the chain
     """
     N = len(x)
-    X=np.fft.fft(x)
+    X=np.fft.fft(x-x.mean())
     # We take the real part just to convert the complex output of fft to a real numpy float. The imaginary part if already 0 when coming out of the fft.
     R = np.real(np.fft.ifft(X*X.conj()))
     # Divide by an additional factor of 1/N since we are taking two fft and one ifft without unitary normalization, see: https://docs.scipy.org/doc/numpy/reference/routines.fft.html#module-numpy.fft

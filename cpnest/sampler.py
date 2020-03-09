@@ -100,7 +100,6 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.samples            = [] # the list of samples from the mcmc chain
-        self.ACLs               = [] # the history of the ACL of the chain, will be used to thin the output, if requested
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
 
     def reset(self):
@@ -155,7 +154,7 @@ class Sampler(object):
 
         Taken from http://github.com/farr/Ensemble.jl
         """
-        if tau is None: tau = self.maxmcmc/safety#self.poolsize
+        if tau is None: tau = self.poolsize/safety
 
         if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
@@ -214,7 +213,7 @@ class Sampler(object):
             else:
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize))==0:
+            if (self.counter%(self.poolsize//4))==0:
                 self.proposal.set_ensemble(self.evolution_points)
 
             self.counter += 1
@@ -305,7 +304,7 @@ class MetropolisHastingsSampler(Sampler):
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            if self.verbose >=3 and np.isfinite(logLmin):
+            if np.isfinite(logLmin):#self.verbose >=3 and
                 self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()

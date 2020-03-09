@@ -204,7 +204,7 @@ class CPNest(object):
             sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
-        if self.verbose>1: self.plot()
+        if self.verbose>1: self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
 
