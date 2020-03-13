@@ -304,7 +304,7 @@ class MetropolisHastingsSampler(Sampler):
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            if np.isfinite(logLmin):#self.verbose >=3 and
+            if np.isfinite(logLmin) and self.verbose >=3:
                 self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
