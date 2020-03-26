@@ -74,6 +74,7 @@ setup(
         url='https://github.com/johnveitch/cpnest',
         license='MIT',
         cmdclass={'build_ext': build_ext},
+        python_requires='>=3',
         classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: MIT License',

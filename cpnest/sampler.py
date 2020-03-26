@@ -13,6 +13,7 @@ from . import proposal
 from .cpnest import CheckPoint, RunManager
 from tqdm import tqdm
 from operator import attrgetter
+import numpy.lib.recfunctions as rfn
 
 import pickle
 __checkpoint_flag = False
@@ -99,7 +100,6 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.samples            = [] # the list of samples from the mcmc chain
-        self.ACLs               = [] # the history of the ACL of the chain, will be used to thin the output, if requested
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
 
     def reset(self):
@@ -128,7 +128,6 @@ class Sampler(object):
             _, p = next(self.yield_sample(-np.inf))
         if self.verbose >= 3:
             # save the poolsize as prior samples
-            import numpy.lib.recfunctions as rfn
             
             prior_samples = []
             for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
@@ -155,7 +154,7 @@ class Sampler(object):
 
         Taken from http://github.com/farr/Ensemble.jl
         """
-        if tau is None: tau = self.maxmcmc/safety#self.poolsize
+        if tau is None: tau = self.poolsize/safety
 
         if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
@@ -193,27 +192,34 @@ class Sampler(object):
 
             if self.logLmin.value==np.inf:
                 break
+            
+            # if the nested sampler is requesting for an update
+            # produce a sample for it
+            if self.producer_pipe.poll():
+                p = self.producer_pipe.recv()
 
-            p = self.producer_pipe.recv()
+                if p is None:
+                    break
+                if p == "checkpoint":
+                    self.checkpoint()
+                    sys.exit(130)
 
-            if p is None:
-                break
-            if p == "checkpoint":
-                self.checkpoint()
-                sys.exit(130)
-
-            self.evolution_points.append(p)
-            (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
-            # Send the sample to the Nested Sampler
-            self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
+                self.evolution_points.append(p)
+                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
+                # Send the sample to the Nested Sampler
+                self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
+            
+            # otherwise, keep on sampling from the previous boundary
+            else:
+                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
             # Update the ensemble every now and again
-            if (self.counter%(self.poolsize))==0:
+            if (self.counter%(self.poolsize//4))==0:
                 self.proposal.set_ensemble(self.evolution_points)
 
             self.counter += 1
 
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
-        self.samples.extend(self.evolution_points)
+#        self.samples.extend(self.evolution_points)
         
         if self.verbose >=3:
             
@@ -300,7 +306,7 @@ class MetropolisHastingsSampler(Sampler):
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            if self.verbose >=3:
+            if np.isfinite(logLmin) and self.verbose >=3:
                 self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.estimate_nmcmc()
