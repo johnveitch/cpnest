@@ -246,6 +246,7 @@ class Sampler(object):
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.logLmax = obj.manager.logLmax
+        obj.logger = logging.getLogger("CPNest")
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
         return obj
@@ -259,6 +260,7 @@ class Sampler(object):
         del state['manager']
         del state['producer_pipe']
         del state['thread_id']
+        del state['logger']
         return state
 
     def __setstate__(self, state):
