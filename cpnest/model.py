@@ -38,7 +38,12 @@ class Model(object):
         """
         logP=-inf
         while(logP==-inf):
-            p = LivePoint(self.names,self.bounds,d=array('d',[uniform(self.bounds[i][0],self.bounds[i][1]) for i,_ in enumerate(self.names)]) )
+            p = LivePoint(self.names,
+                          d=array('d',
+                                  [uniform(self.bounds[i][0], self.bounds[i][1])
+                                   for i,_ in enumerate(self.names)]
+                                )
+                        )
             logP=self.log_prior(p)
         return p
   
@@ -115,3 +120,36 @@ class Model(object):
         Return a string with the output file header
         """
         return '\t'.join(self.names) + '\tlogL'
+
+
+    def from_normalised(self, normalised_value):
+        """
+        Maps from [0,1]^Ndim to the full range of the parameters
+        Inverse of to_normalised()
+        ----------
+        Parameter:
+            normalised_vaue: array-like values in range (0,1)
+        ----------
+        Returns:
+            point: :obj:`cpnest.parameter.LivePoint`
+        """
+        d=array('d',
+                [self.bounds[i][0] 
+                 + normalised_value[i]*(self.bounds[i][1]-self.bounds[i][0])
+                 for i,_ in enumerate(self.names)]
+                )
+        return LivePoint(self.names, d=d)
+
+    def to_normalised(self, point):
+        """
+        Maps the bounds of the parameters onto [-1,1]
+        ----------
+        Parameter:
+            point: :obj:`cpnest.parameter.LivePoint`
+        ----------
+        Returns:
+            normalised_value: :obj:`array.array`
+                The values of the parameter mapped into the Ndim-cube
+        """
+        return array('d', [(b[1]-l)/(b[1]-b[0]) for v,u,l
+                    in zip(value.values, self.bounds)])
