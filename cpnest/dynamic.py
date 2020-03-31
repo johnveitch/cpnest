@@ -209,8 +209,6 @@ class DynamicNestedSampler(NestedSampler):
                     else:
                         yield data
 
-        raise StopIteration
-
     def nested_sampling_loop(self):
         """
         main nested sampling loop
