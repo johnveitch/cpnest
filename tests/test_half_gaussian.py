@@ -45,7 +45,7 @@ class HalfGaussianTestCase(unittest.TestCase):
         pos=self.work.posterior_samples['x']
         #t,pval=stats.kstest(pos,self.model.distr.cdf)
         plt.figure()
-        plt.hist(pos.ravel(),normed=True)
+        plt.hist(pos.ravel(),density=True)
         x=np.linspace(self.model.bounds[0][0],self.model.bounds[0][1],100)
         plt.plot(x,2*self.model.distr.pdf(x))
         plt.savefig('posterior.png')
