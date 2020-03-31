@@ -142,6 +142,7 @@ class DynamicNestedSampler(NestedSampler):
         for i in range(self.Ninit):
             tmp = self.model.new_point()
             tmp.logL = self.model.log_likelihood(tmp)
+            if tmp.logL > self.logLmax: self.logLmax = tmp.logL
             samples.append(tmp)
 
         worst = np.argmin([p.logL for p in samples])
