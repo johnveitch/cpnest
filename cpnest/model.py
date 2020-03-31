@@ -40,8 +40,9 @@ class Model(object):
         while(logP==-inf):
             p = LivePoint(self.names,
                           d=array('d',
-                                [uniform(self.bounds[i][0], self.bounds[i][1])
-                                   for i, _ in enumerate(self.names)]
+                                      [uniform(self.bounds[i][0],
+                                               self.bounds[i][1])
+                                       for i, _ in enumerate(self.names) ]
                                  )
                          )
             logP=self.log_prior(p)
@@ -134,7 +135,7 @@ class Model(object):
         """
         d=array('d',
                 [self.bounds[i][0]
-                 + normalised_value[i]*(self.bounds[i][1]-self.bounds[i][0])
+                 + normalised_value[i] * (self.bounds[i][1] - self.bounds[i][0])
                  for i, _ in enumerate(self.names)]
                 )
         return LivePoint(self.names, d=d)
