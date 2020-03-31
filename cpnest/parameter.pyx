@@ -9,8 +9,8 @@ from cpython cimport array
 cimport numpy as np
 import numpy as np
 
-cpdef LivePoint rebuild_livepoint(names, bounds):
-    cdef LivePoint lp=LivePoint(names, bounds)
+cpdef LivePoint rebuild_livepoint(names):
+    cdef LivePoint lp=LivePoint(names)
     return lp
 
 cdef class LivePoint:
@@ -24,14 +24,12 @@ cdef class LivePoint:
     """
     def __cinit__(LivePoint self,
                   list names,
-                  list bounds,
                   array.array d=None,
                   double logL=-INFINITY,
                   double logP=-INFINITY):
         self.logL = logL
         self.logP = logP
         self.names = names
-        self.bounds = bounds
         self.dimension = len(names)
         if d is not None:
             self.values             = array.array('d',d)
@@ -42,19 +40,18 @@ cdef class LivePoint:
         return self.names
 
     def __reduce__(self):
-        return (rebuild_livepoint, (self.names,self.bounds),self.__getstate__())
+        return (rebuild_livepoint, (self.names,),self.__getstate__())
     
     def __repr__(self):
         return self.__class__.__name__+'({0:s}, d={1:s}, logL={2:f}, logP={3:f})'.format(str(self.names),str(self.values),self.logL,self.logP)
 
     def __getstate__(self):
-        return (self.logL,self.logP,self.bounds,self.values)
+        return (self.logL, self.logP, self.values)
     
-    def __setstate__(self,state):
-          self.logL=state[0]
-          self.logP=state[1]
-          self.bounds=state[2]
-          self.values=array.array('d',state[3])
+    def __setstate__(self, state):
+          self.logL = state[0]
+          self.logP = state[1]
+          self.values = array.array('d',state[2])
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})
@@ -83,7 +80,7 @@ cdef class LivePoint:
     
     def __sub__(LivePoint self,LivePoint other):
         assert self.dimension == other.dimension
-        cdef LivePoint result = LivePoint(self.names,self.bounds)
+        cdef LivePoint result = LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=self.values[i]-other.values[i]
@@ -97,7 +94,7 @@ cdef class LivePoint:
         return self
 
     def __mul__(LivePoint self,float other):
-        cdef LivePoint result=LivePoint(self.names,self.bounds)
+        cdef LivePoint result=LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=other*self.values[i]
@@ -110,7 +107,7 @@ cdef class LivePoint:
         return self
 
     def __truediv__(LivePoint self,float other):
-        cdef LivePoint result = LivePoint(self.names,self.bounds)
+        cdef LivePoint result = LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=self.values[i]/other
@@ -144,7 +141,7 @@ cdef class LivePoint:
         """
         Returns a copy of the current live point
         """
-        cdef LivePoint result = LivePoint(self.names,self.bounds)
+        cdef LivePoint result = LivePoint(self.names)
         result.__setstate__(self.__getstate__())
         return result
       
@@ -158,16 +155,3 @@ cdef class LivePoint:
         x['logL']     = self.logL
         x['logPrior'] = self.logP
         return x
-
-cdef inline double map_to_values(double normalised_value, double lower_bound, double upper_bound):
-    """
-    Maps [-1,1] to the bounds of the parameters
-    """
-    return 0.5*(normalised_value+1.0)*(upper_bound-lower_bound)+lower_bound
-
-cdef inline double map_to_normalised_values(double value, double lower_bound, double upper_bound):
-    """
-    Maps the bounds of the parameters onto [-1,1]
-    """
-    return (value-lower_bound)/(upper_bound-lower_bound)
-
