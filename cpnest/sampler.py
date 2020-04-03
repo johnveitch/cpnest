@@ -331,14 +331,14 @@ class MetropolisHastingsSampler(Sampler):
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
-
+                # append the sample to the array of samples
+                self.samples.append(oldparam.values)
+                
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            # append the sample to the array of samples
-            self.samples.append(oldparam.values)
             
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
