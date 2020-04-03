@@ -131,16 +131,16 @@ class Sampler(object):
 
         # initialise the structure to store the mcmc chain
         self.samples = []
-        
+
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
             self.estimate_nmcmc_on_the_fly()
-        
+
         if self.sample_prior is True:
             # save the poolsize as prior samples
-            
+
             prior_samples = []
             for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -177,27 +177,23 @@ class Sampler(object):
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
 
         return self.Nmcmc
-    
-    def estimate_nmcmc(self):
+
+    def estimate_nmcmc(self, steps = 5000):
         """
-        Estimate autocorrelation length of the chain
+        Estimate autocorrelation length of chain
         """
         # first of all, build a numpy array out of
         # the stored samples
         self.ACL = []
         samples = np.array(self.samples)
-
-        if self.store_chain is False:
-            self.ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
-        else:
-            self.ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
+        self.ACL = [acl(autocorrelation(samples[:,i])) for i in range(samples.shape[1])]
         self.Nmcmc = int(np.max(self.ACL))
-        if self.store_chain is False and len(self.samples) > self.maxmcmc:
+        if self.store_chain is False and len(self.samples) > 5000:
             self.samples = []
         if self.Nmcmc < 20:
             self.Nmcmc = 20
         return self.Nmcmc
-        
+
     def produce_sample(self):
         try:
             self._produce_sample()
@@ -244,7 +240,7 @@ class Sampler(object):
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
                 # Send the sample to the Nested Sampler
                 self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
-            
+
             # otherwise, keep on sampling from the previous boundary
             else:
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
@@ -257,9 +253,9 @@ class Sampler(object):
 
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
 #        self.samples.extend(self.evolution_points)
-        
+
         if self.verbose >=3:
-            
+
             self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray()
                                                   for j in range(0,len(self.samples))],usemask=False)
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
@@ -340,13 +336,15 @@ class MetropolisHastingsSampler(Sampler):
                         sub_accepted+=1
                 # append the sample to the array of samples
                 self.samples.append(oldparam.values)
-                
+
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            
+            # append the sample to the array of samples
+            self.samples.append(oldparam.values)
+
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter += sub_counter
