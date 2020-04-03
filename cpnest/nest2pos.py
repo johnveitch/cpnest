@@ -171,14 +171,17 @@ def autocorrelation(x):
     """
     Compute the autocorrelation of the chain
     """
-    N = len(x)
-    X=np.fft.fft(x-x.mean())
-    # We take the real part just to convert the complex output of fft to a real numpy float. The imaginary part if already 0 when coming out of the fft.
-    R = np.real(np.fft.ifft(X*X.conj()))
-    # Divide by an additional factor of 1/N since we are taking two fft and one ifft without unitary normalization, see: https://docs.scipy.org/doc/numpy/reference/routines.fft.html#module-numpy.fft
-    return R/N
+    mean=x.mean()
+    var=np.var(x)
+    xp=x-mean
 
-def acl(acf):
+    cf=np.fft.fft(xp)
+    sf=cf.conjugate()*cf
+    corr=np.fft.ifft(sf).real/var/len(x)
+
+    return corr
+
+def acl(acf, safety = 5.0):
     for i in range(len(acf)):
-        if acf[i] < i/5.0:
-            return acf[i]+1
+        if np.abs(acf[i]) < i/safety:
+            return np.abs(acf[i])+1
