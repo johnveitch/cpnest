@@ -86,6 +86,7 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
+                 prior_sampling= None,
                  n_periodic_checkpoint = None):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
@@ -150,6 +151,7 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
+                                  sample_prior = prior_sampling,
                                   manager     = self.manager
                                   )
             else:
