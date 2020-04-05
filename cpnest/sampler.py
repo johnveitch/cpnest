@@ -142,7 +142,7 @@ class Sampler(object):
             # save the poolsize as prior samples
 
             prior_samples = []
-            for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
+            for k in tqdm(range(5000), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
                 _, p = next(self.yield_sample(-np.inf))
                 prior_samples.append(p)

@@ -73,7 +73,7 @@ class CPNest(object):
         **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
-    
+
     periodic_checkpoint_interval: `float`
         checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
@@ -93,7 +93,8 @@ class CPNest(object):
                  proposals     = None,
                  prior_sampling = False,
                  n_periodic_checkpoint = None,
-                 periodic_checkpoint_interval=None
+                 periodic_checkpoint_interval=None,
+                 prior_sampling= False,
                  ):
 
         if nthreads is None:
@@ -152,7 +153,7 @@ class CPNest(object):
                         output         = output,
                         verbose        = verbose,
                         seed           = self.seed,
-                        prior_sampling = False,
+                        prior_sampling = prior_sampling,
                         manager        = self.manager)
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
