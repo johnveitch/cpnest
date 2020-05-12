@@ -2,6 +2,7 @@ from __future__ import division, print_function
 import sys
 import os
 import pickle
+import time
 import logging
 import numpy as np
 from numpy import logaddexp
@@ -153,7 +154,8 @@ class NestedSampler(object):
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = None):
+                 n_periodic_checkpoint = None,
+                 ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
@@ -170,7 +172,7 @@ class NestedSampler(object):
         self.queue_counter  = 0
         self.Nlive          = nlive
         self.params         = [None] * self.Nlive
-        self.n_periodic_checkpoint = n_periodic_checkpoint
+        self.last_checkpoint_time = time.time()
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
@@ -333,12 +335,11 @@ class NestedSampler(object):
             return 0
 
         try:
-            i=0
             while self.condition > self.tolerance:
                 self.consume_sample()
-                if self.n_periodic_checkpoint is not None and i % self.n_periodic_checkpoint == 1:
+                if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
                     self.checkpoint()
-                i += 1
+                    self.last_checkpoint_time = time.time()
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint
@@ -397,6 +398,7 @@ class NestedSampler(object):
         del obj.__dict__['llmin']
         del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)
+        obj.last_checkpoint_time = time.time()
         return obj
 
     def __getstate__(self):

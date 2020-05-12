@@ -86,7 +86,10 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
-                 n_periodic_checkpoint = None):
+                 n_periodic_checkpoint = None,
+                 periodic_checkpoint_interval=None
+                 ):
+
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -98,6 +101,14 @@ class CPNest(object):
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+
+        if n_periodic_checkpoint is not None:
+            self.logger.critical(
+                "The n_periodic_checkpoint kwarg is deprecated, "
+                "use periodic_checkpoint_interval instead."
+            )
+        if periodic_checkpoint_interval is None:
+            periodic_checkpoint_interval = np.inf
 
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
@@ -113,7 +124,10 @@ class CPNest(object):
         self.output   = output
         self.poolsize = poolsize
         self.posterior_samples = None
-        self.manager = RunManager(nthreads=self.nthreads)
+        self.manager = RunManager(
+            nthreads=self.nthreads,
+            periodic_checkpoint_interval=periodic_checkpoint_interval
+        )
         self.manager.start()
         self.user     = usermodel
         self.resume = resume
@@ -133,8 +147,7 @@ class CPNest(object):
                         verbose        = verbose,
                         seed           = self.seed,
                         prior_sampling = False,
-                        manager        = self.manager,
-                        n_periodic_checkpoint = n_periodic_checkpoint)
+                        manager        = self.manager)
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
@@ -362,6 +375,9 @@ class RunManager(SyncManager):
         self.logLmin = None
         self.logLmax = None
         self.nthreads=nthreads
+        self.periodic_checkpoint_interval = kwargs.get(
+            "periodic_checkpoint_interval", np.inf
+        )
 
     def start(self):
         super(RunManager, self).start()
