@@ -140,6 +140,8 @@ class NestedSampler(object):
         Deafult: 0.1
 
     n_periodic_checkpoint: int
+        **deprecated**
+        This parameter should not be used, it should be set by the manager instead.
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
 
