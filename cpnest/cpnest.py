@@ -70,7 +70,12 @@ class CPNest(object):
         'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
 
     n_periodic_checkpoint: `int`
+        **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
+        Default: None (disabled)
+    
+    periodic_checkpoint_interval: `float`
+        checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
 
     """
