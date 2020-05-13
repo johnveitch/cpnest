@@ -364,6 +364,9 @@ class CPNest(object):
 
 class RunManager(SyncManager):
     def __init__(self, nthreads=None, **kwargs):
+        self.periodic_checkpoint_interval = kwargs.pop(
+            "periodic_checkpoint_interval", np.inf
+        )
         super(RunManager,self).__init__(**kwargs)
         self.nconnected=mp.Value(c_int,0)
         self.producer_pipes = list()
@@ -375,9 +378,6 @@ class RunManager(SyncManager):
         self.logLmin = None
         self.logLmax = None
         self.nthreads=nthreads
-        self.periodic_checkpoint_interval = kwargs.get(
-            "periodic_checkpoint_interval", np.inf
-        )
 
     def start(self):
         super(RunManager, self).start()
