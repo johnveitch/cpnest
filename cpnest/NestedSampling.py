@@ -232,7 +232,7 @@ class NestedSampler(object):
         """
         with open(self.evidence_file,"w") as f:
             f.write('#logZ\tlogLmax\tH\n')
-            f.write('{0:.5f} {1:.5f} {2:.2f\n'.format(self.state.logZ, self.logLmax.value, self.state.info))
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax.value, self.state.info))
 
     def setup_random_seed(self,seed):
         """
