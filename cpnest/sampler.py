@@ -383,7 +383,9 @@ class HamiltonianMonteCarloSampler(Sampler):
                         global_lmax = max(global_lmax, newparam.logL)
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
-
+            
+            # append the sample to the array of samples
+            self.samples.append(oldparam.values)
             self.evolution_points.append(oldparam)
 
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
@@ -394,7 +396,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
-                p.update_trajectory_length(self.estimate_nmcmc_on_the_fly())
+                p.update_trajectory_length(self.Nmcmc)
                 #print(p.dt,p.L)
 
             yield (sub_counter, oldparam)
