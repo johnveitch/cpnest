@@ -187,8 +187,12 @@ class Sampler(object):
         ACL = []
         samples = np.array(self.samples)
         if not self.store_chain:
+            # if we are not storing the full chain, compute the ACL on the full set of samples we
+            # kept
             ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
         else:
+            # if we are storing the chain, look only at the last maxmcmc samples, to avoid
+            # reconsidering the old samples
             ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
         self.Nmcmc = int(np.max(ACL))
         if (not self.store_chain) and (len(self.samples) > self.maxmcmc):
