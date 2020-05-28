@@ -6,16 +6,15 @@ class EggboxModel(cpnest.model.Model):
     """
     Eggbox problem from https://arxiv.org/pdf/0809.3437v1.pdf
     """
-    names=['1','2','3','4','5']
-    bounds=[[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi]]
+    names=['1','2']
+    bounds=[[0,10.0*np.pi],[0,10.0*np.pi]]#,[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi]]
     data = None
-    @staticmethod
-    def log_likelihood(x):
+    
+    def log_likelihood(self,x):
         return log_eggbox(x)
-
-    def force(self,x):
-        f = np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
-        return f
+    
+    def log_prior(self,x):
+        return super(EggboxModel,self).log_prior(x)
 
 def log_eggbox(p):
     tmp = 1.0
@@ -37,6 +36,7 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-        work=cpnest.CPNest(EggboxModel(),verbose=3,nthreads=1,nlive=1000,maxmcmc=1000,poolsize=1000)
-        work.run()
+    M = EggboxModel()
+    work=cpnest.CPNest(M,verbose=3,nthreads=4,nlive=1000,maxmcmc=1000,poolsize=1000)
+    work.run()
 

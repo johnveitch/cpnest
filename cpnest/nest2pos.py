@@ -3,6 +3,8 @@ import numpy as np
 from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
+from scipy.stats import pearsonr
+#from statsmodels.tsa.ar_model import AutoReg
 
 if not logging.Logger.manager.loggerDict:
     LOGGER = logging.getLogger('nest2pos')
@@ -170,6 +172,7 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
 def autocorrelation(x):
     """
     Compute the autocorrelation of the chain
+    using an FFT
     """
     mean=x.mean()
     var=np.var(x)
@@ -178,10 +181,25 @@ def autocorrelation(x):
     cf=np.fft.fft(xp)
     sf=cf.conjugate()*cf
     corr=np.fft.ifft(sf).real/var/len(x)
-
     return corr
 
-def acl(acf, safety = 5.0):
-    for i in range(len(acf)):
-        if np.abs(acf[i]) < i/safety:
-            return np.abs(acf[i])+1
+def acl(x, tolerance=0.01):
+    """
+    Compute autocorrelation time for x
+    """
+    T=1
+    i=1
+    acf = autocorrelation(x)
+    while acf[i]>tolerance and i<len(x):
+        T+=2*acf[i]
+        i+=1
+    return T
+
+#def acl_AR(x):
+#    """
+#    Eq. 7 from https://arxiv.org/pdf/1011.0175.pdf
+#    """
+#    M = AutoReg(x)
+#    res = M.fit(ic='aic')
+#    ac = autocorrelation(x)[:res.k_ar]
+#    return (1.0-np.dot(ac.T,res.params))/(1.0-np.dot(np.ones(res.k_ar).T,res.params))**2

@@ -16,7 +16,7 @@ from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
 
-from .nest2pos import autocorrelation, acl
+from .nest2pos import acl
 
 import pickle
 __checkpoint_flag = False
@@ -142,7 +142,7 @@ class Sampler(object):
             # save the poolsize as prior samples
             
             prior_samples = []
-            for k in tqdm(range(5000), desc='SMPLR {} generating prior samples'.format(self.thread_id),
+            for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
                 _, p = next(self.yield_sample(-np.inf))
                 prior_samples.append(p)
@@ -178,21 +178,21 @@ class Sampler(object):
 
         return self.Nmcmc
     
-    def estimate_nmcmc(self, steps = 5000):
+    def estimate_nmcmc(self):
         """
-        Estimate autocorrelation length of chain using
-        the autocorrelation length
+        Estimate autocorrelation length of the chain
         """
         # first of all, build a numpy array out of
         # the stored samples
         self.ACL = []
         samples = np.array(self.samples)
-#        import matplotlib.pyplot as plt
-#        plt.plot(autocorrelation(samples[:,0]))
-#        plt.show()
-        self.ACL = [acl(autocorrelation(samples[:,i])) for i in range(samples.shape[1])]
+
+        if self.store_chain is False:
+            self.ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        else:
+            self.ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
         self.Nmcmc = int(np.max(self.ACL))
-        if self.store_chain is False and len(self.samples) > 5000:
+        if self.store_chain is False and len(self.samples) > self.maxmcmc:
             self.samples = []
         if self.Nmcmc < 20:
             self.Nmcmc = 20
