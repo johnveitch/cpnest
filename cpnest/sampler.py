@@ -394,7 +394,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
-                p.update_trajectory_length(self.estimate_nmcmc())
+                p.update_trajectory_length(self.estimate_nmcmc_on_the_fly())
                 #print(p.dt,p.L)
 
             yield (sub_counter, oldparam)
