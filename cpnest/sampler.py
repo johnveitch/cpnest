@@ -2,6 +2,7 @@ from __future__ import division
 import sys
 import os
 import logging
+import time
 import numpy as np
 from math import log
 from collections import deque
@@ -106,6 +107,7 @@ class Sampler(object):
         self.store_chain        = store_chain
         self.samples            = None # the list of samples from the mcmc chain
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
+        self.last_checkpoint_time = time.time()
 
     def reset(self):
         """
@@ -222,7 +224,11 @@ class Sampler(object):
 
             if self.logLmin.value==np.inf:
                 break
-            
+
+            if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
+                self.checkpoint()
+                self.last_checkpoint_time = time.time()
+
             # if the nested sampler is requesting for an update
             # produce a sample for it
             if self.producer_pipe.poll():
@@ -286,6 +292,7 @@ class Sampler(object):
         obj.logger = logging.getLogger("CPNest")
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
+        obj.last_checkpoint_time = time.time()
         return obj
 
     def __getstate__(self):
