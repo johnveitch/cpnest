@@ -184,14 +184,13 @@ class Sampler(object):
         """
         # first of all, build a numpy array out of
         # the stored samples
-        self.ACL = []
+        ACL = []
         samples = np.array(self.samples)
-
-        if self.store_chain is False:
-            self.ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        if not self.store_chain:
+            ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
         else:
-            self.ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
-        self.Nmcmc = int(np.max(self.ACL))
+            ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
+        self.Nmcmc = int(np.max(ACL))
         if (not self.store_chain) and (len(self.samples) > self.maxmcmc):
             self.samples = []
         if self.Nmcmc < 20:
@@ -346,8 +345,6 @@ class MetropolisHastingsSampler(Sampler):
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            # append the sample to the array of samples
-            self.samples.append(oldparam.values)
 
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
