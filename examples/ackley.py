@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 import cpnest.model
+from numpy import log
 
 class AckleyModel(cpnest.model.Model):
     """
@@ -11,7 +12,7 @@ class AckleyModel(cpnest.model.Model):
     data = None
     @staticmethod
     def log_likelihood(x):
-        return ackley(x['x'],x['y'])
+        return log(ackley(x['x'],x['y']))
 
     def force(self,x):
         f = np.zeros(1, dtype = {'names':x.names, 'formats':['f8' for _ in x.names]})
@@ -19,7 +20,7 @@ class AckleyModel(cpnest.model.Model):
 
 def ackley(x, y):
     """
-    Ackley problem 
+    Ackley problem
     """
     r = np.sqrt(0.5*(x*x+y*y))
     first = 20.0*np.exp(r)

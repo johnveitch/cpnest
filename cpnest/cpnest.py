@@ -74,7 +74,12 @@ class CPNest(object):
         'sli' for the slice sampler. Default: None
 
     n_periodic_checkpoint: `int`
+        **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
+        Default: None (disabled)
+    
+    periodic_checkpoint_interval: `float`
+        checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
 
     """
@@ -90,8 +95,10 @@ class CPNest(object):
                  nhamiltonian = 0,
                  nslice       = 0,
                  resume       = False,
-                 proposals    = None,
-                 n_periodic_checkpoint = None):
+                 proposals     = None,
+                 n_periodic_checkpoint = None,
+                 periodic_checkpoint_interval=None
+                 ):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -103,6 +110,14 @@ class CPNest(object):
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+        
+        if n_periodic_checkpoint is not None:
+            self.logger.critical(
+                "The n_periodic_checkpoint kwarg is deprecated, "
+                "use periodic_checkpoint_interval instead."
+            )
+        if periodic_checkpoint_interval is None:
+            periodic_checkpoint_interval = np.inf
 
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
         from .NestedSampling import NestedSampler
@@ -120,7 +135,10 @@ class CPNest(object):
         self.output   = output
         self.poolsize = poolsize
         self.posterior_samples = None
-        self.manager = RunManager(nthreads=self.nthreads)
+        self.manager = RunManager(
+            nthreads=self.nthreads,
+            periodic_checkpoint_interval=periodic_checkpoint_interval
+        )
         self.manager.start()
         self.user     = usermodel
         self.resume = resume
@@ -140,8 +158,7 @@ class CPNest(object):
                         verbose        = verbose,
                         seed           = self.seed,
                         prior_sampling = False,
-                        manager        = self.manager,
-                        n_periodic_checkpoint = n_periodic_checkpoint)
+                        manager        = self.manager)
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
@@ -379,6 +396,9 @@ class CPNest(object):
 
 class RunManager(SyncManager):
     def __init__(self, nthreads=None, **kwargs):
+        self.periodic_checkpoint_interval = kwargs.pop(
+            "periodic_checkpoint_interval", np.inf
+        )
         super(RunManager,self).__init__(**kwargs)
         self.nconnected=mp.Value(c_int,0)
         self.producer_pipes = list()

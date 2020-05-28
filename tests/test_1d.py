@@ -45,7 +45,7 @@ class GaussianTestCase(unittest.TestCase):
         stat,pval = stats.normaltest(pos.T)
         print('Normal test p-value {0}'.format(str(pval)))
         plt.figure()
-        plt.hist(pos.ravel(),normed=True)
+        plt.hist(pos.ravel(),density=True)
         x=np.linspace(self.model.bounds[0][0],self.model.bounds[0][1],100)
         plt.plot(x,self.model.distr.pdf(x))
         plt.title('NormalTest pval = {0}'.format(pval))

@@ -2,93 +2,104 @@ from __future__ import division, print_function
 import sys
 import os
 import pickle
+import time
 import logging
 import numpy as np
-import multiprocessing as mp
-from numpy import logaddexp, exp
+from numpy import logaddexp
 from numpy import inf
 from math import isnan
-try:
-    from queue import Empty
-except ImportError:
-    from Queue import Empty # For python 2 compatibility
-import types
 from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
-from .cpnest import CheckPoint, RunManager
+from .cpnest import CheckPoint
 
 from tqdm import tqdm
 
-class _NSintegralState(object):
-  """
-  Stores the state of the nested sampling integrator
-  """
-  def __init__(self, nlive):
-    self.nlive = nlive
-    self.reset()
-    self.logger = logging.getLogger('CPNest')
-  def reset(self):
-    """
-    Reset the sampler to its initial state at logZ = -infinity
-    """
-    self.iteration=0
-    self.logZ=-inf
-    self.oldZ=-inf
-    self.logw=0
-    self.info=0
-    # Start with a dummy sample enclosing the whole prior
-    self.logLs=[-inf] # Likelihoods sampled
-    self.log_vols=[0.0] # Volumes enclosed by contours
-  def increment(self, logL, nlive=None):
-    """
-    Increment the state of the evidence integrator
-    Simply uses rectangle rule for initial estimate
-    """
-    if(logL<=self.logLs[-1]):
-      self.logger.warning('NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1],logL))
-    if nlive is None:
-      nlive = self.nlive
-    oldZ = self.logZ
-    logt=-1.0/nlive
-    Wt = self.logw + logL + logsubexp(0,logt)
-    self.logZ = logaddexp(self.logZ,Wt)
-    # Update information estimate
-    if np.isfinite(oldZ) and np.isfinite(self.logZ) and np.isfinite(logL):
-        self.info = np.exp(Wt - self.logZ)*logL + np.exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
-        if isnan(self.info):
-            self.info=0
 
-    # Update history
-    self.logw += logt
-    self.iteration += 1
-    self.logLs.append(logL)
-    self.log_vols.append(self.logw)
-  def finalise(self):
+class _NSintegralState(object):
     """
-    Compute the final evidence with more accurate integrator
-    Call at end of sampling run to refine estimate
+    Stores the state of the nested sampling integrator
     """
-    from scipy import integrate
-    # Trapezoidal rule
-    self.logZ=nest2pos.log_integrate_log_trap(np.array(self.logLs),np.array(self.log_vols))
-    return self.logZ
-  def plot(self,filename):
-    """
-    Plot the logX vs logL
-    """
-    import matplotlib as mpl
-    mpl.use('Agg')
-    from matplotlib import pyplot as plt
-    fig=plt.figure()
-    plt.plot(self.log_vols,self.logLs)
-    plt.title('{0} iterations. logZ={1:.2f} H={2:.2f} bits'.format(self.iteration,self.logZ,self.info*np.log2(np.e)))
-    plt.grid(which='both')
-    plt.xlabel('log prior_volume')
-    plt.ylabel('log likelihood')
-    plt.xlim([self.log_vols[-1],self.log_vols[0]])
-    plt.savefig(filename)
-    self.logger.info('Saved nested sampling plot as {0}'.format(filename))
+    def __init__(self, nlive):
+        self.nlive = nlive
+        self.reset()
+        self.logger = logging.getLogger('CPNest')
+
+    def reset(self):
+        """
+        Reset the sampler to its initial state at logZ = -infinity
+        """
+        self.iteration = 0
+        self.logZ = -inf
+        self.oldZ = -inf
+        self.logw = 0
+        self.info = 0
+        # Start with a dummy sample enclosing the whole prior
+        self.logLs = [-inf]  # Likelihoods sampled
+        self.log_vols = [0.0]  # Volumes enclosed by contours
+
+    def increment(self, logL, nlive=None):
+        """
+        Increment the state of the evidence integrator
+        Simply uses rectangle rule for initial estimate
+        """
+        if(logL<=self.logLs[-1]):
+            self.logger.warning('NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1], logL))
+        if nlive is None:
+            nlive = self.nlive
+        oldZ = self.logZ
+        logt=-1.0/nlive
+        Wt = self.logw + logL + logsubexp(0,logt)
+        self.logZ = logaddexp(self.logZ,Wt)
+        # Update information estimate
+        if np.isfinite(oldZ) and np.isfinite(self.logZ) and np.isfinite(logL):
+            self.info = np.exp(Wt - self.logZ)*logL + np.exp(oldZ - self.logZ)*(self.info + oldZ) - self.logZ
+            if isnan(self.info):
+                self.info = 0
+
+        # Update history
+        self.logw += logt
+        self.iteration += 1
+        self.logLs.append(logL)
+        self.log_vols.append(self.logw)
+
+    def finalise(self):
+        """
+        Compute the final evidence with more accurate integrator
+        Call at end of sampling run to refine estimate
+        """
+        from scipy import integrate
+        # Trapezoidal rule
+        self.logZ = nest2pos.log_integrate_log_trap(np.array(self.logLs), np.array(self.log_vols))
+        return self.logZ
+
+    def plot(self,filename):
+        """
+        Plot the logX vs logL
+        """
+        import matplotlib as mpl
+        mpl.use('Agg')
+        from matplotlib import pyplot as plt
+        plt.figure()
+        plt.plot(self.log_vols,self.logLs)
+        plt.title('{0} iterations. logZ={1:.2f} H={2:.2f} bits'.format(self.iteration,self.logZ,self.info*np.log2(np.e)))
+        plt.grid(which='both')
+        plt.xlabel('log prior_volume')
+        plt.ylabel('log likelihood')
+        plt.xlim([self.log_vols[-1],self.log_vols[0]])
+        plt.savefig(filename)
+        self.logger.info('Saved nested sampling plot as {0}'.format(filename))
+
+    def __getstate__(self):
+        """Remove the unpicklable entries."""
+        state = self.__dict__.copy()
+        del state['logger']
+        return state
+
+    def __setstate__(self, state):
+        if 'logger' not in state:
+            state['logger'] = logging.getLogger("CPNest")
+        self.__dict__ = state
 
 
 class NestedSampler(object):
@@ -129,6 +140,8 @@ class NestedSampler(object):
         Deafult: 0.1
 
     n_periodic_checkpoint: int
+        **deprecated**
+        This parameter should not be used, it should be set by the manager instead.
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
 
@@ -143,7 +156,8 @@ class NestedSampler(object):
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = None):
+                 n_periodic_checkpoint = None,
+                 ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
@@ -160,7 +174,7 @@ class NestedSampler(object):
         self.queue_counter  = 0
         self.Nlive          = nlive
         self.params         = [None] * self.Nlive
-        self.n_periodic_checkpoint = n_periodic_checkpoint
+        self.last_checkpoint_time = time.time()
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
@@ -217,7 +231,8 @@ class NestedSampler(object):
         Write the evidence logZ and maximum likelihood to the evidence_file
         """
         with open(self.evidence_file,"w") as f:
-            f.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax.value))
+            f.write('#logZ\tlogLmax\tH\n')
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax.value, self.state.info))
 
     def setup_random_seed(self,seed):
         """
@@ -323,12 +338,11 @@ class NestedSampler(object):
             return 0
 
         try:
-            i=0
             while self.condition > self.tolerance:
                 self.consume_sample()
-                if self.n_periodic_checkpoint is not None and i % self.n_periodic_checkpoint == 1:
+                if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
                     self.checkpoint()
-                i += 1
+                    self.last_checkpoint_time = time.time()
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint
@@ -383,19 +397,23 @@ class NestedSampler(object):
         obj.logLmax = obj.manager.logLmax
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
+        obj.logger = logging.getLogger("CPNest")
         del obj.__dict__['llmin']
+        del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)
+        obj.last_checkpoint_time = time.time()
         return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state['llmin']=self.logLmin.value
+        state['llmin'] = self.logLmin.value
         state['llmax'] = self.logLmax.value
         # Remove the unpicklable entries.
         del state['logLmin']
         del state['logLmax']
         del state['manager']
         del state['model']
+        del state['logger']
         return state
 
     def __setstate__(self, state):
