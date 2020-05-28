@@ -94,7 +94,6 @@ class CPNest(object):
                  prior_sampling = False,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
-                 prior_sampling= False,
                  ):
 
         if nthreads is None:
