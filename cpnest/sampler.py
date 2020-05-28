@@ -142,7 +142,7 @@ class Sampler(object):
             # save the poolsize as prior samples
 
             prior_samples = []
-            for k in tqdm(range(5000), desc='SMPLR {} generating prior samples'.format(self.thread_id),
+            for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
                 _, p = next(self.yield_sample(-np.inf))
                 prior_samples.append(p)
@@ -178,17 +178,21 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self, steps = 5000):
+    def estimate_nmcmc(self):
         """
-        Estimate autocorrelation length of chain
+        Estimate autocorrelation length of the chain
         """
         # first of all, build a numpy array out of
         # the stored samples
         self.ACL = []
         samples = np.array(self.samples)
-        self.ACL = [acl(autocorrelation(samples[:,i])) for i in range(samples.shape[1])]
+
+        if self.store_chain is False:
+            self.ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        else:
+            self.ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
         self.Nmcmc = int(np.max(self.ACL))
-        if self.store_chain is False and len(self.samples) > 5000:
+        if (not self.store_chain) and (len(self.samples) > self.maxmcmc):
             self.samples = []
         if self.Nmcmc < 20:
             self.Nmcmc = 20
