@@ -69,7 +69,6 @@ class Sampler(object):
                  seed         = None,
                  output       = None,
                  verbose      = False,
-                 store_chain  = False,
                  sample_prior = False,
                  poolsize     = 1000,
                  proposal     = None,
@@ -104,8 +103,7 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.sample_prior       = sample_prior
-        self.store_chain        = store_chain
-        self.samples            = None # the list of samples from the mcmc chain
+        self.samples            = deque(maxlen = None if self.verbose >=3 else 5*self.maxmcmc) # the list of samples from the mcmc chain
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
         self.last_checkpoint_time = time.time()
 
@@ -185,19 +183,15 @@ class Sampler(object):
         # first of all, build a numpy array out of
         # the stored samples
         ACL = []
-        if not self.store_chain:
-            samples = np.array([self.samples[j].values for j in range(0,len(self.samples))])
-            # if we are not storing the full chain, compute the ACL on the full set of samples we
-            # kept
-            ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
-        else:
-            # if we are storing the chain, look only at the last maxmcmc samples, to avoid
-            # reconsidering the old samples
-            samples = np.array([self.samples[j].values for j in range(-self.maxmcmc,0)])
-            ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        samples = np.array([x.values for x in self.samples[-5*self.maxmcmc:]])
+        # compute the ACL on 5 times the maxmcmc set of samples
+        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        
+        if self.verbose >= 3:
+            for i in range(len(self.model.names)):
+                self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
+        
         self.Nmcmc = int(np.max(ACL))
-        if (not self.store_chain) and (len(self.samples) > self.maxmcmc):
-            self.samples = []
         if self.Nmcmc < 1:
             self.Nmcmc = 1
         return self.Nmcmc

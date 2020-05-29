@@ -47,7 +47,12 @@ class CPNest(object):
         output directory (./)
 
     verbose: `int`
-        Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
+        Verbosity:
+            0: no display of information on screen, save the NS chain and evidence
+            1: 0 + display progress on screen
+            2: 1 + display diagnostics (ACL), save the posterior samples and trace plots and posterior plots
+            3: 2 + save chains from individual samplers
+            default: 0
 
     seed: `int`
         random seed (default: 1234)
@@ -110,7 +115,7 @@ class CPNest(object):
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-
+        #FIXME: remove in the next release
         if n_periodic_checkpoint is not None:
             self.logger.critical(
                 "The n_periodic_checkpoint kwarg is deprecated, "
@@ -226,13 +231,22 @@ class CPNest(object):
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
-
-        self.posterior_samples = self.get_posterior_samples(filename=None)
-        if self.verbose>=3 or self.NS.prior_sampling is True:
+        
+        if self.verbose >= 2:
+            self.logger.critical("Saving nested samples in {0}".format(self.output))
+            self.nested_samples = self.get_nested_samples()
+            self.logger.critical("Saving posterior samples in {0}".format(self.output))
+            self.posterior_samples = self.get_posterior_samples()
+        else:
+            self.nested_samples = self.get_nested_samples(filename=None)
+            self.posterior_samples = self.get_posterior_samples(filename=None)
+        
+        if self.verbose>=3 or self.NS.prior_sampling:
             self.prior_samples = self.get_prior_samples(filename=None)
-        if self.verbose>=3 and self.NS.prior_sampling is False:
+        if self.verbose>=3 and not self.NS.prior_sampling:
             self.mcmc_samples = self.get_mcmc_samples(filename=None)
-        if self.verbose>1: self.plot(corner = False)
+        if self.verbose>=2:
+            self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
 
@@ -255,7 +269,7 @@ class CPNest(object):
                 ,usemask=False)
         if filename:
             np.savetxt(os.path.join(
-                self.NS.output_folder,'nested_samples.dat'),
+                self.NS.output_folder, filename),
                 self.nested_samples.ravel(),
                 header=' '.join(self.nested_samples.dtype.names),
                 newline='\n',delimiter=' ')
@@ -284,7 +298,7 @@ class CPNest(object):
         # TODO: Replace with something to output samples in whatever format
         if filename:
             np.savetxt(os.path.join(
-                self.NS.output_folder,'posterior.dat'),
+                self.NS.output_folder, filename),
                 posterior_samples.ravel(),
                 header=' '.join(posterior_samples.dtype.names),
                 newline='\n',delimiter=' ')
@@ -318,11 +332,15 @@ class CPNest(object):
         # if we sampled the prior, the nested samples are samples from the prior
         if self.NS.prior_sampling:
             prior_samples.append(self.get_nested_samples())
-
+        
+        if not prior_samples:
+            self.logger.critical('ERROR, no prior samples found!')
+            return None
+        
         prior_samples = stack_arrays([p for p in prior_samples])
         if filename:
             np.savetxt(os.path.join(
-                       self.NS.output_folder,'prior.dat'),
+                       self.NS.output_folder, filename),
                        self.prior_samples.ravel(),
                        header=' '.join(self.prior_samples.dtype.names),
                        newline='\n',delimiter=' ')
@@ -352,12 +370,16 @@ class CPNest(object):
             if 'mcmc_chain' in file:
                 mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
                 os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+        
+        if not mcmc_samples:
+            self.logger.critical('ERROR, no MCMC samples found!')
+            return None
             
         # now stack all the mcmc chains
         mcmc_samples = stack_arrays([p for p in mcmc_samples])
         if filename:
             np.savetxt(os.path.join(
-                       self.NS.output_folder,'mcmc.dat'),
+                       self.NS.output_folder, filename),
                        self.mcmc_samples.ravel(),
                        header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
