@@ -68,12 +68,15 @@ class CPNest(object):
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
         'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
-
+    
+    prior_sampling: `boolean`
+        generates samples from the prior
+    
     n_periodic_checkpoint: `int`
         **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
-    
+
     periodic_checkpoint_interval: `float`
         checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
@@ -91,6 +94,7 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
+                 prior_sampling = False,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None
                  ):
@@ -151,7 +155,7 @@ class CPNest(object):
                         output         = output,
                         verbose        = verbose,
                         seed           = self.seed,
-                        prior_sampling = False,
+                        prior_sampling = prior_sampling,
                         manager        = self.manager)
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
@@ -168,6 +172,7 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
+                                  sample_prior = prior_sampling,
                                   manager     = self.manager
                                   )
             else:
@@ -189,6 +194,7 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
+                                  sample_prior = prior_sampling,
                                   manager     = self.manager
                                   )
             else:
@@ -222,6 +228,10 @@ class CPNest(object):
             sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
+        if self.verbose>=3 or self.NS.prior_sampling is True:
+            self.prior_samples = self.get_prior_samples(filename=None)
+        if self.verbose>=3 and self.NS.prior_sampling is False:
+            self.mcmc_samples = self.get_mcmc_samples(filename=None)
         if self.verbose>1: self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
@@ -270,40 +280,7 @@ class CPNest(object):
         nested_samples     = self.get_nested_samples()
         posterior_samples  = draw_posterior_many([nested_samples],[self.nlive],verbose=self.verbose)
         posterior_samples  = np.array(posterior_samples)
-        self.prior_samples = {n:None for n in self.user.names}
-        self.mcmc_samples  = {n:None for n in self.user.names}
-        # if we run with full verbose, read in and output
-        # the mcmc thinned posterior samples
-        if self.verbose >= 3:
-            from .nest2pos import resample_mcmc_chain
-            from numpy.lib.recfunctions import stack_arrays
 
-            prior_samples = []
-            mcmc_samples  = []
-            for file in os.listdir(self.NS.output_folder):
-                if 'prior_samples' in file:
-                    prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
-                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
-                elif 'mcmc_chain' in file:
-                    mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
-                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
-
-            # first deal with the prior samples
-            self.prior_samples = stack_arrays([p for p in prior_samples])
-            if filename:
-                np.savetxt(os.path.join(
-                           self.NS.output_folder,'prior.dat'),
-                           self.prior_samples.ravel(),
-                           header=' '.join(self.prior_samples.dtype.names),
-                           newline='\n',delimiter=' ')
-            # now stack all the mcmc chains
-            self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
-            if filename:
-                np.savetxt(os.path.join(
-                           self.NS.output_folder,'mcmc.dat'),
-                           self.mcmc_samples.ravel(),
-                           header=' '.join(self.mcmc_samples.dtype.names),
-                           newline='\n',delimiter=' ')
         # TODO: Replace with something to output samples in whatever format
         if filename:
             np.savetxt(os.path.join(
@@ -313,39 +290,117 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
         return posterior_samples
 
+    def get_prior_samples(self, filename='prior.dat'):
+        """
+        Returns prior samples
+
+        Parameters
+        ----------
+        filename : string
+                   If given, file to save posterior samples to
+
+        Returns
+        -------
+        pos : :obj:`numpy.ndarray`
+        """
+        import numpy as np
+        import os
+
+        from numpy.lib.recfunctions import stack_arrays
+        
+        # read in the samples from the prior coming from each sampler
+        prior_samples = []
+        for file in os.listdir(self.NS.output_folder):
+            if 'prior_samples' in file:
+                prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
+                os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+        
+        # if we sampled the prior, the nested samples are samples from the prior
+        if self.NS.prior_sampling:
+            prior_samples.append(self.get_nested_samples())
+
+        prior_samples = stack_arrays([p for p in prior_samples])
+        if filename:
+            np.savetxt(os.path.join(
+                       self.NS.output_folder,'prior.dat'),
+                       self.prior_samples.ravel(),
+                       header=' '.join(self.prior_samples.dtype.names),
+                       newline='\n',delimiter=' ')
+
+        return prior_samples
+
+    def get_mcmc_samples(self, filename='mcmc.dat'):
+        """
+        Returns resampled mcmc samples
+
+        Parameters
+        ----------
+        filename : string
+                   If given, file to save posterior samples to
+
+        Returns
+        -------
+        pos : :obj:`numpy.ndarray`
+        """
+        import numpy as np
+        import os
+        from .nest2pos import resample_mcmc_chain
+        from numpy.lib.recfunctions import stack_arrays
+
+        mcmc_samples  = []
+        for file in os.listdir(self.NS.output_folder):
+            if 'mcmc_chain' in file:
+                mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
+                os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+            
+        # now stack all the mcmc chains
+        mcmc_samples = stack_arrays([p for p in mcmc_samples])
+        if filename:
+            np.savetxt(os.path.join(
+                       self.NS.output_folder,'mcmc.dat'),
+                       self.mcmc_samples.ravel(),
+                       header=' '.join(self.mcmc_samples.dtype.names),
+                       newline='\n',delimiter=' ')
+        return mcmc_samples
+    
     def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
         """
         pos = self.posterior_samples
-        if self.verbose >= 3:
+        if self.verbose>=3 and self.NS.prior_sampling is False:
             pri = self.prior_samples
             mc  = self.mcmc_samples
+        elif self.verbose>=3 or self.NS.prior_sampling is True:
+            pri = self.prior_samples
+            mc  = None
         else:
             pri = None
             mc  = None
         from . import plot
-        for n in pos.dtype.names:
-            plot.plot_hist(pos[n].ravel(), name = n,
-                           prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
-                           mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
-                           filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
+        if self.NS.prior_sampling is False:
+            for n in pos.dtype.names:
+                plot.plot_hist(pos[n].ravel(), name = n,
+                               prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
+                               mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
+                               filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
         for n in self.nested_samples.dtype.names:
             plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.pdf'.format(n)))
-        import numpy as np
-        plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-        if self.verbose >= 3:
-            plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
-            plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
-        else:
-            plotting_priors = None
-            plotting_mcmc   = None
-        if corner:
-            plot.plot_corner(plotting_posteriors,
-                             ps=plotting_priors,
-                             ms=plotting_mcmc,
-                             labels=pos.dtype.names,
-                             filename=os.path.join(self.output,'corner.pdf'))
+        if self.NS.prior_sampling is False:
+            import numpy as np
+            plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
+            if self.verbose >= 3:
+                plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
+                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
+            else:
+                plotting_priors = None
+                plotting_mcmc   = None
+            if corner:
+                plot.plot_corner(plotting_posteriors,
+                                 ps=plotting_priors,
+                                 ms=plotting_mcmc,
+                                 labels=pos.dtype.names,
+                                 filename=os.path.join(self.output,'corner.pdf'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')

@@ -16,6 +16,8 @@ from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
 
+from .nest2pos import acl
+
 import pickle
 __checkpoint_flag = False
 
@@ -64,13 +66,15 @@ class Sampler(object):
     def __init__(self,
                  model,
                  maxmcmc,
-                 seed        = None,
-                 output      = None,
-                 verbose     = False,
-                 poolsize    = 1000,
-                 proposal    = None,
-                 resume_file = None,
-                 manager     = None):
+                 seed         = None,
+                 output       = None,
+                 verbose      = False,
+                 store_chain  = False,
+                 sample_prior = False,
+                 poolsize     = 1000,
+                 proposal     = None,
+                 resume_file  = None,
+                 manager      = None):
 
         self.seed = seed
         self.model = model
@@ -80,7 +84,6 @@ class Sampler(object):
         self.manager = manager
         self.logLmin = self.manager.logLmin
         self.logLmax = self.manager.logLmax
-
         self.logger = logging.getLogger('CPNest')
 
         if proposal is None:
@@ -100,7 +103,9 @@ class Sampler(object):
         self.mcmc_counter       = 0
         self.initialised        = False
         self.output             = output
-        self.samples            = [] # the list of samples from the mcmc chain
+        self.sample_prior       = sample_prior
+        self.store_chain        = store_chain
+        self.samples            = None # the list of samples from the mcmc chain
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
         self.last_checkpoint_time = time.time()
 
@@ -124,13 +129,18 @@ class Sampler(object):
 
         self.proposal.set_ensemble(self.evolution_points)
 
+        # initialise the structure to store the mcmc chain
+        self.samples = []
+
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
-        if self.verbose >= 3:
+            self.estimate_nmcmc_on_the_fly()
+
+        if self.sample_prior is True or self.verbose>=3:
             # save the poolsize as prior samples
-            
+
             prior_samples = []
             for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -146,7 +156,7 @@ class Sampler(object):
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
-    def estimate_nmcmc(self, safety=5, tau=None):
+    def estimate_nmcmc_on_the_fly(self, safety=5, tau=None):
         """
         Estimate autocorrelation length of chain using acceptance fraction
         ACL = (2/acc) - 1
@@ -166,6 +176,30 @@ class Sampler(object):
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
 
+        return self.Nmcmc
+
+    def estimate_nmcmc(self):
+        """
+        Estimate autocorrelation length of the chain
+        """
+        # first of all, build a numpy array out of
+        # the stored samples
+        ACL = []
+        if not self.store_chain:
+            samples = np.array([self.samples[j].values for j in range(0,len(self.samples))])
+            # if we are not storing the full chain, compute the ACL on the full set of samples we
+            # kept
+            ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        else:
+            # if we are storing the chain, look only at the last maxmcmc samples, to avoid
+            # reconsidering the old samples
+            samples = np.array([self.samples[j].values for j in range(-self.maxmcmc,0)])
+            ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+        self.Nmcmc = int(np.max(ACL))
+        if (not self.store_chain) and (len(self.samples) > self.maxmcmc):
+            self.samples = []
+        if self.Nmcmc < 1:
+            self.Nmcmc = 1
         return self.Nmcmc
 
     def produce_sample(self):
@@ -214,21 +248,21 @@ class Sampler(object):
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
                 # Send the sample to the Nested Sampler
                 self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
-            
+
             # otherwise, keep on sampling from the previous boundary
             else:
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize//4))==0:
                 self.proposal.set_ensemble(self.evolution_points)
+                self.estimate_nmcmc()
 
             self.counter += 1
 
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
 #        self.samples.extend(self.evolution_points)
-        
-        if self.verbose >=3:
-            
+
+        if self.verbose >=3 and not(self.sample_prior):
             self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray()
                                                   for j in range(0,len(self.samples))],usemask=False)
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
@@ -307,16 +341,16 @@ class MetropolisHastingsSampler(Sampler):
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
+                # append the sample to the array of samples
+                self.samples.append(oldparam)
 
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            if np.isfinite(logLmin) and self.verbose >=3:
-                self.samples.append(oldparam)
+
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.estimate_nmcmc()
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter += sub_counter
             self.acceptance    = float(self.mcmc_accepted)/float(self.mcmc_counter)
@@ -349,11 +383,10 @@ class HamiltonianMonteCarloSampler(Sampler):
                         global_lmax = max(global_lmax, newparam.logL)
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
-
+            
+            # append the sample to the array of samples
+            self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
-
-            if self.verbose >= 3:
-                self.samples.append(oldparam)
 
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
@@ -363,7 +396,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
-                p.update_trajectory_length(self.estimate_nmcmc())
+                p.update_trajectory_length(self.Nmcmc)
                 #print(p.dt,p.L)
 
             yield (sub_counter, oldparam)

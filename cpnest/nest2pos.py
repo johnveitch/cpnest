@@ -3,6 +3,8 @@ import numpy as np
 from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
+from scipy.stats import pearsonr
+#from statsmodels.tsa.ar_model import AutoReg
 
 if not logging.Logger.manager.loggerDict:
     LOGGER = logging.getLogger('nest2pos')
@@ -147,7 +149,7 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
     ACL = []
     for n in chain.dtype.names:
         if n != 'logL' and n != 'logPrior':
-            ACL.append(acl(autocorrelation(chain[n])))
+            ACL.append(acl(chain[n]))
     ACL = int(np.round(np.max(ACL)))
 
     LOGGER.critical('Measured autocorrelation length {0!s}'.format(str(ACL)))
@@ -170,15 +172,34 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
 def autocorrelation(x):
     """
     Compute the autocorrelation of the chain
+    using an FFT
     """
-    N = len(x)
-    X=np.fft.fft(x-x.mean())
-    # We take the real part just to convert the complex output of fft to a real numpy float. The imaginary part if already 0 when coming out of the fft.
-    R = np.real(np.fft.ifft(X*X.conj()))
-    # Divide by an additional factor of 1/N since we are taking two fft and one ifft without unitary normalization, see: https://docs.scipy.org/doc/numpy/reference/routines.fft.html#module-numpy.fft
-    return R/N
+    mean=x.mean()
+    var=np.var(x)
+    xp=x-mean
 
-def acl(acf):
-    for i in range(len(acf)):
-        if acf[i] < i/5.0:
-            return acf[i]+1
+    cf=np.fft.fft(xp)
+    sf=cf.conjugate()*cf
+    corr=np.fft.ifft(sf).real/var/len(x)
+    return corr
+
+def acl(x, tolerance=0.01):
+    """
+    Compute autocorrelation time for x
+    """
+    T=1
+    i=1
+    acf = autocorrelation(x)
+    while acf[i]>tolerance and i<len(x):
+        T+=2*acf[i]
+        i+=1
+    return T
+
+#def acl_AR(x):
+#    """
+#    Eq. 7 from https://arxiv.org/pdf/1011.0175.pdf
+#    """
+#    M = AutoReg(x)
+#    res = M.fit(ic='aic')
+#    ac = autocorrelation(x)[:res.k_ar]
+#    return (1.0-np.dot(ac.T,res.params))/(1.0-np.dot(np.ones(res.k_ar).T,res.params))**2
