@@ -149,7 +149,7 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
     ACL = []
     for n in chain.dtype.names:
         if n != 'logL' and n != 'logPrior':
-            ACL.append(acl(autocorrelation(chain[n])))
+            ACL.append(acl(chain[n]))
     ACL = int(np.round(np.max(ACL)))
 
     LOGGER.critical('Measured autocorrelation length {0!s}'.format(str(ACL)))

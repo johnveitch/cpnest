@@ -138,7 +138,7 @@ class Sampler(object):
             _, p = next(self.yield_sample(-np.inf))
             self.estimate_nmcmc_on_the_fly()
 
-        if self.sample_prior is True:
+        if self.sample_prior is True or self.verbose>=3:
             # save the poolsize as prior samples
 
             prior_samples = []
@@ -185,20 +185,21 @@ class Sampler(object):
         # first of all, build a numpy array out of
         # the stored samples
         ACL = []
-        samples = np.array(self.samples)
         if not self.store_chain:
+            samples = np.array([self.samples[j].values for j in range(0,len(self.samples))])
             # if we are not storing the full chain, compute the ACL on the full set of samples we
             # kept
             ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
         else:
             # if we are storing the chain, look only at the last maxmcmc samples, to avoid
             # reconsidering the old samples
-            ACL = [acl(samples[-self.maxmcmc:,i]) for i in range(samples.shape[1])]
+            samples = np.array([self.samples[j].values for j in range(-self.maxmcmc,0)])
+            ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
         self.Nmcmc = int(np.max(ACL))
         if (not self.store_chain) and (len(self.samples) > self.maxmcmc):
             self.samples = []
-        if self.Nmcmc < 20:
-            self.Nmcmc = 20
+        if self.Nmcmc < 1:
+            self.Nmcmc = 1
         return self.Nmcmc
 
     def produce_sample(self):
@@ -261,8 +262,7 @@ class Sampler(object):
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
 #        self.samples.extend(self.evolution_points)
 
-        if self.verbose >=3:
-
+        if self.verbose >=3 and not(self.sample_prior):
             self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray()
                                                   for j in range(0,len(self.samples))],usemask=False)
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
@@ -342,7 +342,7 @@ class MetropolisHastingsSampler(Sampler):
                         logp_old = newparam.logP
                         sub_accepted+=1
                 # append the sample to the array of samples
-                self.samples.append(oldparam.values)
+                self.samples.append(oldparam)
 
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
@@ -385,7 +385,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                         sub_accepted   += 1
             
             # append the sample to the array of samples
-            self.samples.append(oldparam.values)
+            self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
 
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
