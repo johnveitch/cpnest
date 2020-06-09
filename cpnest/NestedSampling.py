@@ -4,6 +4,7 @@ import os
 import pickle
 import time
 import logging
+import bisect
 import numpy as np
 from numpy import logaddexp
 from numpy import inf
@@ -182,6 +183,8 @@ class NestedSampler(object):
         self.logLmax        = self.manager.logLmax
         self.iteration      = 0
         self.nested_samples = []
+        self.log_likelihoods = []
+        self.insertion_indices = []
         self.logZ           = None
         self.state          = _NSintegralState(self.Nlive)
         sys.stdout.flush()
@@ -252,7 +255,7 @@ class NestedSampler(object):
             self.state.increment(self.params[k].logL)
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
-            
+
         # Make sure we are mixing the chains
         for i in np.random.permutation(range(len(self.worst))): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
@@ -267,6 +270,7 @@ class NestedSampler(object):
                 if proposed.logL > self.logLmin.value:
                     # replace worst point with new one
                     self.params[k]     = proposed
+                    self.add_insertion_index(proposed)
                     self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     self.accepted += 1
                     break
@@ -291,6 +295,16 @@ class NestedSampler(object):
         self.logLmin.value = np.float128(self.params[n-1].logL)
         return np.float128(self.logLmin.value)
 
+    def add_insertion_index(self, point):
+        """
+        Gets the insertion index for a proposed point given
+        the current set of live points
+        """
+        current_logL = sorted(self.log_likelihoods[-self.Nlive:])
+        index = bisect.bisect(current_logL, point.logL)
+        self.insertion_indices.append(index)
+        self.log_likelihoods.append(point.logL)
+
     def reset(self):
         """
         Initialise the pool of `cpnest.parameter.LivePoint` by
@@ -310,6 +324,7 @@ class NestedSampler(object):
                             self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
                             self.logger.warn("You may want to check your likelihood function")
                         if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
+                            self.log_likelihoods.append(self.params[i].logL)
                             i+=1
                             pbar.update()
                             break

@@ -73,7 +73,7 @@ class CPNest(object):
         **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
-    
+
     periodic_checkpoint_interval: `float`
         checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
@@ -337,6 +337,8 @@ class CPNest(object):
         if self.verbose >= 3:
             plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
             plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
+            plot.plot_indices(self.NS.insertion_indices, self.nlive,
+                    filename=os.path.join(self.output, 'insertion_indices.pdf'))
         else:
             plotting_priors = None
             plotting_mcmc   = None

@@ -71,6 +71,30 @@ def plot_hist(x, name=None, prior_samples=None, mcmc_samples=None, filename=None
         plt.savefig(filename, bbox_inches='tight')
     plt.close()
 
+
+def plot_indices(indices, nlive, name=None, filename=None):
+    """
+    Histogram indices for index insertion tests
+    """
+    import random
+    fig = plt.figure()
+    ax  = fig.add_subplot(111)
+    ax.hist(indices, density = True, color='tab:blue', linewidth = 1.25,
+                histtype='step', bins=len(indices)//50, label = 'produced')
+    u = [random.uniform(0, nlive) for _ in range(len(indices))]
+    ax.hist(u, density = True, color='tab:orange', linewidth = 1.25,
+                histtype='step', bins=len(u)//50, label = 'expected')
+    ax.legend(loc='upper left')
+    ax.set_ylabel('insertion indices')
+    if name is not None:
+        ax.set_xlabel(name)
+        if filename is None:
+            filename=name+'_hist.pdf'
+    if filename is not None:
+        plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+
+
 def plot_corner(xs, ps=None, ms=None, filename=None, **kwargs):
     """
     Produce a corner plot
