@@ -72,7 +72,7 @@ def plot_hist(x, name=None, prior_samples=None, mcmc_samples=None, filename=None
     plt.close()
 
 
-def plot_indices(indices, nlive, name=None, filename=None):
+def plot_indices(indices, nlive=None, u=None, name=None, filename=None):
     """
     Histogram indices for index insertion tests
     """
@@ -81,11 +81,15 @@ def plot_indices(indices, nlive, name=None, filename=None):
     ax  = fig.add_subplot(111)
     ax.hist(indices, density = True, color='tab:blue', linewidth = 1.25,
                 histtype='step', bins=len(indices)//50, label = 'produced')
-    u = [random.uniform(0, nlive) for _ in range(len(indices))]
-    ax.hist(u, density = True, color='tab:orange', linewidth = 1.25,
-                histtype='step', bins=len(u)//50, label = 'expected')
+    if u is not None:
+        ax.hist(u, density = True, color='tab:orange', linewidth = 1.25,
+                    histtype='step', bins=len(u)//50, label = 'expected')
+    if nlive is not None:
+        ax.axhline(1 / nlive, color='black', linewidth=1.25, linestyle=':',
+                label='pmf')
+
     ax.legend(loc='upper left')
-    ax.set_ylabel('insertion indices')
+    ax.set_xlabel('insertion indices')
     if name is not None:
         ax.set_xlabel(name)
         if filename is None:

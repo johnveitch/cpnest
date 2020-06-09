@@ -222,6 +222,8 @@ class CPNest(object):
             sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
+        chisq, p = self.check_insertion_indices()
+        self.logger.warning('Insertion indices checks: chi-square={0:.4}, p-value={1:.2}'.format(chisq, p))
         if self.verbose>1: self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
@@ -313,6 +315,19 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
         return posterior_samples
 
+
+    def check_insertion_indices(self):
+        """
+        Compute the p-statistic between the distribution of
+        insertion indices and the uniform distibution U(0, nlive-1)
+        and produce diagnostic plots
+        """
+        from scipy.stats import chisquare
+        f, bins = np.histogram(self.NS.insertion_indices, bins=np.arange(self.nlive),
+                density=True)
+        chisq, p = chisquare(f)
+        return chisq, p
+
     def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
@@ -337,8 +352,6 @@ class CPNest(object):
         if self.verbose >= 3:
             plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
             plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
-            plot.plot_indices(self.NS.insertion_indices, self.nlive,
-                    filename=os.path.join(self.output, 'insertion_indices.pdf'))
         else:
             plotting_priors = None
             plotting_mcmc   = None
@@ -348,6 +361,9 @@ class CPNest(object):
                              ms=plotting_mcmc,
                              labels=pos.dtype.names,
                              filename=os.path.join(self.output,'corner.pdf'))
+
+        plot.plot_indices(self.NS.insertion_indices, nlive=self.nlive,
+                filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
