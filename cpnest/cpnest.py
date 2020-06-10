@@ -222,7 +222,7 @@ class CPNest(object):
             sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
-        self.check_insertion_indices()
+        self.check_insertion_indices(filename='insertion_indices.dat')
         if self.verbose>1: self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
@@ -315,7 +315,7 @@ class CPNest(object):
         return posterior_samples
 
 
-    def check_insertion_indices(self):
+    def check_insertion_indices(self, filename=None):
         """
         Compute the p-statistic between the distribution of
         insertion indices and the uniform distibution U(0, nlive-1)
@@ -333,6 +333,12 @@ class CPNest(object):
             plot_indices(self.NS.insertion_indices, nlive=self.nlive, u=u,
                     filename=os.path.join(self.output, 'insertion_indices.pdf'))
         self.logger.warning('Insertion indices checks: ks-statistic={0:.4}, p-value={1:.2}'.format(D, ks_p))
+
+        if filename is not None:
+            np.savetxt(os.path.join(
+                self.NS.output_folder, filename),
+                self.NS.insertion_indices,
+                newline='\n',delimiter=' ')
 
     def plot(self, corner = True):
         """
