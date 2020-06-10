@@ -79,7 +79,7 @@ class CPNest(object):
         Default: None (disabled)
 
     prior_sampling: boolean
-        produce Nlive samples from the prior.
+        produce nlive samples from the prior.
         Default: False
 
     """
