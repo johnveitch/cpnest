@@ -8,6 +8,7 @@ import bisect
 import numpy as np
 from numpy import logaddexp
 from numpy import inf
+from scipy.stats import ksone
 from math import isnan
 from . import nest2pos
 from .nest2pos import logsubexp
@@ -184,6 +185,7 @@ class NestedSampler(object):
         self.iteration      = 0
         self.nested_samples = []
         self.insertion_indices = []
+        self.rolling_p      = []
         self.logZ           = None
         self.state          = _NSintegralState(self.Nlive)
         sys.stdout.flush()
@@ -303,6 +305,38 @@ class NestedSampler(object):
         index = bisect.bisect(current_logL, point.logL)
         self.insertion_indices.append(index)
 
+    def check_insertion_indices(self, rolling=True, filename=None):
+        """
+        Checking the distibution of the insertion indices either during
+        the nested sampling run (rolling=True) or for the whole run
+        (rolling=False).
+        """
+        if rolling:
+            indices = self.insertion_indices[-self.Nlive:]
+        else:
+            indices = self.insertion_indices
+
+        analytic_cdf = np.arange(self.Nlive + 1) / self.Nlive
+        counts, _ = np.histogram(indices, bins=np.arange(self.Nlive + 1))
+        cdf = np.cumsum(counts) / len(indices)
+        gaps = np.column_stack([cdf - analytic_cdf[:self.Nlive],
+            analytic_cdf[1:] - cdf])
+        D = np.max(gaps)
+        p = ksone.sf(D, self.Nlive)
+
+        if rolling:
+            self.logger.warning('Rolling KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
+            self.rolling_p.append(p)
+        else:
+            self.logger.warning('Final KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
+
+        if filename is not None:
+            np.savetxt(os.path.join(
+                self.output_folder, filename),
+                self.insertion_indices,
+                newline='\n',delimiter=' ')
+
+
     def reset(self):
         """
         Initialise the pool of `cpnest.parameter.LivePoint` by
@@ -354,6 +388,10 @@ class NestedSampler(object):
                 if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
                     self.checkpoint()
                     self.last_checkpoint_time = time.time()
+
+                if (self.iteration % self.Nlive) < self.manager.nthreads:
+                    self.check_insertion_indices()
+
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint

@@ -222,7 +222,7 @@ class CPNest(object):
             sys.exit(130)
 
         self.posterior_samples = self.get_posterior_samples(filename=None)
-        self.check_insertion_indices(filename='insertion_indices.dat')
+        self.NS.check_insertion_indices(rolling=False, filename='insertion_indices.dat')
         if self.verbose>1: self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
@@ -314,32 +314,6 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
         return posterior_samples
 
-
-    def check_insertion_indices(self, filename=None):
-        """
-        Compute the p-statistic between the distribution of
-        insertion indices and the uniform distibution U(0, nlive-1)
-        and produce diagnostic plots
-        """
-        from scipy.stats import chisquare, ks_2samp
-        from .plot import plot_indices
-        f, bins = np.histogram(self.NS.insertion_indices, bins=np.arange(self.nlive),
-                density=False)
-        chisq, chi_p = chisquare(f)
-        u = np.random.randint(0, self.nlive, len(self.NS.insertion_indices))
-        self.logger.warning('Insertion indices checks: chi-square={0:.4}, p-value={1:.2}'.format(chisq, chi_p))
-        D, ks_p = ks_2samp(self.NS.insertion_indices, u)
-        if self.verbose > 1:
-            plot_indices(self.NS.insertion_indices, nlive=self.nlive, u=u,
-                    filename=os.path.join(self.output, 'insertion_indices.pdf'))
-        self.logger.warning('Insertion indices checks: ks-statistic={0:.4}, p-value={1:.2}'.format(D, ks_p))
-
-        if filename is not None:
-            np.savetxt(os.path.join(
-                self.NS.output_folder, filename),
-                self.NS.insertion_indices,
-                newline='\n',delimiter=' ')
-
     def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
@@ -373,6 +347,9 @@ class CPNest(object):
                              ms=plotting_mcmc,
                              labels=pos.dtype.names,
                              filename=os.path.join(self.output,'corner.pdf'))
+        if self.verbose >= 3:
+            plot.plot_indices(self.NS.insertion_indices, nlive=self.nlive,
+                    filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
 
     def worker_sampler(self, producer_pipe, logLmin):
