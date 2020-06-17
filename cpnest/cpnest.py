@@ -140,11 +140,6 @@ class CPNest(object):
         self.poolsize = poolsize
         self.posterior_samples = None
         self.prior_sampling = prior_sampling
-#        self.manager = RunManager(
-#            nthreads=self.nthreads,
-#            periodic_checkpoint_interval=periodic_checkpoint_interval
-#        )
-#        self.manager.start()
         self.user     = usermodel
         self.resume = resume
 

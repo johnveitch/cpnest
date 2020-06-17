@@ -43,6 +43,6 @@ def test_all():
 if __name__=='__main__':
 #    unittest.main(verbosity=2)
     gaussmodel = GaussianModel()
-    work=cpnest.CPNest(gaussmodel,verbose=2,nthreads=8,nlive=1000,maxmcmc=5000,poolsize=1000)
+    work=cpnest.CPNest(gaussmodel,verbose=2,nthreads=8,nlive=1000,maxmcmc=5000,poolsize=1000,resume=1)
     work.run()
  

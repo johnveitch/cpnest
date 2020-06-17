@@ -257,6 +257,7 @@ class NestedSampler(object):
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
 
         # Replace the points we just consumed with the next acceptable ones
+        np.random.shuffle(self.worst)
         for k in self.worst:
             self.iteration += 1
             loops           = 0

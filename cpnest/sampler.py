@@ -234,7 +234,7 @@ class Sampler(object):
 
         if (self.counter%(self.poolsize//4))==0:
             self.proposal.set_ensemble(self.evolution_points)
-            self.estimate_nmcmc()
+#            self.estimate_nmcmc()
 
         self.counter += 1
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
