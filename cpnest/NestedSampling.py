@@ -164,6 +164,7 @@ class NestedSampler(object):
         self.periodic_checkpoint_interval = 3600
         self.logger         = logging.getLogger('CPNest')
         self.model          = model
+        self.nthreads       = len(samplers)
         self.samplers       = samplers
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
@@ -299,18 +300,25 @@ class NestedSampler(object):
         """
         # send all live points to the samplers for start
         i = 0
-        nthreads=len(self.samplers)
-        with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
-            while i < self.Nlive:
-                acceptance,sub_acceptance,self.jumps,self.params[i] = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.model.new_point(), -np.inf))
-                self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
-                if np.isnan(self.params[i].logL):
+        from ray.util import ActorPool
+
+        self.pool = ActorPool(self.samplers)
+
+        with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
+#            while i<self.Nlive:
+            p = self.pool.map(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
+#                p = ray.get([self.samplers[j].produce_sample.remote(self.model.new_point(), -np.inf) for j in range(self.nthreads)])
+            for j,r in enumerate(p):
+                acceptance,sub_acceptance,self.jumps,self.params[j] = r
+#                acceptance,sub_acceptance,self.jumps,self.params[i] = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.model.new_point(), -np.inf))
+                self.queue_counter = (self.queue_counter + 1) % self.nthreads
+                if np.isnan(self.params[j].logL):
                     self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
                     self.logger.warn("You may want to check your likelihood function")
-                if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
-                    i+=1
+                if self.params[j].logP!=-np.inf and self.params[j].logL!=-np.inf:
+                    i+=self.nthreads
                     pbar.update()
-                    
+                        
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()

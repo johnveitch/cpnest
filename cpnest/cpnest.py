@@ -189,7 +189,7 @@ class CPNest(object):
                                                               self.manager,
                                                               self.user)
             self.process_pool.append(sampler)
-            
+        
         # instantiate the nested sampler class
         resume_file = os.path.join(output, "nested_sampler_resume.pkl")
         if not os.path.exists(resume_file) or resume == False:
