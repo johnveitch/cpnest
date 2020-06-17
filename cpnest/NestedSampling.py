@@ -14,7 +14,7 @@ from operator import attrgetter
 from .cpnest import CheckPoint
 
 from tqdm import tqdm
-
+import ray
 
 class _NSintegralState(object):
     """
@@ -101,7 +101,6 @@ class _NSintegralState(object):
             state['logger'] = logging.getLogger("CPNest")
         self.__dict__ = state
 
-
 class NestedSampler(object):
     """
     Nested Sampler class.
@@ -149,22 +148,23 @@ class NestedSampler(object):
 
     def __init__(self,
                  model,
-                 manager        = None,
+                 samplers       = None,
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = None,
+                 n_periodic_checkpoint = None
                  ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
         """
+        self.periodic_checkpoint_interval = 3600
         self.logger         = logging.getLogger('CPNest')
         self.model          = model
-        self.manager        = manager
+        self.samplers       = samplers
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose        = verbose
@@ -178,8 +178,8 @@ class NestedSampler(object):
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
-        self.logLmin        = self.manager.logLmin
-        self.logLmax        = self.manager.logLmax
+        self.logLmin        = -np.inf
+        self.logLmax        = -np.inf
         self.iteration      = 0
         self.nested_samples = []
         self.logZ           = None
@@ -232,7 +232,7 @@ class NestedSampler(object):
         """
         with open(self.evidence_file,"w") as f:
             f.write('#logZ\tlogLmax\tH\n')
-            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax.value, self.state.info))
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax, self.state.info))
 
     def setup_random_seed(self,seed):
         """
@@ -247,16 +247,14 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
+        logLmin = self.get_worst_n_live_points(len(self.samplers))
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
-            
-        # Make sure we are mixing the chains
-        for i in np.random.permutation(range(len(self.worst))): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
-        self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
+        
+        self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
 
         # Replace the points we just consumed with the next acceptable ones
         for k in self.worst:
@@ -264,22 +262,22 @@ class NestedSampler(object):
             loops           = 0
             while(True):
                 loops += 1
-                acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
-                if proposed.logL > self.logLmin.value:
+                acceptance, sub_acceptance, self.jumps, proposed = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[k], self.logLmin))
+                if proposed.logL > self.logLmin:
                     # replace worst point with new one
                     self.params[k]     = proposed
-                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                    self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
                     self.accepted += 1
                     break
                 else:
                     # resend it to the producer
-                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
+                    ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[k], self.logLmin))
                     self.rejected += 1
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
                 self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                 .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax.value))
+                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
                 #sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
@@ -289,8 +287,9 @@ class NestedSampler(object):
         """
         self.params.sort(key=attrgetter('logL'))
         self.worst = np.arange(n)
-        self.logLmin.value = np.float128(self.params[n-1].logL)
-        return np.float128(self.logLmin.value)
+        self.logLmin = self.params[n-1].logL
+        self.logLmax = self.params[-1].logL
+        return self.logLmin
 
     def reset(self):
         """
@@ -299,21 +298,18 @@ class NestedSampler(object):
         """
         # send all live points to the samplers for start
         i = 0
-        nthreads=self.manager.nthreads
+        nthreads=len(self.samplers)
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
             while i < self.Nlive:
-                for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
-                for j in range(nthreads):
-                    while i < self.Nlive:
-                        acceptance,sub_acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
-                        self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
-                        if np.isnan(self.params[i].logL):
-                            self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
-                            self.logger.warn("You may want to check your likelihood function")
-                        if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
-                            i+=1
-                            pbar.update()
-                            break
+                acceptance,sub_acceptance,self.jumps,self.params[i] = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.model.new_point(), -np.inf))
+                self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
+                if np.isnan(self.params[i].logL):
+                    self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
+                    self.logger.warn("You may want to check your likelihood function")
+                if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
+                    i+=1
+                    pbar.update()
+                    
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -330,30 +326,30 @@ class NestedSampler(object):
                 self.nested_samples.append(self.params[i])
             self.write_chain_to_file()
             self.write_evidence_to_file()
-            self.logLmin.value = np.inf
-            self.logLmin.value = np.inf
-            for c in self.manager.consumer_pipes:
-                c.send(None)
+            self.logLmin = np.inf
+            self.logLmax = np.inf
+            for c in self.samplers:
+                ray.get(c.produce_sample.remote(None, np.inf))
             self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
 
         try:
             while self.condition > self.tolerance:
                 self.consume_sample()
-                if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
+                if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
                     self.checkpoint()
                     self.last_checkpoint_time = time.time()
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint
-            for c in self.manager.consumer_pipes:
-                c.send("checkpoint")
+            for c in self.samplers:
+                ray.get(c.produce_sample.remote("checkpoint", 0))
             sys.exit(130)
 
         # Signal worker threads to exit
-        self.logLmin.value = np.inf
-        for c in self.manager.consumer_pipes:
-            c.send(None)
+        self.logLmin = np.inf
+        for c in self.samplers:
+            ray.get(c.produce_sample.remote(None, np.inf))
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
@@ -372,7 +368,7 @@ class NestedSampler(object):
 
         # Some diagnostics
         if self.verbose>1 :
-          self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
+            self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
         return self.state.logZ, self.nested_samples
 
     def checkpoint(self):

@@ -11,7 +11,7 @@ from random import random,randrange
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
-from .cpnest import CheckPoint, RunManager
+from .cpnest import CheckPoint
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
@@ -21,6 +21,7 @@ from .nest2pos import acl
 import pickle
 __checkpoint_flag = False
 
+import ray
 
 class Sampler(object):
     """
@@ -72,19 +73,15 @@ class Sampler(object):
                  sample_prior = False,
                  poolsize     = 1000,
                  proposal     = None,
-                 resume_file  = None,
-                 manager      = None):
+                 resume_file  = None):
 
         self.seed = seed
         self.model = model
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
         self.resume_file = resume_file
-        self.manager = manager
-        self.logLmin = self.manager.logLmin
-        self.logLmax = self.manager.logLmax
         self.logger = logging.getLogger('CPNest')
-
+        self.periodic_checkpoint_interval = 3600
         if proposal is None:
             self.proposal = DefaultProposalCycle()
         else:
@@ -104,7 +101,6 @@ class Sampler(object):
         self.output             = output
         self.sample_prior       = sample_prior
         self.samples            = deque(maxlen = None if self.verbose >=3 else 5*self.maxmcmc) # the list of samples from the mcmc chain
-        self.producer_pipe, self.thread_id = self.manager.connect_producer()
         self.last_checkpoint_time = time.time()
 
     def reset(self):
@@ -112,6 +108,7 @@ class Sampler(object):
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
         and distributing them according to :obj:`cpnest.model.Model.log_prior`
         """
+        self.thread_id = os.getpid()
         np.random.seed(seed=self.seed)
         for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -153,6 +150,8 @@ class Sampler(object):
             self.prior_samples = prior_samples
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
+        self.counter=1
+        __checkpoint_flag=False
 
     def estimate_nmcmc_on_the_fly(self, safety=5, tau=None):
         """
@@ -196,14 +195,14 @@ class Sampler(object):
             self.Nmcmc = 1
         return self.Nmcmc
 
-    def produce_sample(self):
+    def produce_sample(self, point, logLmin):
         try:
-            self._produce_sample()
+            return self._produce_sample(point, logLmin)
         except CheckPoint:
             self.logger.critical("Checkpoint excepted in sampler")
             self.checkpoint()
 
-    def _produce_sample(self):
+    def _produce_sample(self, p, logLmin):
         """
         main loop that takes the worst :obj:`cpnest.parameter.LivePoint` and
         evolves it. Proposed sample is then sent back
@@ -211,48 +210,36 @@ class Sampler(object):
         """
         if not self.initialised:
             self.reset()
+#        if self.manager.checkpoint_flag.value:
+#            self.checkpoint()
+#            sys.exit(130)
 
-        self.counter=1
-        __checkpoint_flag=False
-        while True:
+        if logLmin==np.inf:
+            return 0
 
-            if self.manager.checkpoint_flag.value:
-                self.checkpoint()
-                sys.exit(130)
+        if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
+            self.checkpoint()
+            self.last_checkpoint_time = time.time()
 
-            if self.logLmin.value==np.inf:
-                break
+        if p is None:
+            return 0
+        
+        if p == "checkpoint":
+            self.checkpoint()
+            sys.exit(130)
 
-            if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
-                self.checkpoint()
-                self.last_checkpoint_time = time.time()
+        self.evolution_points.append(p)
+        (Nmcmc, outParam) = next(self.yield_sample(logLmin))
+            # Send the sample to the Nested Sampler
 
-            # if the nested sampler is requesting for an update
-            # produce a sample for it
-            if self.producer_pipe.poll():
-                p = self.producer_pipe.recv()
+        if (self.counter%(self.poolsize//4))==0:
+            self.proposal.set_ensemble(self.evolution_points)
+            self.estimate_nmcmc()
 
-                if p is None:
-                    break
-                if p == "checkpoint":
-                    self.checkpoint()
-                    sys.exit(130)
-
-                self.evolution_points.append(p)
-                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
-                # Send the sample to the Nested Sampler
-                self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
-
-            # otherwise, keep on sampling from the previous boundary
-            else:
-                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
-            # Update the ensemble every now and again
-            if (self.counter%(self.poolsize//4))==0:
-                self.proposal.set_ensemble(self.evolution_points)
-                self.estimate_nmcmc()
-
-            self.counter += 1
-
+        self.counter += 1
+        return self.acceptance, self.sub_acceptance, Nmcmc, outParam
+            
+    def finalise(self):
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
 #        self.samples.extend(self.evolution_points)
 
@@ -308,6 +295,7 @@ class Sampler(object):
         self.__dict__ = state
         self.manager = None
 
+@ray.remote
 class MetropolisHastingsSampler(Sampler):
     """
     metropolis-hastings acceptance rule
@@ -331,7 +319,7 @@ class MetropolisHastingsSampler(Sampler):
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.model.log_likelihood(newparam)
                     if newparam.logL > logLmin:
-                        self.logLmax.value = max(self.logLmax.value, newparam.logL)
+#                        self.logLmax.value = max(self.logLmax.value, newparam.logL)
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
@@ -349,8 +337,10 @@ class MetropolisHastingsSampler(Sampler):
             self.mcmc_counter += sub_counter
             self.acceptance    = float(self.mcmc_accepted)/float(self.mcmc_counter)
             # Yield the new sample
+            self.estimate_nmcmc_on_the_fly()
             yield (sub_counter, oldparam)
 
+@ray.remote
 class HamiltonianMonteCarloSampler(Sampler):
     """
     HamiltonianMonteCarlo acceptance rule

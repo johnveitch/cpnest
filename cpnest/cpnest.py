@@ -9,12 +9,8 @@ import sys
 import signal
 import logging
 
-from multiprocessing.sharedctypes import Value, Array
-from multiprocessing import Lock
-from multiprocessing.managers import SyncManager
-
 import cProfile
-
+import ray
 
 class CheckPoint(Exception):
     print("Checkpoint exception raise")
@@ -103,7 +99,6 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
-                 prior_sampling = False,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False
@@ -114,6 +109,7 @@ class CPNest(object):
         else:
             self.nthreads = nthreads
 
+        ray.init(num_cpus=nthreads)
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
@@ -144,11 +140,11 @@ class CPNest(object):
         self.poolsize = poolsize
         self.posterior_samples = None
         self.prior_sampling = prior_sampling
-        self.manager = RunManager(
-            nthreads=self.nthreads,
-            periodic_checkpoint_interval=periodic_checkpoint_interval
-        )
-        self.manager.start()
+#        self.manager = RunManager(
+#            nthreads=self.nthreads,
+#            periodic_checkpoint_interval=periodic_checkpoint_interval
+#        )
+#        self.manager.start()
         self.user     = usermodel
         self.resume = resume
 
@@ -158,24 +154,11 @@ class CPNest(object):
 
         self.process_pool = []
 
-        # instantiate the nested sampler class
-        resume_file = os.path.join(output, "nested_sampler_resume.pkl")
-        if not os.path.exists(resume_file) or resume == False:
-            self.NS = NestedSampler(self.user,
-                        nlive          = nlive,
-                        output         = output,
-                        verbose        = verbose,
-                        seed           = self.seed,
-                        prior_sampling = self.prior_sampling,
-                        manager        = self.manager)
-        else:
-            self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
-
         # instantiate the sampler class
         for i in range(self.nthreads-nhamiltonian):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
-                sampler = MetropolisHastingsSampler(self.user,
+                sampler = MetropolisHastingsSampler.remote(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
                                   output      = output,
@@ -183,21 +166,19 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
-                                  sample_prior = prior_sampling,
-                                  manager     = self.manager
+                                  sample_prior = prior_sampling
                                   )
             else:
-                sampler = MetropolisHastingsSampler.resume(resume_file,
+                sampler = MetropolisHastingsSampler.resume.remote(resume_file,
                                                            self.manager,
                                                            self.user)
 
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+            self.process_pool.append(sampler)
 
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
-                sampler = HamiltonianMonteCarloSampler(self.user,
+                sampler = HamiltonianMonteCarloSampler.remote(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
                                   output      = output,
@@ -209,11 +190,23 @@ class CPNest(object):
                                   manager     = self.manager
                                   )
             else:
-                sampler = HamiltonianMonteCarloSampler.resume(resume_file,
+                sampler = HamiltonianMonteCarloSampler.resume.remote(resume_file,
                                                               self.manager,
                                                               self.user)
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+            self.process_pool.append(sampler)
+            
+        # instantiate the nested sampler class
+        resume_file = os.path.join(output, "nested_sampler_resume.pkl")
+        if not os.path.exists(resume_file) or resume == False:
+            self.NS = NestedSampler(self.user,
+                        nlive          = nlive,
+                        output         = output,
+                        verbose        = verbose,
+                        seed           = self.seed,
+                        prior_sampling = self.prior_sampling,
+                        samplers       = self.process_pool)
+        else:
+            self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
     def run(self):
         """
@@ -228,12 +221,12 @@ class CPNest(object):
             signal.signal(signal.SIGUSR2, sighandler)
 
         #self.p_ns.start()
-        for each in self.process_pool:
-            each.start()
+#        for each in self.process_pool:
+#            each.start()
         try:
             self.NS.nested_sampling_loop()
-            for each in self.process_pool:
-                each.join()
+#            for each in self.process_pool:
+#                each.join()
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
@@ -450,35 +443,35 @@ class CPNest(object):
         self.manager.checkpoint_flag=1
 
 
-class RunManager(SyncManager):
-    def __init__(self, nthreads=None, **kwargs):
-        self.periodic_checkpoint_interval = kwargs.pop(
-            "periodic_checkpoint_interval", np.inf
-        )
-        super(RunManager,self).__init__(**kwargs)
-        self.nconnected=mp.Value(c_int,0)
-        self.producer_pipes = list()
-        self.consumer_pipes = list()
-        for i in range(nthreads):
-            consumer, producer = mp.Pipe(duplex=True)
-            self.producer_pipes.append(producer)
-            self.consumer_pipes.append(consumer)
-        self.logLmin = None
-        self.logLmax = None
-        self.nthreads=nthreads
-
-    def start(self):
-        super(RunManager, self).start()
-        self.logLmin = mp.Value(c_double,-np.inf)
-        self.logLmax = mp.Value(c_double,-np.inf)
-        self.checkpoint_flag=mp.Value(c_int,0)
-
-    def connect_producer(self):
-        """
-        Returns the producer's end of the pipe
-        """
-        with self.nconnected.get_lock():
-            n = self.nconnected.value
-            pipe = self.producer_pipes[n]
-            self.nconnected.value+=1
-        return pipe, n
+#class RunManager(SyncManager):
+#    def __init__(self, nthreads=None, **kwargs):
+#        self.periodic_checkpoint_interval = kwargs.pop(
+#            "periodic_checkpoint_interval", np.inf
+#        )
+#        super(RunManager,self).__init__(**kwargs)
+#        self.nconnected=mp.Value(c_int,0)
+#        self.producer_pipes = list()
+#        self.consumer_pipes = list()
+#        for i in range(nthreads):
+#            consumer, producer = mp.Pipe(duplex=True)
+#            self.producer_pipes.append(producer)
+#            self.consumer_pipes.append(consumer)
+#        self.logLmin = None
+#        self.logLmax = None
+#        self.nthreads=nthreads
+#
+#    def start(self):
+#        super(RunManager, self).start()
+#        self.logLmin = mp.Value(c_double,-np.inf)
+#        self.logLmax = mp.Value(c_double,-np.inf)
+#        self.checkpoint_flag=mp.Value(c_int,0)
+#
+#    def connect_producer(self):
+#        """
+#        Returns the producer's end of the pipe
+#        """
+#        with self.nconnected.get_lock():
+#            n = self.nconnected.value
+#            pipe = self.producer_pipes[n]
+#            self.nconnected.value+=1
+#        return pipe, n
