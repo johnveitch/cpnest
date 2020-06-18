@@ -81,7 +81,7 @@ class Sampler(object):
         self.maxmcmc = maxmcmc
         self.resume_file = resume_file
         self.logger = logging.getLogger('CPNest')
-        self.periodic_checkpoint_interval = 3600
+        self.periodic_checkpoint_interval = np.inf
         if proposal is None:
             self.proposal = DefaultProposalCycle()
         else:

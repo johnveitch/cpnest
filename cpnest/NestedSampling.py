@@ -161,7 +161,7 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.periodic_checkpoint_interval = 3600
+        self.periodic_checkpoint_interval = np.inf
         self.logger         = logging.getLogger('CPNest')
         self.model          = model
         self.nthreads       = len(samplers)
