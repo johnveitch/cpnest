@@ -256,30 +256,33 @@ class NestedSampler(object):
             logLtmp.append(self.params[k].logL)
         
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
-
+        
+        # pick and copy some of the survivors
+#        copies = np.random.randint(self.nthreads, high=self.Nlive, size=self.nthreads)
         # Replace the points we just consumed with the next acceptable ones
-        np.random.shuffle(self.worst)
-        for k in self.worst:
-            self.iteration += 1
-            loops           = 0
-            while(True):
-                loops += 1
-                acceptance, sub_acceptance, self.jumps, proposed = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[k], self.logLmin))
+        p = self.pool.map(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
+        for i, r in zip(self.worst,p):
+            acceptance,sub_acceptance,self.jumps,proposed = r
+            while True:
+                self.iteration += 1
+                
+    ##                    acceptance, sub_acceptance, self.jumps, proposed = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[k], self.logLmin))
                 if proposed.logL > self.logLmin:
                     # replace worst point with new one
-                    self.params[k]     = proposed
-                    self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
+                    self.params[i]     = proposed
+    ##                        self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
                     self.accepted += 1
                     break
                 else:
                     # resend it to the producer
-                    ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[k], self.logLmin))
+                    acceptance,sub_acceptance,self.jumps,proposed = ray.get(self.samplers[i].produce_sample.remote(self.params[i], self.logLmin))
                     self.rejected += 1
+                    
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
                 self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax))
+                .format(self.iteration, self.jumps, self.acceptance, i, acceptance, sub_acceptance, self.state.info,\
+                  logLtmp[i], self.params[i].logL, self.condition, self.state.logZ, self.logLmax))
                 #sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
