@@ -85,11 +85,11 @@ def plot_indices(indices, nlive=None, u=None, name=None, filename=None):
         ax.hist(u, density = True, color='tab:orange', linewidth = 1.25,
                     histtype='step', bins=len(u)//50, label = 'expected')
     if nlive is not None:
-        ax.axhline(1 / nlive, color='black', linewidth=1.25, linestyle=':',
-                label='pmf')
+        ax.axhline(1, color='black', linewidth=1.25, linestyle=':',
+                label='pdf')
 
     ax.legend(loc='upper left')
-    ax.set_xlabel('insertion indices')
+    ax.set_xlabel('insertion indices [0, 1]')
     if name is not None:
         ax.set_xlabel(name)
         if filename is None:

@@ -8,7 +8,7 @@ import bisect
 import numpy as np
 from numpy import logaddexp
 from numpy import inf
-from scipy.stats import ksone
+from scipy.stats import kstest
 from math import isnan
 from . import nest2pos
 from .nest2pos import logsubexp
@@ -16,6 +16,50 @@ from operator import attrgetter
 from .cpnest import CheckPoint
 
 from tqdm import tqdm
+
+
+class KeyOrderedList(list):
+
+    def __init__(self, iterable, key=lambda x: x):
+        iterable = sorted(iterable, key=key)
+        super(KeyOrderedList, self).__init__(iterable)
+
+        self._key = key
+        self._keys = [self._key(v) for v in iterable]
+
+    def search(self, item):
+        """
+        Find the location of a new entry
+        """
+        return bisect.bisect(self._keys, self._key(item))
+
+    def add(self, item):
+        """
+        Update the ordered list with a single item
+        """
+        index = self.search(item)
+        self.insert(index, item)
+        self._keys.insert(index, self._key(item))
+        return index
+
+
+class OrderedLivePoints(KeyOrderedList):
+
+    def __init__(self, live_points):
+        super(OrderedLivePoints, self).__init__(live_points, key=lambda x: x.logL)
+
+    def insert_live_point(self, live_point):
+        """
+        Insert a live point
+        """
+        return self.add(live_point)
+
+    def remove_n_worst_points(self, n):
+        """
+        Remvoe the n worst live points
+        """
+        del self[:n]
+        del self._keys[:n]
 
 
 class _NSintegralState(object):
@@ -250,9 +294,11 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
+        n = len(self.manager.consumer_pipes)
+        self.logLmin.value = np.float128(self.params[n-1].logL)
         logLtmp = []
-        for k in self.worst:
+        worst = list(range(n))
+        for k in worst:
             self.state.increment(self.params[k].logL)
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
@@ -262,16 +308,22 @@ class NestedSampler(object):
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
 
         # Replace the points we just consumed with the next acceptable ones
-        for k in self.worst:
+        # Reversed since the for the first point the current number of
+        # live points is N - n_worst - 1
+        for k in reversed(worst):
             self.iteration += 1
             loops           = 0
             while(True):
                 loops += 1
                 acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
                 if proposed.logL > self.logLmin.value:
-                    # replace worst point with new one
-                    self.params[k]     = proposed
-                    self.add_insertion_index(proposed)
+                    # Insert the new live point into the ordered list and
+                    # return the index at which is was inserted, this will
+                    # include the n worst points, so this subtracted
+                    index = self.params.insert_live_point(proposed)
+                    # the index is then coverted to a value between [0, 1]
+                    # accounting for the variable number of live points
+                    self.insertion_indices.append((index - n) / (self.Nlive - k))
                     self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     self.accepted += 1
                     break
@@ -283,27 +335,11 @@ class NestedSampler(object):
             if self.verbose:
                 self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                 .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[k], self.params[k].logL, self.condition, self.state.logZ, self.logLmax.value))
-                #sys.stderr.flush()
+                  logLtmp[k], proposed.logL, self.condition, self.state.logZ, self.logLmax.value))
 
-    def get_worst_n_live_points(self, n):
-        """
-        selects the lowest likelihood N live points
-        for evolution
-        """
-        self.params.sort(key=attrgetter('logL'))
-        self.worst = np.arange(n)
-        self.logLmin.value = np.float128(self.params[n-1].logL)
-        return np.float128(self.logLmin.value)
-
-    def add_insertion_index(self, point):
-        """
-        Gets the insertion index for a proposed point given
-        the current set of live points
-        """
-        current_logL = sorted([p.logL for p in self.params])
-        index = bisect.bisect(current_logL, point.logL)
-        self.insertion_indices.append(index)
+        # points not removed earlier because they are used to resend to
+        # samplers if rejected
+        self.params.remove_n_worst_points(n)
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
@@ -316,14 +352,7 @@ class NestedSampler(object):
         else:
             indices = self.insertion_indices
 
-        analytic_cdf = np.arange(self.Nlive + 1) / self.Nlive
-        counts, _ = np.histogram(indices, bins=np.arange(self.Nlive + 1))
-        cdf = np.cumsum(counts) / len(indices)
-        gaps = np.column_stack([cdf - analytic_cdf[:self.Nlive],
-            analytic_cdf[1:] - cdf])
-        D = np.max(gaps)
-        p = ksone.sf(D, self.Nlive)
-
+        D, p = kstest(indices, 'uniform', args=(0, 1))
         if rolling:
             self.logger.warning('Rolling KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
             self.rolling_p.append(p)
@@ -345,20 +374,22 @@ class NestedSampler(object):
         # send all live points to the samplers for start
         i = 0
         nthreads=self.manager.nthreads
+        params = [None] * self.Nlive
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
             while i < self.Nlive:
                 for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
                 for j in range(nthreads):
                     while i < self.Nlive:
-                        acceptance,sub_acceptance,self.jumps,self.params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
+                        acceptance,sub_acceptance,self.jumps,params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
                         self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
-                        if np.isnan(self.params[i].logL):
-                            self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
+                        if np.isnan(params[i].logL):
+                            self.logger.warn("Likelihood function returned NaN for params "+str(params))
                             self.logger.warn("You may want to check your likelihood function")
-                        if self.params[i].logP!=-np.inf and self.params[i].logL!=-np.inf:
+                        if params[i].logP!=-np.inf and params[i].logL!=-np.inf:
                             i+=1
                             pbar.update()
                             break
+        self.params = OrderedLivePoints(params)
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -372,7 +403,8 @@ class NestedSampler(object):
             self.reset()
         if self.prior_sampling:
             for i in range(self.Nlive):
-                self.nested_samples.append(self.params[i])
+                #self.nested_samples.append(self.params[i])
+                self.nested_samples = self.params.live_points
             self.write_chain_to_file()
             self.write_evidence_to_file()
             self.logLmin.value = np.inf
