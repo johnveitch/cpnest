@@ -304,7 +304,7 @@ class NestedSampler(object):
             logLtmp.append(self.params[k].logL)
 
         # Make sure we are mixing the chains
-        for i in np.random.permutation(range(len(self.worst))): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
+        for i in np.random.permutation(range(n)): self.manager.consumer_pipes[worst[i]].send(self.params[worst[i]])
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
 
         # Replace the points we just consumed with the next acceptable ones
