@@ -242,8 +242,9 @@ class CPNest(object):
         if self.verbose>=2:
             self.plot(corner = False)
 
+        ray.shutdown()
         #TODO: Clean up the resume pickles
-
+        
     def get_nested_samples(self, filename='nested_samples.dat'):
         """
         returns nested sampling chain

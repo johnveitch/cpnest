@@ -15,6 +15,7 @@ from .cpnest import CheckPoint
 
 from tqdm import tqdm
 import ray
+from ray.util import ActorPool
 
 class _NSintegralState(object):
     """
@@ -189,6 +190,8 @@ class NestedSampler(object):
         self.output_folder  = output
         self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
         header              = open(os.path.join(output,'header.txt'),'w')
+        self.pool           = ActorPool(self.samplers)
+        
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
@@ -248,7 +251,8 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(self.samplers))
+        n = len(self.samplers)
+        logLmin = self.get_worst_n_live_points(n)
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
@@ -257,31 +261,27 @@ class NestedSampler(object):
         
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
-        # pick and copy some of the survivors
-#        copies = np.random.randint(self.nthreads, high=self.Nlive, size=self.nthreads)
         # Replace the points we just consumed with the next acceptable ones
-        p = self.pool.map(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
+        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
         for i, r in zip(self.worst,p):
             acceptance,sub_acceptance,self.jumps,proposed = r
             while True:
                 self.iteration += 1
-                
-    ##                    acceptance, sub_acceptance, self.jumps, proposed = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[k], self.logLmin))
                 if proposed.logL > self.logLmin:
                     # replace worst point with new one
-                    self.params[i]     = proposed
-    ##                        self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
+                    self.params[i] = proposed
                     self.accepted += 1
                     break
                 else:
                     # resend it to the producer
-                    acceptance,sub_acceptance,self.jumps,proposed = ray.get(self.samplers[i].produce_sample.remote(self.params[i], self.logLmin))
+                    acceptance,sub_acceptance,self.jumps,proposed = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[i], self.logLmin))
                     self.rejected += 1
+            self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
                     
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
                 self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                .format(self.iteration, self.jumps, self.acceptance, i, acceptance, sub_acceptance, self.state.info,\
+                .format(self.iteration, self.jumps, self.acceptance, self.queue_counter, acceptance, sub_acceptance, self.state.info,\
                   logLtmp[i], self.params[i].logL, self.condition, self.state.logZ, self.logLmax))
                 #sys.stderr.flush()
 
@@ -303,13 +303,10 @@ class NestedSampler(object):
         """
         # send all live points to the samplers for start
         i = 0
-        from ray.util import ActorPool
-
-        self.pool = ActorPool(self.samplers)
 
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
 #            while i<self.Nlive:
-            p = self.pool.map(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
+            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
 #                p = ray.get([self.samplers[j].produce_sample.remote(self.model.new_point(), -np.inf) for j in range(self.nthreads)])
             for j,r in enumerate(p):
                 acceptance,sub_acceptance,self.jumps,self.params[j] = r
