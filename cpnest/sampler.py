@@ -18,8 +18,7 @@ import numpy.lib.recfunctions as rfn
 
 from .nest2pos import acl
 
-import pickle
-__checkpoint_flag = False
+import dill as pickle
 
 import ray
 
@@ -151,7 +150,6 @@ class Sampler(object):
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
         self.counter=1
-        __checkpoint_flag=False
 
     def estimate_nmcmc_on_the_fly(self, safety=5, tau=None):
         """
@@ -215,13 +213,16 @@ class Sampler(object):
 #            sys.exit(130)
 
         if logLmin==np.inf:
+            self.finalise()
             return 0
 
-        if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
+        if p == "time_checkpoint":
             self.checkpoint()
             self.last_checkpoint_time = time.time()
-
+            return 0
+        
         if p is None:
+            self.finalise()
             return 0
         
         if p == "checkpoint":
@@ -262,7 +263,7 @@ class Sampler(object):
             pickle.dump(self, f)
 
     @classmethod
-    def resume(cls, resume_file, manager, model):
+    def resume(cls, resume_file, model):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
@@ -270,11 +271,9 @@ class Sampler(object):
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         obj.model   = model
-        obj.manager = manager
-        obj.logLmin = obj.manager.logLmin
-        obj.logLmax = obj.manager.logLmax
+        obj.logLmin = obj.logLmin
+        obj.logLmax = obj.logLmax
         obj.logger = logging.getLogger("CPNest")
-        obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
         obj.last_checkpoint_time = time.time()
         return obj
@@ -283,17 +282,12 @@ class Sampler(object):
         state = self.__dict__.copy()
         # Remove the unpicklable entries.
         del state['model']
-        del state['logLmin']
-        del state['logLmax']
-        del state['manager']
-        del state['producer_pipe']
         del state['thread_id']
         del state['logger']
         return state
 
     def __setstate__(self, state):
         self.__dict__ = state
-        self.manager = None
 
 @ray.remote
 class MetropolisHastingsSampler(Sampler):

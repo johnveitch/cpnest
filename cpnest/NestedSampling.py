@@ -1,7 +1,7 @@
 from __future__ import division, print_function
 import sys
 import os
-import pickle
+import dill as pickle
 import time
 import logging
 import numpy as np
@@ -149,7 +149,8 @@ class NestedSampler(object):
 
     def __init__(self,
                  model,
-                 samplers       = None,
+                 pool,
+                 nthreads       = None,
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
@@ -165,8 +166,7 @@ class NestedSampler(object):
         self.periodic_checkpoint_interval = np.inf
         self.logger         = logging.getLogger('CPNest')
         self.model          = model
-        self.nthreads       = len(samplers)
-        self.samplers       = samplers
+        self.nthreads       = nthreads
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose        = verbose
@@ -190,7 +190,7 @@ class NestedSampler(object):
         self.output_folder  = output
         self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
         header              = open(os.path.join(output,'header.txt'),'w')
-        self.pool           = ActorPool(self.samplers)
+        self.pool           = pool
         
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
@@ -251,8 +251,8 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        n = len(self.samplers)
-        logLmin = self.get_worst_n_live_points(n)
+        n = self.nthreads
+        logLmin = self.get_worst_n_live_points(2*n)
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
@@ -262,21 +262,20 @@ class NestedSampler(object):
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
         # Replace the points we just consumed with the next acceptable ones
-        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
-        for i, r in zip(self.worst,p):
-            acceptance,sub_acceptance,self.jumps,proposed = r
-            while True:
+        while len(self.worst) != 0:
+            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
+            for i, r in zip(self.worst,p):
+                acceptance,sub_acceptance,self.jumps,proposed = r
                 self.iteration += 1
                 if proposed.logL > self.logLmin:
                     # replace worst point with new one
                     self.params[i] = proposed
                     self.accepted += 1
+                    self.worst.remove(i)
                     break
                 else:
-                    # resend it to the producer
-                    acceptance,sub_acceptance,self.jumps,proposed = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.params[i], self.logLmin))
                     self.rejected += 1
-            self.queue_counter = (self.queue_counter + 1) % len(self.samplers)
+            self.queue_counter = (self.queue_counter + 1) % self.nthreads
                     
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
@@ -291,7 +290,7 @@ class NestedSampler(object):
         for evolution
         """
         self.params.sort(key=attrgetter('logL'))
-        self.worst = np.arange(n)
+        self.worst = list(range(n))
         self.logLmin = self.params[n-1].logL
         self.logLmax = self.params[-1].logL
         return self.logLmin
@@ -302,21 +301,16 @@ class NestedSampler(object):
         sampling them from the `cpnest.model.log_prior` distribution
         """
         # send all live points to the samplers for start
-        i = 0
-
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
 #            while i<self.Nlive:
             p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
 #                p = ray.get([self.samplers[j].produce_sample.remote(self.model.new_point(), -np.inf) for j in range(self.nthreads)])
             for j,r in enumerate(p):
                 acceptance,sub_acceptance,self.jumps,self.params[j] = r
-#                acceptance,sub_acceptance,self.jumps,self.params[i] = ray.get(self.samplers[self.queue_counter].produce_sample.remote(self.model.new_point(), -np.inf))
-                self.queue_counter = (self.queue_counter + 1) % self.nthreads
                 if np.isnan(self.params[j].logL):
                     self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
                     self.logger.warn("You may want to check your likelihood function")
                 if self.params[j].logP!=-np.inf and self.params[j].logL!=-np.inf:
-                    i+=self.nthreads
                     pbar.update()
                         
         if self.verbose:
@@ -337,8 +331,9 @@ class NestedSampler(object):
             self.write_evidence_to_file()
             self.logLmin = np.inf
             self.logLmax = np.inf
-            for c in self.samplers:
-                ray.get(c.produce_sample.remote(None, np.inf))
+            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
+            for r in p:
+                _ = r
             self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
 
@@ -347,18 +342,21 @@ class NestedSampler(object):
                 self.consume_sample()
                 if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
                     self.checkpoint()
+                    p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote("time_checkpoint", self.logLmin), range(self.nthreads))
+                    for r in p:
+                        _ = r
                     self.last_checkpoint_time = time.time()
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint
-            for c in self.samplers:
-                ray.get(c.produce_sample.remote("checkpoint", 0))
+            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote("checkpoint", self.logLmin), range(self.nthreads))
+            for r in p:
+                _ = r
             sys.exit(130)
 
         # Signal worker threads to exit
-        self.logLmin = np.inf
-        for c in self.samplers:
-            ray.get(c.produce_sample.remote(None, np.inf))
+        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, np.inf), range(self.nthreads))
+        for r in p: _ = r
 
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
@@ -389,36 +387,28 @@ class NestedSampler(object):
             pickle.dump(self, f)
 
     @classmethod
-    def resume(cls, filename, manager, usermodel):
+    def resume(cls, filename, usermodel, pool):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
         with open(filename,"rb") as f:
             obj = pickle.load(f)
-        obj.manager = manager
-        obj.logLmin = obj.manager.logLmin
-        obj.logLmin.value = obj.llmin
-        obj.logLmax = obj.manager.logLmax
-        obj.logLmax.value = obj.llmax
+        obj.logLmin = obj.logLmin
+        obj.logLmax = obj.logLmax
         obj.model = usermodel
+        obj.pool  = pool
         obj.logger = logging.getLogger("CPNest")
-        del obj.__dict__['llmin']
-        del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
         return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state['llmin'] = self.logLmin.value
-        state['llmax'] = self.logLmax.value
         # Remove the unpicklable entries.
-        del state['logLmin']
-        del state['logLmax']
-        del state['manager']
         del state['model']
         del state['logger']
+        del state['pool']
         return state
 
     def __setstate__(self, state):

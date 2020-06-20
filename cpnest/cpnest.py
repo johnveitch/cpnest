@@ -32,7 +32,10 @@ class CPNest(object):
 
     usermodel: :obj:`cpnest.Model`
         a user-defined model to analyse
-
+    
+    pool: :obj:`pool`
+        a user-defined pool of workers, if None is passed will create an ActorPool from ray
+    
     nlive: `int`
         Number of live points (100)
 
@@ -89,6 +92,7 @@ class CPNest(object):
     """
     def __init__(self,
                  usermodel,
+                 pool         = None,
                  nlive        = 100,
                  poolsize     = 100,
                  output       = './',
@@ -108,8 +112,9 @@ class CPNest(object):
             self.nthreads = mp.cpu_count()
         else:
             self.nthreads = nthreads
-
+        
         ray.init(num_cpus=nthreads)
+        
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
@@ -165,11 +170,10 @@ class CPNest(object):
                                   )
             else:
                 sampler = MetropolisHastingsSampler.resume.remote(resume_file,
-                                                           self.manager,
                                                            self.user)
 
             self.process_pool.append(sampler)
-
+        
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
@@ -181,28 +185,31 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
-                                  sample_prior = prior_sampling,
-                                  manager     = self.manager
+                                  sample_prior = prior_sampling
                                   )
             else:
                 sampler = HamiltonianMonteCarloSampler.resume.remote(resume_file,
-                                                              self.manager,
                                                               self.user)
             self.process_pool.append(sampler)
         
+        if pool == None:
+            from ray.util import ActorPool
+            pool = ActorPool(self.process_pool)
+
         # instantiate the nested sampler class
         resume_file = os.path.join(output, "nested_sampler_resume.pkl")
         if not os.path.exists(resume_file) or resume == False:
             self.NS = NestedSampler(self.user,
-                        nlive          = nlive,
-                        output         = output,
-                        verbose        = verbose,
-                        seed           = self.seed,
-                        prior_sampling = self.prior_sampling,
-                        samplers       = self.process_pool)
+                                    pool,
+                                    nthreads       = nthreads,
+                                    nlive          = nlive,
+                                    output         = output,
+                                    verbose        = verbose,
+                                    seed           = self.seed,
+                                    prior_sampling = self.prior_sampling)
         else:
-            self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
-
+            self.NS = NestedSampler.resume(resume_file, self.user, pool)
+        
     def run(self):
         """
         Run the sampler
@@ -215,15 +222,10 @@ class CPNest(object):
             signal.signal(signal.SIGUSR1, sighandler)
             signal.signal(signal.SIGUSR2, sighandler)
 
-        #self.p_ns.start()
-#        for each in self.process_pool:
-#            each.start()
         try:
             self.NS.nested_sampling_loop()
-#            for each in self.process_pool:
-#                each.join()
         except CheckPoint:
-            self.checkpoint()
+            self.NS.checkpoint()
             sys.exit(130)
         
         if self.verbose >= 2:
@@ -436,7 +438,7 @@ class CPNest(object):
             each.start()
 
     def checkpoint(self):
-        self.manager.checkpoint_flag=1
+        self.checkpoint_flag=1
 
 
 #class RunManager(SyncManager):
