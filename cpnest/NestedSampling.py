@@ -354,10 +354,6 @@ class NestedSampler(object):
                 _ = r
             sys.exit(130)
 
-        # Signal worker threads to exit
-        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, np.inf), range(self.nthreads))
-        for r in p: _ = r
-
         # final adjustments
         self.params.sort(key=attrgetter('logL'))
         for i,p in enumerate(self.params):
