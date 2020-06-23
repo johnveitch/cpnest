@@ -1,26 +1,22 @@
 #! /usr/bin/env python
 # coding: utf-8
 
-import multiprocessing as mp
-from ctypes import c_double, c_int
 import numpy as np
 import os
 import sys
 import signal
 import logging
-
 import cProfile
-import ray
 
 class CheckPoint(Exception):
     print("Checkpoint exception raise")
     pass
 
-
 def sighandler(signal, frame):
     print("Handling signal {}".format(signal))
     raise CheckPoint()
 
+_use_ray = False
 
 class CPNest(object):
     """
@@ -109,11 +105,15 @@ class CPNest(object):
                  ):
 
         if nthreads is None:
-            self.nthreads = mp.cpu_count()
+            self.nthreads = os.cpu_count()
         else:
             self.nthreads = nthreads
         
-        ray.init(num_cpus=nthreads)
+        # if the user did  not specify a pool, start the ray API
+        if pool == None:
+            import ray
+            _use_ray = True
+            ray.init(num_cpus=nthreads)
         
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
@@ -244,7 +244,6 @@ class CPNest(object):
         if self.verbose>=2:
             self.plot(corner = False)
 
-        ray.shutdown()
         #TODO: Clean up the resume pickles
         
     def get_nested_samples(self, filename='nested_samples.dat'):

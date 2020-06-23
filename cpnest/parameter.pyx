@@ -5,7 +5,6 @@
 
 from __future__ import division
 from numpy.math cimport INFINITY
-from cpython cimport array
 cimport numpy as np
 import numpy as np
 
@@ -24,7 +23,7 @@ cdef class LivePoint:
     """
     def __cinit__(LivePoint self,
                   list names,
-                  array.array d=None,
+                  np.ndarray d=None,
                   double logL=-INFINITY,
                   double logP=-INFINITY):
         self.logL = logL
@@ -32,10 +31,10 @@ cdef class LivePoint:
         self.names = names
         self.dimension = len(names)
         if d is not None:
-            self.values             = array.array('d',d)
+            self.values             = np.array(d, dtype=np.float64)
         else:
-            self.values             = array.array('d',[0]*self.dimension)
-
+            self.values             = np.zeros(self.dimension, dtype=np.float64)
+    
     def keys(self):
         return self.names
 
@@ -51,7 +50,7 @@ cdef class LivePoint:
     def __setstate__(self, state):
           self.logL = state[0]
           self.logP = state[1]
-          self.values = array.array('d',state[2])
+          self.values = np.array(state[2])
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})

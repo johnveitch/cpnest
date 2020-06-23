@@ -17,10 +17,8 @@ from operator import attrgetter
 import numpy.lib.recfunctions as rfn
 
 from .nest2pos import acl
-
-import dill as pickle
-
 import ray
+import dill as pickle
 
 class Sampler(object):
     """
@@ -262,8 +260,9 @@ class Sampler(object):
         with open(self.resume_file, "wb") as f:
             pickle.dump(self, f)
 
-    @classmethod
-    def resume(cls, resume_file, model):
+#    @classmethod
+#    @ray.remote
+    def resume(self, resume_file, model):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.

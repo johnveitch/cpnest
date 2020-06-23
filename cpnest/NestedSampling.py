@@ -251,8 +251,8 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        n = self.nthreads
-        logLmin = self.get_worst_n_live_points(2*n)
+        n = 2*self.nthreads
+        logLmin = self.get_worst_n_live_points(n)
         logLtmp = []
         for k in self.worst:
             self.state.increment(self.params[k].logL)
@@ -263,6 +263,7 @@ class NestedSampler(object):
         
         # Replace the points we just consumed with the next acceptable ones
         while len(self.worst) != 0:
+            indeces_to_remove = []
             p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
             for i, r in zip(self.worst,p):
                 acceptance,sub_acceptance,self.jumps,proposed = r
@@ -271,17 +272,22 @@ class NestedSampler(object):
                     # replace worst point with new one
                     self.params[i] = proposed
                     self.accepted += 1
-                    self.worst.remove(i)
-                    break
+                    indeces_to_remove.append(i)
+                    if self.verbose:
+                        self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
+                            .format(self.iteration, self.jumps, self.acceptance, self.queue_counter, acceptance, sub_acceptance, self.state.info,\
+                            logLtmp[i], self.params[i].logL, self.condition, self.state.logZ, self.logLmax))
+                        self.queue_counter = (self.queue_counter + 1) % self.nthreads
                 else:
                     self.rejected += 1
-            self.queue_counter = (self.queue_counter + 1) % self.nthreads
+                self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
+            for k in indeces_to_remove:
+                self.worst.remove(k)
                     
-            self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-            if self.verbose:
-                self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                .format(self.iteration, self.jumps, self.acceptance, self.queue_counter, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[i], self.params[i].logL, self.condition, self.state.logZ, self.logLmax))
+        
+#        if self.verbose:
+#            for i in self.worst:
+                
                 #sys.stderr.flush()
 
     def get_worst_n_live_points(self, n):
@@ -301,15 +307,16 @@ class NestedSampler(object):
         sampling them from the `cpnest.model.log_prior` distribution
         """
         # send all live points to the samplers for start
+        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
+        
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
-#            while i<self.Nlive:
-            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
-#                p = ray.get([self.samplers[j].produce_sample.remote(self.model.new_point(), -np.inf) for j in range(self.nthreads)])
+
             for j,r in enumerate(p):
                 acceptance,sub_acceptance,self.jumps,self.params[j] = r
                 if np.isnan(self.params[j].logL):
                     self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
                     self.logger.warn("You may want to check your likelihood function")
+                    self.pool.submit(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf))
                 if self.params[j].logP!=-np.inf and self.params[j].logL!=-np.inf:
                     pbar.update()
                         
@@ -355,6 +362,7 @@ class NestedSampler(object):
             sys.exit(130)
 
         # final adjustments
+        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
         self.params.sort(key=attrgetter('logL'))
         for i,p in enumerate(self.params):
             self.state.increment(p.logL,nlive=self.Nlive-i)

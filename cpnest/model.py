@@ -1,6 +1,6 @@
 from abc import ABCMeta,abstractmethod,abstractproperty
 from numpy import inf
-from array import array
+import numpy as np
 from .parameter import LivePoint
 from numpy.random import uniform
 
@@ -39,8 +39,7 @@ class Model(object):
         logP=-inf
         while(logP==-inf):
             p = LivePoint(self.names,
-                          d=array('d',
-                                      [uniform(self.bounds[i][0],
+                          d=np.array([uniform(self.bounds[i][0],
                                                self.bounds[i][1])
                                        for i, _ in enumerate(self.names) ]
                                  )
@@ -133,8 +132,7 @@ class Model(object):
         Returns:
             point: :obj:`cpnest.parameter.LivePoint`
         """
-        d=array('d',
-                [self.bounds[i][0]
+        d=np.array([self.bounds[i][0]
                  + normalised_value[i] * (self.bounds[i][1] - self.bounds[i][0])
                  for i, _ in enumerate(self.names)]
                 )
@@ -151,5 +149,5 @@ class Model(object):
             normalised_value: :obj:`array.array`
                 The values of the parameter mapped into the Ndim-cube
         """
-        return array('d', [(v-b[0])/(b[1]-b[0]) for v, b
+        return np.array([(v-b[0])/(b[1]-b[0]) for v, b
                            in zip(value.values, self.bounds)])
