@@ -262,17 +262,17 @@ class NestedSampler(object):
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.Nlive))) - self.state.logZ
         
         # Replace the points we just consumed with the next acceptable ones
-        while len(self.worst) != 0:
+        while len(self.worst) > 0:
             indeces_to_remove = []
             p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
             for i, r in zip(self.worst,p):
                 acceptance,sub_acceptance,self.jumps,proposed = r
-                self.iteration += 1
                 if proposed.logL > self.logLmin:
                     # replace worst point with new one
                     self.params[i] = proposed
                     self.accepted += 1
                     indeces_to_remove.append(i)
+                    self.iteration += 1
                     if self.verbose:
                         self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                             .format(self.iteration, self.jumps, self.acceptance, self.queue_counter, acceptance, sub_acceptance, self.state.info,\
@@ -316,7 +316,6 @@ class NestedSampler(object):
                 if np.isnan(self.params[j].logL):
                     self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
                     self.logger.warn("You may want to check your likelihood function")
-                    self.pool.submit(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf))
                 if self.params[j].logP!=-np.inf and self.params[j].logL!=-np.inf:
                     pbar.update()
                         
@@ -362,7 +361,7 @@ class NestedSampler(object):
             sys.exit(130)
 
         # final adjustments
-        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
+        r = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
         self.params.sort(key=attrgetter('logL'))
         for i,p in enumerate(self.params):
             self.state.increment(p.logL,nlive=self.Nlive-i)
