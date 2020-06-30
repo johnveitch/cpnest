@@ -196,13 +196,14 @@ class CPNest(object):
         
         if pool == None:
             from ray.util import ActorPool
-            pool = ActorPool(self.process_pool)
-
+            self.pool = ActorPool(self.process_pool)
+        else:
+            self.pool = pool
+        
         # instantiate the nested sampler class
         resume_file = os.path.join(output, "nested_sampler_resume.pkl")
         if not os.path.exists(resume_file) or resume == False:
             self.NS = NestedSampler(self.user,
-                                    pool,
                                     nthreads       = nthreads,
                                     nlive          = nlive,
                                     output         = output,
@@ -226,7 +227,7 @@ class CPNest(object):
             signal.signal(signal.SIGUSR2, sighandler)
 
         try:
-            self.NS.nested_sampling_loop()
+            self.NS.nested_sampling_loop(self.pool)
         except CheckPoint:
             self.NS.checkpoint()
             sys.exit(130)

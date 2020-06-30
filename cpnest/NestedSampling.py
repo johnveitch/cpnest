@@ -149,7 +149,6 @@ class NestedSampler(object):
 
     def __init__(self,
                  model,
-                 pool,
                  nthreads       = None,
                  nlive          = 1024,
                  output         = None,
@@ -191,7 +190,6 @@ class NestedSampler(object):
         self.output_folder  = output
         self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
         header              = open(os.path.join(output,'header.txt'),'w')
-        self.pool           = pool
         
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
@@ -246,7 +244,7 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self):
+    def consume_sample(self, pool):
         """
         consumes a sample from the consumer_pipes
         and updates the evidence logZ
@@ -265,7 +263,7 @@ class NestedSampler(object):
         # Replace the points we just consumed with the next acceptable ones
         while len(self.worst) > 0:
             indeces_to_remove = []
-            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
+            p = pool.map_unordered(lambda a, v: a.produce_sample.remote(self.params[v], self.logLmin), self.worst)
             for i, r in zip(self.worst,p):
                 acceptance,sub_acceptance,self.jumps,proposed = r
                 if proposed.logL > self.logLmin:
@@ -302,13 +300,13 @@ class NestedSampler(object):
         self.logLmax = self.params[-1].logL
         return self.logLmin
 
-    def reset(self):
+    def reset(self, pool):
         """
         Initialise the pool of `cpnest.parameter.LivePoint` by
         sampling them from the `cpnest.model.log_prior` distribution
         """
         # send all live points to the samplers for start
-        p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
+        p = pool.map_unordered(lambda a, v: a.produce_sample.remote(self.model.new_point(), -np.inf), range(self.Nlive))
         
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
 
@@ -325,12 +323,12 @@ class NestedSampler(object):
             sys.stderr.flush()
         self.initialised=True
 
-    def nested_sampling_loop(self):
+    def nested_sampling_loop(self, pool):
         """
         main nested sampling loop
         """
         if not self.initialised:
-            self.reset()
+            self.reset(pool)
         if self.prior_sampling:
             for i in range(self.Nlive):
                 self.nested_samples.append(self.params[i])
@@ -338,7 +336,7 @@ class NestedSampler(object):
             self.write_evidence_to_file()
             self.logLmin = np.inf
             self.logLmax = np.inf
-            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
+            p = pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
             for r in p:
                 _ = r
             self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
@@ -346,23 +344,23 @@ class NestedSampler(object):
 
         try:
             while self.condition > self.tolerance:
-                self.consume_sample()
+                self.consume_sample(pool)
                 if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
                     self.checkpoint()
-                    p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote("time_checkpoint", self.logLmin), range(self.nthreads))
+                    p = pool.map_unordered(lambda a, v: a.produce_sample.remote("time_checkpoint", self.logLmin), range(self.nthreads))
                     for r in p:
                         _ = r
                     self.last_checkpoint_time = time.time()
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint
-            p = self.pool.map_unordered(lambda a, v: a.produce_sample.remote("checkpoint", self.logLmin), range(self.nthreads))
+            p = pool.map_unordered(lambda a, v: a.produce_sample.remote("checkpoint", self.logLmin), range(self.nthreads))
             for r in p:
                 _ = r
             sys.exit(130)
 
         # final adjustments
-        r = self.pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
+        r = pool.map_unordered(lambda a, v: a.produce_sample.remote(None, self.logLmin), range(self.nthreads))
         self.params.sort(key=attrgetter('logL'))
         for i,p in enumerate(self.params):
             self.state.increment(p.logL,nlive=self.Nlive-i)
@@ -391,7 +389,7 @@ class NestedSampler(object):
             pickle.dump(self, f)
 
     @classmethod
-    def resume(cls, filename, usermodel, pool):
+    def resume(cls, filename, usermodel):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
@@ -401,7 +399,6 @@ class NestedSampler(object):
         obj.logLmin = obj.logLmin
         obj.logLmax = obj.logLmax
         obj.model = usermodel
-        obj.pool  = pool
         obj.logger = logging.getLogger("CPNest")
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
@@ -412,7 +409,6 @@ class NestedSampler(object):
         # Remove the unpicklable entries.
         del state['model']
         del state['logger']
-        del state['pool']
         return state
 
     def __setstate__(self, state):
