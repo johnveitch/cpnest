@@ -157,13 +157,14 @@ class NestedSampler(object):
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = None
+                 n_periodic_checkpoint = None,
+                 periodic_checkpoint_interval  = np.inf
                  ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.periodic_checkpoint_interval = np.inf
+        self.periodic_checkpoint_interval = periodic_checkpoint_interval
         self.logger         = logging.getLogger('CPNest')
         self.model          = model
         self.nthreads       = nthreads
@@ -251,7 +252,7 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        n = 2*self.nthreads
+        n = self.nthreads
         logLmin = self.get_worst_n_live_points(n)
         logLtmp = []
         for k in self.worst:

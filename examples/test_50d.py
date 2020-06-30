@@ -46,5 +46,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    unittest.main(verbosity=2)
- 
+#    unittest.main(verbosity=2)
+    work=cpnest.CPNest(GaussianModel(dim = 20), verbose=2, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=512, resume=1, periodic_checkpoint_interval=None)
+    work.run()

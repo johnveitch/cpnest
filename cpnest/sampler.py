@@ -260,9 +260,8 @@ class Sampler(object):
         with open(self.resume_file, "wb") as f:
             pickle.dump(self, f)
 
-#    @classmethod
-#    @ray.remote
-    def resume(self, resume_file, model):
+    @classmethod
+    def resume(cls, resume_file, model):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.

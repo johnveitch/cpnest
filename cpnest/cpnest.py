@@ -128,8 +128,10 @@ class CPNest(object):
                 "use periodic_checkpoint_interval instead."
             )
         if periodic_checkpoint_interval is None:
-            periodic_checkpoint_interval = np.inf
-
+            self.periodic_checkpoint_interval = np.inf
+        else:
+            self.periodic_checkpoint_interval = periodic_checkpoint_interval
+        
         from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
         from .NestedSampling import NestedSampler
         from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
@@ -206,7 +208,8 @@ class CPNest(object):
                                     output         = output,
                                     verbose        = verbose,
                                     seed           = self.seed,
-                                    prior_sampling = self.prior_sampling)
+                                    prior_sampling = self.prior_sampling,
+                                    periodic_checkpoint_interval = self.periodic_checkpoint_interval)
         else:
             self.NS = NestedSampler.resume(resume_file, self.user, pool)
         
