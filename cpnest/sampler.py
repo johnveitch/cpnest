@@ -210,18 +210,13 @@ class Sampler(object):
 #            self.checkpoint()
 #            sys.exit(130)
 
-        if logLmin==np.inf:
+        if logLmin==np.inf or p == None:
             self.finalise()
             return 0
 
         if p == "time_checkpoint":
             self.checkpoint()
             self.last_checkpoint_time = time.time()
-            return 0
-        
-        if p is None:
-            self.finalise()
-            return 0
         
         if p == "checkpoint":
             self.checkpoint()
@@ -251,7 +246,7 @@ class Sampler(object):
             self.logger.critical("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         self.logger.critical("Sampler process {0!s} - mean acceptance {1:.3f}: exiting".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         return 0
-
+    
     def checkpoint(self):
         """
         Checkpoint its internal state
@@ -269,8 +264,6 @@ class Sampler(object):
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         obj.model   = model
-        obj.logLmin = obj.logLmin
-        obj.logLmax = obj.logLmax
         obj.logger = logging.getLogger("CPNest")
         obj.logger.info('Resuming Sampler from ' + resume_file)
         obj.last_checkpoint_time = time.time()
@@ -287,7 +280,6 @@ class Sampler(object):
     def __setstate__(self, state):
         self.__dict__ = state
 
-@ray.remote
 class MetropolisHastingsSampler(Sampler):
     """
     metropolis-hastings acceptance rule
@@ -332,7 +324,6 @@ class MetropolisHastingsSampler(Sampler):
             self.estimate_nmcmc_on_the_fly()
             yield (sub_counter, oldparam)
 
-@ray.remote
 class HamiltonianMonteCarloSampler(Sampler):
     """
     HamiltonianMonteCarlo acceptance rule

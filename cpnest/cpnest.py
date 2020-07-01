@@ -160,18 +160,31 @@ class CPNest(object):
         for i in range(self.nthreads-nhamiltonian):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
-                sampler = MetropolisHastingsSampler.remote(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+i,
-                                  proposal    = proposals['mhs'](),
-                                  resume_file = resume_file,
-                                  sample_prior = prior_sampling
-                                  )
+                if _use_ray == True:
+                    MHSampler = ray.remote(MetropolisHastingsSampler)
+                    sampler = MHSampler.remote(self.user,
+                                    maxmcmc,
+                                    verbose     = verbose,
+                                    output      = output,
+                                    poolsize    = poolsize,
+                                    seed        = self.seed+i,
+                                    proposal    = proposals['mhs'](),
+                                    resume_file = resume_file,
+                                    sample_prior = prior_sampling
+                                    )
+                else:
+                    sampler = MetropolisHastingsSampler(self.user,
+                                    maxmcmc,
+                                    verbose     = verbose,
+                                    output      = output,
+                                    poolsize    = poolsize,
+                                    seed        = self.seed+i,
+                                    proposal    = proposals['mhs'](),
+                                    resume_file = resume_file,
+                                    sample_prior = prior_sampling
+                                    )
             else:
-                sampler = MetropolisHastingsSampler.resume.remote(resume_file,
+                sampler = MetropolisHastingsSampler.resume(resume_file,
                                                            self.user)
 
             self.process_pool.append(sampler)
@@ -179,7 +192,8 @@ class CPNest(object):
         for i in range(self.nthreads-nhamiltonian,self.nthreads):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
-                sampler = HamiltonianMonteCarloSampler.remote(self.user,
+                HMCSampler = ray.remote(HamiltonianMonteCarloSampler)
+                sampler = HMCSampler.remote(self.user,
                                   maxmcmc,
                                   verbose     = verbose,
                                   output      = output,

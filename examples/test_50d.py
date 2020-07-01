@@ -33,8 +33,8 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.model=GaussianModel(dim = 100)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=512, resume=1)
+        self.model=GaussianModel(dim = 50)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=50, nlive=10000, maxmcmc=5000, poolsize=512, resume=0, output='/home/delpozzo/data1-delpozzo/test/')
 
     def test_run(self):
         self.work.run()
@@ -46,6 +46,6 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-#    unittest.main(verbosity=2)
-    work=cpnest.CPNest(GaussianModel(dim = 5), verbose=2, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=512, resume=1, periodic_checkpoint_interval=None)
-    work.run()
+   unittest.main(verbosity=2)
+    # work=cpnest.CPNest(GaussianModel(dim = 50), verbose=2, nthreads=12, nlive=1000, maxmcmc=5000, poolsize=1000, resume=1, periodic_checkpoint_interval=None)
+    # work.run()
