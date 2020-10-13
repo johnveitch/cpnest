@@ -1,4 +1,9 @@
 include DESCRIPTION.rst
 include LICENSE
 include cpnest/parameter.c
+prune .github
+exclude .git*
+exclude .travis.yml
+exclude publish-key.enc
+
 
