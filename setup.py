@@ -23,6 +23,7 @@ try:
     import Cython
 except ImportError:
     have_cython = False
+    raise ImportError
 else:
     have_cython = True
 
