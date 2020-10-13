@@ -30,6 +30,7 @@ else:
 libraries = [] if WINDOWS else ["m"]
 if have_cython:  # convert the pyx file to a .c file if cython is available
     from Cython.Build import cythonize
+    print('Running cython')
     ext_modules = [Extension("cpnest.parameter",
                              sources=[os.path.join("cpnest", "parameter.pyx")],
                              include_dirs=['cpnest'],
