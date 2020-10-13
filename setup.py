@@ -3,19 +3,9 @@ import platform
 # Always prefer setuptools over distutils
 from setuptools import setup
 from setuptools import Extension
-from setuptools.command.build_ext import build_ext as _build_ext
+
 
 WINDOWS = platform.system().lower() == "windows"
-
-
-# see https://stackoverflow.com/a/21621689/1862861 for why this is here
-class build_ext(_build_ext):
-    def finalize_options(self):
-        _build_ext.finalize_options(self)
-        # Prevent numpy from thinking it is still in its setup process:
-        __builtins__.__NUMPY_SETUP__ = False
-        import numpy
-        self.include_dirs.append(numpy.get_include())
 
 
 # check whether user has Cython
@@ -29,11 +19,13 @@ else:
 # set extension
 libraries = [] if WINDOWS else ["m"]
 if have_cython:  # convert the pyx file to a .c file if cython is available
+    from Cython.Build import new_build_ext as build_ext
     ext_modules = [Extension("cpnest.parameter",
                              sources=[os.path.join("cpnest", "parameter.pyx")],
                              include_dirs=['cpnest'],
                              libraries=libraries)]
 else:
+    from setuptools.command.build_ext import build_ext
     # just compile the included parameter.c (already converted from
     # parameter.pyx) file
     ext_modules = [Extension("cpnest.parameter",
