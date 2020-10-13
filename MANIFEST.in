@@ -1,2 +1,4 @@
 include DESCRIPTION.rst
 include LICENSE
+include cpnest/parameter.c
+
