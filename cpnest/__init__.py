@@ -3,13 +3,12 @@ from .logger import CPNestLogger
 from .cpnest import CPNest
 
 # Get the version number from git tag
-from importlib.metadata import version, PackageNotFoundError
-
+from pkg_resources import get_distribution, DistributionNotFound
 try:
-    __version__ = version(__name__)
-except PackageNotFoundError:
+    __version__ = get_distribution(__name__).version
+except DistributionNotFound:
     # package is not installed
-    __version__ = "unknown"
+    __version__ = "dev"
 
 logging.setLoggerClass(CPNestLogger)
 
