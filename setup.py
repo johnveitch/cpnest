@@ -1,12 +1,9 @@
+import os
+import platform
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup
 from setuptools import Extension
 from setuptools.command.build_ext import build_ext as _build_ext
-# To use a consistent encoding
-from codecs import open
-import os
-import re
-import platform
 
 WINDOWS = platform.system().lower() == "windows"
 
@@ -51,25 +48,12 @@ with open(os.path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
         long_description = f.read()
 
 
-# Get the version info from __init__.py file
-def readfile(filename):
-    with open(filename) as fp:
-        filecontents = fp.read()
-    return filecontents
-
-
-VERSION_REGEX = re.compile(r"__version__ = \'(.*?)\'")
-CONTENTS = readfile(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "cpnest", "__init__.py"))
-VERSION = VERSION_REGEX.findall(CONTENTS)[0]
-
 with open("requirements.txt") as requires_file:
     requirements = requires_file.read().split("\n")
 
 setup(
         name='cpnest',
-        version=VERSION,
+        use_scm_version=True,
         description='CPNest: Parallel nested sampling',
         long_description=long_description,
         author='Walter Del Pozzo, John Veitch',
@@ -92,7 +76,7 @@ setup(
         keywords='nested sampling bayesian inference',
         packages=['cpnest'],
         install_requires=requirements,
-        setup_requires=['numpy', 'cython'],
+        setup_requires=['numpy', 'cython', 'setuptools_scm'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
         entry_points={},
         test_suite='tests',
