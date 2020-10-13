@@ -2,6 +2,7 @@ name: Build and upload to PyPI
 
 env:
     CIBW_SKIP: cp27-*
+    CIBW_BEFORE_BUILD: pip install cython
 
 # Build on every branch push, tag push, and pull request change:
 # on: [push, pull_request]
@@ -31,7 +32,7 @@ jobs:
 
       - name: Install cibuildwheel and cython
         run: |
-          python -m pip install cibuildwheel==1.6.3 cython
+          python -m pip install cibuildwheel==1.6.3
       - name: Build wheels
         run: |
           python -m cibuildwheel --output-dir wheelhouse
@@ -50,9 +51,6 @@ jobs:
         with:
           python-version: '3.7'
 
-      - name: Install cython
-        run: |
-          python -m pip install cython
       - name: Build sdist
         run: python setup.py sdist
 
