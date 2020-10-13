@@ -6,6 +6,8 @@ name: CI
 # events but only for the master branch
 on:
   push:
+    tags:
+      - 'v*.*.*'
     branches: [ master ]
   pull_request:
     branches: [ master ]
@@ -33,10 +35,6 @@ jobs:
         python setup.py bdist_wheel 
         
     - name: pypi-publish
-      on:
-        push:
-          tags:
-            - 'v*.*.*'
       uses: pypa/gh-action-pypi-publish@v1.3.1
       with:
         password: ${{ secrets.pypitoken }}
