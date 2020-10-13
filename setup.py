@@ -64,6 +64,9 @@ CONTENTS = readfile(os.path.join(
     "cpnest", "__init__.py"))
 VERSION = VERSION_REGEX.findall(CONTENTS)[0]
 
+with open("requirements.txt") as requires_file:
+    requirements = requires_file.read().split("\n")
+
 setup(
         name='cpnest',
         version=VERSION,
@@ -88,10 +91,8 @@ setup(
             'Programming Language :: Python :: 3.8'],
         keywords='nested sampling bayesian inference',
         packages=['cpnest'],
-        install_requires=['numpy', 'scipy', 'corner', 'tqdm', 'cython'],
-
-        setup_requires=['numpy', 'scipy', 'cython'],
-        tests_require=['corner','tqdm'],
+        install_requires=requirements,
+        setup_requires=['numpy', 'cython'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
         entry_points={},
         test_suite='tests',
