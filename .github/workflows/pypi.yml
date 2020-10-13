@@ -1,7 +1,7 @@
 name: Build and upload to PyPI
 
 env:
-    CIBW_SKIP: cp27-* pp27-* cp39-macosx*
+    CIBW_SKIP: cp27-* pp27-* cp*-macosx*
     CIBW_BEFORE_BUILD: python -m pip install numpy setuptools_scm cython
 
 # Build on every branch push, tag push, and pull request change:
