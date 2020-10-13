@@ -3,4 +3,5 @@ scipy
 corner
 tqdm
 cython
+matplotlib
 
