@@ -17,7 +17,6 @@ import cProfile
 
 
 class CheckPoint(Exception):
-    print("Checkpoint exception raise")
     pass
 
 
