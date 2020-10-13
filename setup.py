@@ -3,8 +3,19 @@ import platform
 # Always prefer setuptools over distutils
 from setuptools import setup
 from setuptools import Extension
+from setuptools.command.build_ext import build_ext as _build_ext
 
 WINDOWS = platform.system().lower() == "windows"
+
+
+# see https://stackoverflow.com/a/21621689/1862861 for why this is here
+class build_ext(_build_ext):
+    def finalize_options(self):
+        _build_ext.finalize_options(self)
+        # Prevent numpy from thinking it is still in its setup process:
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        self.include_dirs.append(numpy.get_include())
 
 
 # check whether user has Cython
@@ -52,6 +63,7 @@ setup(
         author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
         url='https://github.com/johnveitch/cpnest',
         license='MIT',
+        cmdclass={'build_ext': build_ext},
         python_requires='>=3',
         classifiers=[
             'Development Status :: 4 - Beta',
