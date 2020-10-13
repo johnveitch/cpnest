@@ -29,10 +29,12 @@ else:
 # set extension
 libraries = [] if WINDOWS else ["m"]
 if have_cython:  # convert the pyx file to a .c file if cython is available
+    from Cython.Build import cythonize
     ext_modules = [Extension("cpnest.parameter",
                              sources=[os.path.join("cpnest", "parameter.pyx")],
                              include_dirs=['cpnest'],
                              libraries=libraries)]
+    ext_modules = cythonize(ext_modules)
 else:
     # just compile the included parameter.c (already converted from
     # parameter.pyx) file
