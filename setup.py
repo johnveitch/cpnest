@@ -79,7 +79,7 @@ setup(
         keywords='nested sampling bayesian inference',
         packages=['cpnest'],
         install_requires=requirements,
-        setup_requires=['numpy<=1.18.5', 'cython', 'setuptools_scm'],
+        setup_requires=['numpy', 'cython', 'setuptools_scm'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
         entry_points={},
         test_suite='tests',
