@@ -30,7 +30,7 @@ else:
     # parameter.pyx) file
     ext_modules = [Extension("cpnest.parameter",
                              sources=[os.path.join("cpnest", "parameter.c")],
-                             include_dirs=['cpnest'],
+                             include_dirs=['cpnest',numpy.get_include()],
                              libraries=libraries)]
 
 here = os.path.abspath(os.path.dirname(__file__))
