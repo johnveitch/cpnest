@@ -102,7 +102,6 @@ class CPNest(object):
                  nhamiltonian = 0,
                  resume       = False,
                  proposals     = None,
-                 prior_sampling = False,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False
