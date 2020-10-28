@@ -103,7 +103,7 @@ def draw_posterior_many(datas, Nlives, verbose=False):
     for post,frac in zip(posts,fracs):
       mask = uniform(size=len(post))<frac
       bigpos.append(post[mask])
-    result = vstack(bigpos).flatten()
+    result = np.concatenate([bigpos[i] for i in range(len(bigpos))], axis=None)
     LOGGER.critical('Samples produced: {0:d}'.format(result.shape[0]))
     return result
 
