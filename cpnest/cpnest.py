@@ -294,17 +294,19 @@ class CPNest(object):
                     os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
 
             # first deal with the prior samples
-            self.prior_samples = stack_arrays([p for p in prior_samples])
-            if filename:
-                np.savetxt(os.path.join(
+            if len(prior_samples)>0:
+                self.prior_samples = stack_arrays([p for p in prior_samples])
+                if filename:
+                    np.savetxt(os.path.join(
                            self.NS.output_folder,'prior.dat'),
                            self.prior_samples.ravel(),
                            header=' '.join(self.prior_samples.dtype.names),
                            newline='\n',delimiter=' ')
             # now stack all the mcmc chains
-            self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
-            if filename:
-                np.savetxt(os.path.join(
+            if len(mcmc_samples)>0:
+                self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
+                if filename:
+                    np.savetxt(os.path.join(
                            self.NS.output_folder,'mcmc.dat'),
                            self.mcmc_samples.ravel(),
                            header=' '.join(self.mcmc_samples.dtype.names),
