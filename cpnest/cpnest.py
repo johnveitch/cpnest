@@ -298,6 +298,42 @@ class CPNest(object):
         nested_samples     = self.get_nested_samples()
         posterior_samples  = draw_posterior_many([nested_samples],[self.nlive],verbose=self.verbose)
         posterior_samples  = np.array(posterior_samples)
+        self.prior_samples = {n:None for n in self.user.names}
+        self.mcmc_samples  = {n:None for n in self.user.names}
+        # if we run with full verbose, read in and output
+        # the mcmc thinned posterior samples
+        if self.verbose >= 3:
+            from .nest2pos import resample_mcmc_chain
+            from numpy.lib.recfunctions import stack_arrays
+
+            prior_samples = []
+            mcmc_samples  = []
+            for file in os.listdir(self.NS.output_folder):
+                if 'prior_samples' in file:
+                    prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
+                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+                elif 'mcmc_chain' in file:
+                    mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
+                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+
+            # first deal with the prior samples
+            if len(prior_samples)>0:
+                self.prior_samples = stack_arrays([p for p in prior_samples])
+                if filename:
+                    np.savetxt(os.path.join(
+                           self.NS.output_folder,'prior.dat'),
+                           self.prior_samples.ravel(),
+                           header=' '.join(self.prior_samples.dtype.names),
+                           newline='\n',delimiter=' ')
+            # now stack all the mcmc chains
+            if len(mcmc_samples)>0:
+                self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
+                if filename:
+                    np.savetxt(os.path.join(
+                           self.NS.output_folder,'mcmc.dat'),
+                           self.mcmc_samples.ravel(),
+                           header=' '.join(self.mcmc_samples.dtype.names),
+                           newline='\n',delimiter=' ')
 
         # TODO: Replace with something to output samples in whatever format
         if filename:
