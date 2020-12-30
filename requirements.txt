@@ -1,0 +1,7 @@
+numpy
+scipy
+corner
+tqdm
+cython
+matplotlib
+

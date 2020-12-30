@@ -35,7 +35,7 @@ class GaussianTestCase(unittest.TestCase):
     def setUp(self):
         self.model=GaussianModel(dim = 10)
         self.work=cpnest.CPNest(self.model, verbose=2, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=1000)
-        
+
     def test_run(self):
         self.work.run()
         # 2 sigma tolerance

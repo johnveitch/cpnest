@@ -17,7 +17,6 @@ import cProfile
 
 
 class CheckPoint(Exception):
-    print("Checkpoint exception raise")
     pass
 
 
@@ -47,7 +46,12 @@ class CPNest(object):
         output directory (./)
 
     verbose: `int`
-        Verbosity, 0=silent, 1=progress, 2=diagnostic, 3=detailed diagnostic
+        Verbosity:
+            0: no display of information on screen, save the NS chain and evidence
+            1: 0 + display progress on screen
+            2: 1 + display diagnostics (ACL), save the posterior samples and trace plots and posterior plots
+            3: 2 + save chains from individual samplers
+            default: 0
 
     seed: `int`
         random seed (default: 1234)
@@ -70,17 +74,29 @@ class CPNest(object):
     proposal: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
+<<<<<<< HEAD
         'hmc' for the Hamiltonian Monte-Carlo sampler,
         'sli' for the slice sampler. Default: None
 
+=======
+        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+    
+    prior_sampling: `boolean`
+        generates samples from the prior
+    
+>>>>>>> master
     n_periodic_checkpoint: `int`
         **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
-    
+
     periodic_checkpoint_interval: `float`
         checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
+
+    prior_sampling: boolean
+        produce nlive samples from the prior.
+        Default: False
 
     """
     def __init__(self,
@@ -97,7 +113,8 @@ class CPNest(object):
                  resume       = False,
                  proposals     = None,
                  n_periodic_checkpoint = None,
-                 periodic_checkpoint_interval=None
+                 periodic_checkpoint_interval=None,
+                 prior_sampling = False
                  ):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
@@ -110,7 +127,7 @@ class CPNest(object):
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-        
+
         if n_periodic_checkpoint is not None:
             self.logger.critical(
                 "The n_periodic_checkpoint kwarg is deprecated, "
@@ -135,6 +152,7 @@ class CPNest(object):
         self.output   = output
         self.poolsize = poolsize
         self.posterior_samples = None
+        self.prior_sampling = prior_sampling
         self.manager = RunManager(
             nthreads=self.nthreads,
             periodic_checkpoint_interval=periodic_checkpoint_interval
@@ -157,7 +175,7 @@ class CPNest(object):
                         output         = output,
                         verbose        = verbose,
                         seed           = self.seed,
-                        prior_sampling = False,
+                        prior_sampling = self.prior_sampling,
                         manager        = self.manager)
         else:
             self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
@@ -175,6 +193,7 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['mhs'](),
                                   resume_file = resume_file,
+                                  sample_prior = prior_sampling,
                                   manager     = self.manager
                                   )
             else:
@@ -196,6 +215,7 @@ class CPNest(object):
                                   seed        = self.seed+i,
                                   proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
+                                  sample_prior = prior_sampling,
                                   manager     = self.manager
                                   )
             else:
@@ -247,9 +267,22 @@ class CPNest(object):
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
-
-        self.posterior_samples = self.get_posterior_samples(filename=None)
-        if self.verbose>1: self.plot(corner = False)
+        
+        if self.verbose >= 2:
+            self.logger.critical("Saving nested samples in {0}".format(self.output))
+            self.nested_samples = self.get_nested_samples()
+            self.logger.critical("Saving posterior samples in {0}".format(self.output))
+            self.posterior_samples = self.get_posterior_samples()
+        else:
+            self.nested_samples = self.get_nested_samples(filename=None)
+            self.posterior_samples = self.get_posterior_samples(filename=None)
+        
+        if self.verbose>=3 or self.NS.prior_sampling:
+            self.prior_samples = self.get_prior_samples(filename=None)
+        if self.verbose>=3 and not self.NS.prior_sampling:
+            self.mcmc_samples = self.get_mcmc_samples(filename=None)
+        if self.verbose>=2:
+            self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
 
@@ -272,7 +305,7 @@ class CPNest(object):
                 ,usemask=False)
         if filename:
             np.savetxt(os.path.join(
-                self.NS.output_folder,'nested_samples.dat'),
+                self.NS.output_folder, filename),
                 self.nested_samples.ravel(),
                 header=' '.join(self.nested_samples.dtype.names),
                 newline='\n',delimiter=' ')
@@ -316,63 +349,152 @@ class CPNest(object):
                     os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
 
             # first deal with the prior samples
-            self.prior_samples = stack_arrays([p for p in prior_samples])
-            if filename:
-                np.savetxt(os.path.join(
+            if len(prior_samples)>0:
+                self.prior_samples = stack_arrays([p for p in prior_samples])
+                if filename:
+                    np.savetxt(os.path.join(
                            self.NS.output_folder,'prior.dat'),
                            self.prior_samples.ravel(),
                            header=' '.join(self.prior_samples.dtype.names),
                            newline='\n',delimiter=' ')
             # now stack all the mcmc chains
-            self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
-            if filename:
-                np.savetxt(os.path.join(
+            if len(mcmc_samples)>0:
+                self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
+                if filename:
+                    np.savetxt(os.path.join(
                            self.NS.output_folder,'mcmc.dat'),
                            self.mcmc_samples.ravel(),
                            header=' '.join(self.mcmc_samples.dtype.names),
                            newline='\n',delimiter=' ')
+
         # TODO: Replace with something to output samples in whatever format
         if filename:
             np.savetxt(os.path.join(
-                self.NS.output_folder,'posterior.dat'),
+                self.NS.output_folder, filename),
                 posterior_samples.ravel(),
                 header=' '.join(posterior_samples.dtype.names),
                 newline='\n',delimiter=' ')
         return posterior_samples
 
+    def get_prior_samples(self, filename='prior.dat'):
+        """
+        Returns prior samples
+
+        Parameters
+        ----------
+        filename : string
+                   If given, file to save posterior samples to
+
+        Returns
+        -------
+        pos : :obj:`numpy.ndarray`
+        """
+        import numpy as np
+        import os
+
+        from numpy.lib.recfunctions import stack_arrays
+        
+        # read in the samples from the prior coming from each sampler
+        prior_samples = []
+        for file in os.listdir(self.NS.output_folder):
+            if 'prior_samples' in file:
+                prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
+                os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+        
+        # if we sampled the prior, the nested samples are samples from the prior
+        if self.NS.prior_sampling:
+            prior_samples.append(self.get_nested_samples())
+        
+        if not prior_samples:
+            self.logger.critical('ERROR, no prior samples found!')
+            return None
+        
+        prior_samples = stack_arrays([p for p in prior_samples])
+        if filename:
+            np.savetxt(os.path.join(
+                       self.NS.output_folder, filename),
+                       self.prior_samples.ravel(),
+                       header=' '.join(self.prior_samples.dtype.names),
+                       newline='\n',delimiter=' ')
+
+        return prior_samples
+
+    def get_mcmc_samples(self, filename='mcmc.dat'):
+        """
+        Returns resampled mcmc samples
+
+        Parameters
+        ----------
+        filename : string
+                   If given, file to save posterior samples to
+
+        Returns
+        -------
+        pos : :obj:`numpy.ndarray`
+        """
+        import numpy as np
+        import os
+        from .nest2pos import resample_mcmc_chain
+        from numpy.lib.recfunctions import stack_arrays
+
+        mcmc_samples  = []
+        for file in os.listdir(self.NS.output_folder):
+            if 'mcmc_chain' in file:
+                mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
+                os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+        
+        if not mcmc_samples:
+            self.logger.critical('ERROR, no MCMC samples found!')
+            return None
+            
+        # now stack all the mcmc chains
+        mcmc_samples = stack_arrays([p for p in mcmc_samples])
+        if filename:
+            np.savetxt(os.path.join(
+                       self.NS.output_folder, filename),
+                       self.mcmc_samples.ravel(),
+                       header=' '.join(self.mcmc_samples.dtype.names),
+                       newline='\n',delimiter=' ')
+        return mcmc_samples
+    
     def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
         """
         pos = self.posterior_samples
-        if self.verbose >= 3:
+        if self.verbose>=3 and self.NS.prior_sampling is False:
             pri = self.prior_samples
             mc  = self.mcmc_samples
+        elif self.verbose>=3 or self.NS.prior_sampling is True:
+            pri = self.prior_samples
+            mc  = None
         else:
             pri = None
             mc  = None
         from . import plot
-        for n in pos.dtype.names:
-            plot.plot_hist(pos[n].ravel(), name = n,
-                           prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
-                           mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
-                           filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
+        if self.NS.prior_sampling is False:
+            for n in pos.dtype.names:
+                plot.plot_hist(pos[n].ravel(), name = n,
+                               prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
+                               mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
+                               filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
         for n in self.nested_samples.dtype.names:
             plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.pdf'.format(n)))
-        import numpy as np
-        plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-        if self.verbose >= 3:
-            plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
-            plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
-        else:
-            plotting_priors = None
-            plotting_mcmc   = None
-        if corner:
-            plot.plot_corner(plotting_posteriors,
-                             ps=plotting_priors,
-                             ms=plotting_mcmc,
-                             labels=pos.dtype.names,
-                             filename=os.path.join(self.output,'corner.pdf'))
+        if self.NS.prior_sampling is False:
+            import numpy as np
+            plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
+            if self.verbose >= 3:
+                plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
+                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
+            else:
+                plotting_priors = None
+                plotting_mcmc   = None
+            if corner:
+                plot.plot_corner(plotting_posteriors,
+                                 ps=plotting_priors,
+                                 ms=plotting_mcmc,
+                                 labels=pos.dtype.names,
+                                 filename=os.path.join(self.output,'corner.pdf'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
