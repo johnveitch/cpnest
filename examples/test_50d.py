@@ -33,17 +33,9 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.model=GaussianModel(dim = 10)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=1000)
-        # nthreads=4, dim = 10, 32
-        # nthreads=4, dim = 9, 32
-        # nthreads=4, dim = 8, 30
-        # nthreads=4, dim = 7, 30
-        # nthreads=4, dim = 6, 30
-        # nthreads=4, dim = 5, 24
-        # nthreads=4, dim = 4, 20
-        # nthreads=4, dim = 3, 16
-        # nthreads=4, dim = 2, 10
+        self.model=GaussianModel(dim = 50)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=4, nlive=1000, maxmcmc=5000, poolsize=1000, nslice=4)
+
     def test_run(self):
         self.work.run()
         # 2 sigma tolerance

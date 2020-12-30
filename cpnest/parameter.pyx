@@ -9,8 +9,8 @@ from cpython cimport array
 cimport numpy as np
 import numpy as np
 
-cpdef LivePoint rebuild_livepoint(names):
-    cdef LivePoint lp=LivePoint(names)
+cpdef LivePoint rebuild_livepoint(list names):
+    cdef LivePoint lp = LivePoint(names)
     return lp
 
 cdef class LivePoint:
@@ -63,7 +63,7 @@ cdef class LivePoint:
                 return 1
         return 0
 
-    def __add__(LivePoint self,LivePoint other):
+    def __add__(LivePoint self, LivePoint other):
         assert self.dimension == other.dimension
         result=LivePoint(self.names,self.bounds)
         cdef Py_ssize_t i
@@ -71,7 +71,7 @@ cdef class LivePoint:
             result.values[i]=self.values[i]+other.values[i]
         return result
 
-    def __iadd__(LivePoint self,LivePoint other):
+    def __iadd__(LivePoint self, LivePoint other):
         assert self.dimension == other.dimension
         cdef Py_ssize_t i
         for i in range(self.dimension):
@@ -86,34 +86,34 @@ cdef class LivePoint:
             result.values[i]=self.values[i]-other.values[i]
         return result
 
-    def __isub__(LivePoint self,LivePoint other):
+    def __isub__(LivePoint self, LivePoint other):
         assert self.dimension == other.dimension
         cdef Py_ssize_t i
         for i in range(self.dimension):
             self.values[i]-=other.values[i]
         return self
 
-    def __mul__(LivePoint self,float other):
+    def __mul__(LivePoint self, float other):
         cdef LivePoint result=LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=other*self.values[i]
         return result
 
-    def __imul__(LivePoint self,float other):
+    def __imul__(LivePoint self, float other):
         cdef Py_ssize_t i
         for i in range(self.dimension):
             self.values[i]*=other
         return self
 
-    def __truediv__(LivePoint self,float other):
+    def __truediv__(LivePoint self, float other):
         cdef LivePoint result = LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=self.values[i]/other
         return result
 
-    def __itruediv__(LivePoint self,float other):
+    def __itruediv__(LivePoint self, float other):
         cdef Py_ssize_t i
         for i in range(self.dimension):
             self.values[i]/=other
@@ -122,14 +122,14 @@ cdef class LivePoint:
     def __len__(LivePoint self):
         return self.dimension
     
-    def __getitem__(LivePoint self, name):
+    def __getitem__(LivePoint self, str name):
         cdef Py_ssize_t i
         for i in range(self.dimension):
             if self.names[i] == name:
                 return self.values[i]
         raise KeyError
 
-    def __setitem__(LivePoint self, name, double value):
+    def __setitem__(LivePoint self, str name, double value):
         cdef Py_ssize_t i
         for i in range(self.dimension):
             if self.names[i] == name:
