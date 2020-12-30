@@ -15,7 +15,7 @@ from .cpnest import CheckPoint, RunManager
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
-
+import array
 from .nest2pos import acl
 
 import pickle
@@ -423,14 +423,11 @@ class SliceSampler(Sampler):
         """
         adapts the length scale of the expansion/contraction
         following the rule in (Robbins and Monro, 1951) of Tibbits et al. (2014)
-        the scale is capped from both above and below
         """
-        self.Ne = max(1,self.Ne)
-        ratio = self.Ne/(self.Ne+self.Nc)
-        if np.abs(ratio - 0.5) > 0.05:
-            self.mu *= ratio
-        if self.mu < 1.0/len(self.evolution_points[0].names): self.mu = 1.0/len(self.evolution_points[0].names)
-        elif self.mu > len(self.evolution_points[0].names): self.mu = len(self.evolution_points[0].names)
+        Ne = max(1,self.Ne)
+        Nc = max(1,self.Nc)
+        ratio = Ne/(Ne+Nc)
+        self.mu *= 2*ratio
             
     def reset_boundaries(self):
         """
@@ -466,7 +463,14 @@ class SliceSampler(Sampler):
 
             sub_accepted    = 0
             sub_counter     = 0
-            oldparam        = self.evolution_points.popleft()
+            
+            j = 0
+            while j < self.poolsize:
+                oldparam        = self.evolution_points.popleft()
+                if oldparam.logL > logLmin:
+                    break
+                self.evolution_points.append(oldparam)
+                j += 1
             
             while sub_accepted == 0 and sub_counter < self.m:
                 # Set Initial Interval Boundaries
@@ -476,7 +480,7 @@ class SliceSampler(Sampler):
                 while True:
                     direction_vector = self.proposal.get_direction(mu = self.mu)
                     if not(isinstance(direction_vector,parameter.LivePoint)):
-                        direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                        direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
                     if np.any(direction_vector.values):
                         break
                 
@@ -520,7 +524,7 @@ class SliceSampler(Sampler):
                 trials = 0
                 while True:
                     # generate a new point between the boundaries we identified
-                    Xprime = np.random.uniform(self.L,self.R)
+                    Xprime        = np.random.uniform(self.L,self.R)
                     newparam      = direction_vector * Xprime + oldparam
                     newparam.logP = self.model.log_prior(newparam)
                     
@@ -546,15 +550,11 @@ class SliceSampler(Sampler):
                     trials += 1
 
             self.evolution_points.append(oldparam)
-
-            if self.verbose >= 3:
-                self.samples.append(oldparam)
-
+            self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
             self.logLmax.value  = global_lmax
             self.adapt_length_scale()
-#            print('mu-->',self.mu)
             yield (sub_counter, oldparam)
