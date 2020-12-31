@@ -4,7 +4,6 @@ from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
 from scipy.stats import pearsonr
-#from statsmodels.tsa.ar_model import AutoReg
 
 if not logging.Logger.manager.loggerDict:
     LOGGER = logging.getLogger('nest2pos')
@@ -194,12 +193,3 @@ def acl(x, tolerance=0.01):
         T+=2*acf[i]
         i+=1
     return T
-
-#def acl_AR(x):
-#    """
-#    Eq. 7 from https://arxiv.org/pdf/1011.0175.pdf
-#    """
-#    M = AutoReg(x)
-#    res = M.fit(ic='aic')
-#    ac = autocorrelation(x)[:res.k_ar]
-#    return (1.0-np.dot(ac.T,res.params))/(1.0-np.dot(np.ones(res.k_ar).T,res.params))**2
