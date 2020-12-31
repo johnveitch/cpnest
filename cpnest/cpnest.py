@@ -480,12 +480,16 @@ class CPNest(object):
         if self.NS.prior_sampling is False:
             import numpy as np
             plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-            if self.verbose >= 3:
+            if pri is not None:
                 plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
-                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
             else:
                 plotting_priors = None
+                
+            if mc is not None:
+                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
+            else:
                 plotting_mcmc   = None
+            
             if corner:
                 plot.plot_corner(plotting_posteriors,
                                  ps=plotting_priors,
