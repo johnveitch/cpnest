@@ -415,8 +415,9 @@ class SliceSampler(Sampler):
         """
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
         """
-        self.mu = 100.0
-        self.m  = 100 # maximum stepping out steps allowed
+        self.mu             = 1000.0
+        self.max_steps_out  = self.maxmcmc # maximum stepping out steps allowed
+        self.max_slices     = self.maxmcmc # maximum number of slices allowed
         super(SliceSampler, self).reset()
 
     def adapt_length_scale(self):
@@ -470,22 +471,22 @@ class SliceSampler(Sampler):
                 self.evolution_points.append(oldparam)
                 j += 1
             
-            while sub_accepted == 0 and sub_counter < self.m:
+            while sub_accepted == 0 and sub_counter < self.Nmcmc:
                 # Set Initial Interval Boundaries
                 self.reset_boundaries()
                 sub_counter += 1
         
-                while True:
-                    direction_vector = self.proposal.get_direction(mu = self.mu)
-                    if not(isinstance(direction_vector,parameter.LivePoint)):
-                        direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
-                    if np.any(direction_vector.values):
-                        break
+#                while True:
+                direction_vector = self.proposal.get_direction(mu = self.mu)
+                if not(isinstance(direction_vector,parameter.LivePoint)):
+                    direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
+#                    if np.any(direction_vector.values):
+#                        break
                 
                 Y = logLmin
                 Yp = oldparam.logP-np.random.exponential()
-                J = np.floor(self.m*np.random.uniform(0,1))
-                K = (self.m-1)-J
+                J = np.floor(self.max_steps_out*np.random.uniform(0,1))
+                K = (self.max_steps_out-1)-J
                 # keep on expanding until we get outside the logL boundary from the left
                 # or the prior bound, whichever comes first
                 while J > 0:
@@ -519,9 +520,10 @@ class SliceSampler(Sampler):
                     else:
                         break
 
-                # slice sample the likelihood
-                trials = 0
-                while True:
+                # slice sample the likelihood-bound prior
+                #  if the search interval has shrunk  too much, break and start over
+                slice = 0
+                while slice < self.max_slices:
                     # generate a new point between the boundaries we identified
                     Xprime        = np.random.uniform(self.L,self.R)
                     newparam      = direction_vector * Xprime + oldparam
@@ -543,12 +545,7 @@ class SliceSampler(Sampler):
                         self.R = Xprime
                         self.Nc = self.Nc + 1
 
-                    #  if the search interval has shrunk  too much, break and start over
-                    if np.abs(self.R-self.L) < 1e-7 or trials >= self.m:
-                        break
-                    trials += 1
-                    
-                sub_counter += trials
+                    slice += 1
             
             self.evolution_points.append(oldparam)
             self.samples.append(oldparam)
