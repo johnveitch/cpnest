@@ -454,8 +454,6 @@ class SliceSampler(Sampler):
         self.Ne = self.Ne + 1
         
     def yield_sample(self, logLmin):
-
-        global_lmax = self.logLmax.value
         
         while True:
 
@@ -483,6 +481,7 @@ class SliceSampler(Sampler):
                         break
                 
                 Y = logLmin
+                Yp = oldparam.logP-np.random.exponential()
                 J = np.floor(self.m*np.random.uniform(0,1))
                 K = (self.m-1)-J
                 # keep on expanding until we get outside the logL boundary from the left
@@ -526,33 +525,34 @@ class SliceSampler(Sampler):
                     newparam      = direction_vector * Xprime + oldparam
                     newparam.logP = self.model.log_prior(newparam)
                     
-                    if np.isfinite(newparam.logP):
+                    if newparam.logP > Yp:
                         # compute the new value of logL
                         newparam.logL = self.model.log_likelihood(newparam)
                         if newparam.logL > Y:
-                            global_lmax  = max(global_lmax, newparam.logL)
+                            self.logLmax.value = max(self.logLmax.value, newparam.logL)
                             oldparam     = newparam.copy()
                             sub_accepted += 1
                             break
-                        # adapt the intervals shrinking them
-                        if Xprime < 0.0:
-                            self.L = Xprime
-                            self.Nc = self.Nc + 1
-                        elif Xprime > 0.0:
-                            self.R = Xprime
-                            self.Nc = self.Nc + 1
+                    # adapt the intervals shrinking them
+                    if Xprime < 0.0:
+                        self.L = Xprime
+                        self.Nc = self.Nc + 1
+                    elif Xprime > 0.0:
+                        self.R = Xprime
+                        self.Nc = self.Nc + 1
 
                     #  if the search interval has shrunk  too much, break and start over
                     if np.abs(self.R-self.L) < 1e-7 or trials >= self.m:
                         break
                     trials += 1
-
+                    
+                sub_counter += trials
+            
             self.evolution_points.append(oldparam)
             self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            self.logLmax.value  = global_lmax
             self.adapt_length_scale()
             yield (sub_counter, oldparam)
