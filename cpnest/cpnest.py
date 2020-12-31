@@ -75,7 +75,11 @@ class CPNest(object):
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
         'hmc' for the Hamiltonian Monte-Carlo sampler,
-        'sli' for the slice sampler. Default: None
+        'sli' for the slice sampler.
+        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+    
+    prior_sampling: `boolean`
+        generates samples from the prior
 
     n_periodic_checkpoint: `int`
         **deprecated**
