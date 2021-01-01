@@ -413,7 +413,7 @@ class SliceSampler(Sampler):
         """
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
         """
-        self.mu             = 1000.0
+        self.mu             = 100.0
         self.max_steps_out  = self.maxmcmc # maximum stepping out steps allowed
         self.max_slices     = self.maxmcmc # maximum number of slices allowed
         super(SliceSampler, self).reset()
@@ -469,7 +469,7 @@ class SliceSampler(Sampler):
                 self.evolution_points.append(oldparam)
                 j += 1
             
-            while sub_accepted == 0 and sub_counter < self.Nmcmc:
+            while True:
                 # Set Initial Interval Boundaries
                 self.reset_boundaries()
                 sub_counter += 1
@@ -544,6 +544,12 @@ class SliceSampler(Sampler):
                         self.Nc = self.Nc + 1
 
                     slice += 1
+                    
+                if sub_counter > self.Nmcmc and sub_accepted > 0:
+                    break
+                    
+                if sub_counter > self.maxmcmc:
+                    break
             
             self.evolution_points.append(oldparam)
             self.samples.append(oldparam)
