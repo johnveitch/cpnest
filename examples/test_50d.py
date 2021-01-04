@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import cpnest.model
 from scipy import stats
+import multiprocessing as mp
 
 class GaussianModel(cpnest.model.Model):
     """
@@ -33,8 +34,8 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.model=GaussianModel(dim = 50)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=50, nlive=10000, maxmcmc=5000, poolsize=512, resume=0, output='/home/delpozzo/data1-delpozzo/test/')
+        self.model=GaussianModel(dim = 5)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=1, nlive=1000, maxmcmc=1000, poolsize=1000, nslice=1)
 
     def test_run(self):
         self.work.run()
@@ -47,5 +48,3 @@ def test_all():
 
 if __name__=='__main__':
    unittest.main(verbosity=2)
-    # work=cpnest.CPNest(GaussianModel(dim = 50), verbose=2, nthreads=12, nlive=1000, maxmcmc=5000, poolsize=1000, resume=1, periodic_checkpoint_interval=None)
-    # work.run()

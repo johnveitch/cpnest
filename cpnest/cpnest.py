@@ -9,14 +9,11 @@ import logging
 import cProfile
 
 class CheckPoint(Exception):
-    print("Checkpoint exception raise")
     pass
 
 def sighandler(signal, frame):
     print("Handling signal {}".format(signal))
     raise CheckPoint()
-
-_use_ray = False
 
 class CPNest(object):
     """
@@ -58,20 +55,25 @@ class CPNest(object):
     nthreads: `int` or `None`
         number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
 
-    nhamiltomnian: `int`
+    nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
-
+        
+    nslice: `int`
+            number of sampler threads using an ensemble slice samplers. Default: 0
+            
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
 
     proposal: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
+        'hmc' for the Hamiltonian Monte-Carlo sampler,
+        'sli' for the slice sampler.
         'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
     
     prior_sampling: `boolean`
         generates samples from the prior
-    
+
     n_periodic_checkpoint: `int`
         **deprecated**
         checkpoint the sampler every n_periodic_checkpoint iterations
@@ -97,23 +99,25 @@ class CPNest(object):
                  maxmcmc      = 100,
                  nthreads     = None,
                  nhamiltonian = 0,
+                 nslice       = 0,
                  resume       = False,
                  proposals     = None,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False
                  ):
-
         if nthreads is None:
             self.nthreads = os.cpu_count()
         else:
             self.nthreads = nthreads
         
-        # if the user did  not specify a pool, start the ray API
+        # if the user did not specify a pool, start the ray API
         if pool == None:
             import ray
             _use_ray = True
             ray.init(num_cpus=nthreads)
+        else:
+            _use_ray = False
         
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
@@ -121,7 +125,7 @@ class CPNest(object):
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-        #FIXME: remove in the next release
+
         if n_periodic_checkpoint is not None:
             self.logger.critical(
                 "The n_periodic_checkpoint kwarg is deprecated, "
@@ -131,16 +135,18 @@ class CPNest(object):
             self.periodic_checkpoint_interval = np.inf
         else:
             self.periodic_checkpoint_interval = periodic_checkpoint_interval
-        
-        from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler
+
+        from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
         from .NestedSampling import NestedSampler
-        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle
+        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
         if proposals is None:
             proposals = dict(mhs=DefaultProposalCycle,
-                             hmc=HamiltonianProposalCycle)
+                             hmc=HamiltonianProposalCycle,
+                             sli=EnsembleSliceProposalCycle)
         elif type(proposals) == list:
             proposals = dict(mhs=proposals[0],
-                             hmc=proposals[1])
+                             hmc=proposals[1],
+                             sli=proposals[2])
         self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
@@ -156,58 +162,112 @@ class CPNest(object):
 
         self.process_pool = []
 
+        # instantiate the nested sampler class
+        resume_file = os.path.join(output, "nested_sampler_resume.pkl")
+        if not os.path.exists(resume_file) or resume == False:
+            self.NS = NestedSampler(self.user,
+                                    nlive          = nlive,
+                                    output         = output,
+                                    verbose        = verbose,
+                                    seed           = self.seed,
+                                    prior_sampling = self.prior_sampling)
+        else:
+            self.NS = NestedSampler.resume(resume_file, self.user)
+
+        nmhs = self.nthreads-nhamiltonian-nslice
         # instantiate the sampler class
-        for i in range(self.nthreads-nhamiltonian):
+        for i in range(nmhs):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 if _use_ray == True:
                     MHSampler = ray.remote(MetropolisHastingsSampler)
                     sampler = MHSampler.remote(self.user,
-                                    maxmcmc,
-                                    verbose     = verbose,
-                                    output      = output,
-                                    poolsize    = poolsize,
-                                    seed        = self.seed+i,
-                                    proposal    = proposals['mhs'](),
-                                    resume_file = resume_file,
-                                    sample_prior = prior_sampling
-                                    )
+                                               maxmcmc,
+                                               verbose     = verbose,
+                                               output      = output,
+                                               poolsize    = poolsize,
+                                               seed        = self.seed+i,
+                                               proposal    = proposals['mhs'](),
+                                               resume_file = resume_file,
+                                               sample_prior = prior_sampling
+                                              )
                 else:
                     sampler = MetropolisHastingsSampler(self.user,
-                                    maxmcmc,
-                                    verbose     = verbose,
-                                    output      = output,
-                                    poolsize    = poolsize,
-                                    seed        = self.seed+i,
-                                    proposal    = proposals['mhs'](),
-                                    resume_file = resume_file,
-                                    sample_prior = prior_sampling
-                                    )
+                                                        maxmcmc,
+                                                        verbose     = verbose,
+                                                        output      = output,
+                                                        poolsize    = poolsize,
+                                                        seed        = self.seed+i,
+                                                        proposal    = proposals['mhs'](),
+                                                        resume_file = resume_file,
+                                                        sample_prior = prior_sampling
+                                                        )
             else:
-                sampler = MetropolisHastingsSampler.resume(resume_file,
-                                                           self.user)
+                sampler = MetropolisHastingsSampler.resume(resume_file, self.user)
 
             self.process_pool.append(sampler)
         
-        for i in range(self.nthreads-nhamiltonian,self.nthreads):
+        for i in range(nmhs+nhamiltonian,self.nthreads-nslice):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
-                HMCSampler = ray.remote(HamiltonianMonteCarloSampler)
-                sampler = HMCSampler.remote(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+i,
-                                  proposal    = proposals['hmc'](model=self.user),
-                                  resume_file = resume_file,
-                                  sample_prior = prior_sampling
-                                  )
+                if _use_ray == True:
+                    HMCSampler = ray.remote(HamiltonianMonteCarloSampler)
+                    sampler = HMCSampler.remote(self.user,
+                                                maxmcmc,
+                                                verbose     = verbose,
+                                                output      = output,
+                                                poolsize    = poolsize,
+                                                seed        = self.seed+i,
+                                                proposal    = proposals['hmc'](model=self.user),
+                                                resume_file = resume_file,
+                                                sample_prior = prior_sampling
+                                               )
+                else:
+                    sampler = HamiltonianMonteCarloSampler(self.user,
+                                                           maxmcmc,
+                                                           verbose     = verbose,
+                                                           output      = output,
+                                                           poolsize    = poolsize,
+                                                           seed        = self.seed+i,
+                                                           proposal    = proposals['hmc'](model=self.user),
+                                                           resume_file = resume_file,
+                                                           sample_prior = prior_sampling
+                                                          )
             else:
-                sampler = HamiltonianMonteCarloSampler.resume.remote(resume_file,
-                                                              self.user)
+                sampler = HamiltonianMonteCarloSampler.resume.remote(resume_file, self.user)
+
             self.process_pool.append(sampler)
         
+        for i in range(nmhs+nhamiltonian,self.nthreads):
+            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+            if not os.path.exists(resume_file) or resume == False:
+                if _use_ray == True:
+                    SSampler = ray.remote(SliceSampler)
+                    sampler = SSampler.remote(self.user,
+                                              maxmcmc,
+                                              verbose     = verbose,
+                                              output      = output,
+                                              poolsize    = poolsize,
+                                              seed        = self.seed+i,
+                                              proposal    = proposals['sli'](),
+                                              resume_file = resume_file
+                                             )
+                else:
+                    sampler = SliceSampler(self.user,
+                                           maxmcmc,
+                                           verbose     = verbose,
+                                           output      = output,
+                                           poolsize    = poolsize,
+                                           seed        = self.seed+i,
+                                           proposal    = proposals['sli'](),
+                                           resume_file = resume_file
+                                          )
+            else:
+                SSampler = ray.remote(SliceSampler)
+                sampler = SSampler.resume(resume_file, self.user)
+        
+            self.process_pool.append(sampler)
+            
         if pool == None:
             from ray.util import ActorPool
             self.pool = ActorPool(self.process_pool)
@@ -227,7 +287,7 @@ class CPNest(object):
                                     periodic_checkpoint_interval = self.periodic_checkpoint_interval)
         else:
             self.NS = NestedSampler.resume(resume_file, self.user, pool)
-        
+
     def run(self):
         """
         Run the sampler
@@ -308,6 +368,42 @@ class CPNest(object):
         nested_samples     = self.get_nested_samples()
         posterior_samples  = draw_posterior_many([nested_samples],[self.nlive],verbose=self.verbose)
         posterior_samples  = np.array(posterior_samples)
+        self.prior_samples = {n:None for n in self.user.names}
+        self.mcmc_samples  = {n:None for n in self.user.names}
+        # if we run with full verbose, read in and output
+        # the mcmc thinned posterior samples
+        if self.verbose >= 3:
+            from .nest2pos import resample_mcmc_chain
+            from numpy.lib.recfunctions import stack_arrays
+
+            prior_samples = []
+            mcmc_samples  = []
+            for file in os.listdir(self.NS.output_folder):
+                if 'prior_samples' in file:
+                    prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
+                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+                elif 'mcmc_chain' in file:
+                    mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
+                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+
+            # first deal with the prior samples
+            if len(prior_samples)>0:
+                self.prior_samples = stack_arrays([p for p in prior_samples])
+                if filename:
+                    np.savetxt(os.path.join(
+                           self.NS.output_folder,'prior.dat'),
+                           self.prior_samples.ravel(),
+                           header=' '.join(self.prior_samples.dtype.names),
+                           newline='\n',delimiter=' ')
+            # now stack all the mcmc chains
+            if len(mcmc_samples)>0:
+                self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
+                if filename:
+                    np.savetxt(os.path.join(
+                           self.NS.output_folder,'mcmc.dat'),
+                           self.mcmc_samples.ravel(),
+                           header=' '.join(self.mcmc_samples.dtype.names),
+                           newline='\n',delimiter=' ')
 
         # TODO: Replace with something to output samples in whatever format
         if filename:
@@ -425,12 +521,16 @@ class CPNest(object):
         if self.NS.prior_sampling is False:
             import numpy as np
             plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-            if self.verbose >= 3:
+            if pri is not None:
                 plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
-                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
             else:
                 plotting_priors = None
+                
+            if mc is not None:
+                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
+            else:
                 plotting_mcmc   = None
+            
             if corner:
                 plot.plot_corner(plotting_posteriors,
                                  ps=plotting_priors,
@@ -456,37 +556,3 @@ class CPNest(object):
 
     def checkpoint(self):
         self.checkpoint_flag=1
-
-
-#class RunManager(SyncManager):
-#    def __init__(self, nthreads=None, **kwargs):
-#        self.periodic_checkpoint_interval = kwargs.pop(
-#            "periodic_checkpoint_interval", np.inf
-#        )
-#        super(RunManager,self).__init__(**kwargs)
-#        self.nconnected=mp.Value(c_int,0)
-#        self.producer_pipes = list()
-#        self.consumer_pipes = list()
-#        for i in range(nthreads):
-#            consumer, producer = mp.Pipe(duplex=True)
-#            self.producer_pipes.append(producer)
-#            self.consumer_pipes.append(consumer)
-#        self.logLmin = None
-#        self.logLmax = None
-#        self.nthreads=nthreads
-#
-#    def start(self):
-#        super(RunManager, self).start()
-#        self.logLmin = mp.Value(c_double,-np.inf)
-#        self.logLmax = mp.Value(c_double,-np.inf)
-#        self.checkpoint_flag=mp.Value(c_int,0)
-#
-#    def connect_producer(self):
-#        """
-#        Returns the producer's end of the pipe
-#        """
-#        with self.nconnected.get_lock():
-#            n = self.nconnected.value
-#            pipe = self.producer_pipes[n]
-#            self.nconnected.value+=1
-#        return pipe, n

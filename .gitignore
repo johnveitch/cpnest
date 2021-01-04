@@ -32,6 +32,9 @@
 *.dSYM/
 *.su
 
+# Cython output files
+cpnest/*.c
+
 # Compiled python
 *.pyc
 

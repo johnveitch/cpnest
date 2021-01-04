@@ -4,7 +4,6 @@ from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
 from scipy.stats import pearsonr
-#from statsmodels.tsa.ar_model import AutoReg
 
 if not logging.Logger.manager.loggerDict:
     LOGGER = logging.getLogger('nest2pos')
@@ -103,7 +102,7 @@ def draw_posterior_many(datas, Nlives, verbose=False):
     for post,frac in zip(posts,fracs):
       mask = uniform(size=len(post))<frac
       bigpos.append(post[mask])
-    result = vstack(bigpos).flatten()
+    result = np.concatenate([bigpos[i] for i in range(len(bigpos))], axis=None)
     LOGGER.critical('Samples produced: {0:d}'.format(result.shape[0]))
     return result
 
@@ -174,13 +173,13 @@ def autocorrelation(x):
     Compute the autocorrelation of the chain
     using an FFT
     """
-    mean=x.mean()
-    var=np.var(x)
-    xp=x-mean
+    m=x.mean()
+    v=np.var(x)
+    xp=x-m
 
     cf=np.fft.fft(xp)
     sf=cf.conjugate()*cf
-    corr=np.fft.ifft(sf).real/var/len(x)
+    corr=np.fft.ifft(sf).real/v/len(x)
     return corr
 
 def acl(x, tolerance=0.01):
@@ -188,18 +187,9 @@ def acl(x, tolerance=0.01):
     Compute autocorrelation time for x
     """
     T=1
-    i=1
+    i=0
     acf = autocorrelation(x)
-    while acf[i]>tolerance and i<len(x):
+    while acf[i]>tolerance and i<len(acf):
         T+=2*acf[i]
         i+=1
     return T
-
-#def acl_AR(x):
-#    """
-#    Eq. 7 from https://arxiv.org/pdf/1011.0175.pdf
-#    """
-#    M = AutoReg(x)
-#    res = M.fit(ic='aic')
-#    ac = autocorrelation(x)[:res.k_ar]
-#    return (1.0-np.dot(ac.T,res.params))/(1.0-np.dot(np.ones(res.k_ar).T,res.params))**2

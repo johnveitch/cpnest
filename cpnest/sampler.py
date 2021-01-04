@@ -15,7 +15,7 @@ from .cpnest import CheckPoint
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
-
+import array
 from .nest2pos import acl
 import ray
 import dill as pickle
@@ -120,10 +120,8 @@ class Sampler(object):
             self.evolution_points.append(p)
 
         self.proposal.set_ensemble(self.evolution_points)
-
         # initialise the structure to store the mcmc chain
         self.samples = []
-
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -131,6 +129,7 @@ class Sampler(object):
             self.estimate_nmcmc_on_the_fly()
 
         if self.sample_prior is True or self.verbose>=3:
+
             # save the poolsize as prior samples
 
             prior_samples = []
@@ -206,9 +205,6 @@ class Sampler(object):
         """
         if not self.initialised:
             self.reset()
-#        if self.manager.checkpoint_flag.value:
-#            self.checkpoint()
-#            sys.exit(130)
 
         if logLmin==np.inf or p == None:
             self.finalise()
@@ -224,11 +220,10 @@ class Sampler(object):
 
         self.evolution_points.append(p)
         (Nmcmc, outParam) = next(self.yield_sample(logLmin))
-            # Send the sample to the Nested Sampler
 
         if (self.counter%(self.poolsize//4))==0:
             self.proposal.set_ensemble(self.evolution_points)
-#            self.estimate_nmcmc()
+            self.estimate_nmcmc()
 
         self.counter += 1
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
@@ -377,3 +372,159 @@ class HamiltonianMonteCarloSampler(Sampler):
         self.evolution_points.append(p)
         self.evolution_points.rotate(-k)
         return self.proposal.get_sample(p.copy(),logLmin=p.logL)
+
+class SliceSampler(Sampler):
+    """
+    The Ensemble Slice sampler from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    def reset(self):
+        """
+        Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
+        """
+        self.mu             = 1.0
+        self.max_steps_out  = self.maxmcmc # maximum stepping out steps allowed
+        self.max_slices     = self.maxmcmc # maximum number of slices allowed
+        self.tuning_steps   = 10*self.poolsize
+        super(SliceSampler, self).reset()
+
+    def adapt_length_scale(self):
+        """
+        adapts the length scale of the expansion/contraction
+        following the rule in (Robbins and Monro, 1951) of Tibbits et al. (2014)
+        """
+        Ne = max(1,self.Ne)
+        Nc = max(1,self.Nc)
+        ratio = Ne/(Ne+Nc)
+        self.mu *= 2*ratio
+            
+    def reset_boundaries(self):
+        """
+        resets the boundaries and counts
+        for the slicing
+        """
+        self.L  = - np.random.uniform(0.0,1.0)
+        self.R  = self.L + 1.0
+        self.Ne = 0.0
+        self.Nc = 0.0
+        
+    def increase_left_boundary(self):
+        """
+        increase the left boundary and counts
+        by one unit
+        """
+        self.L  = self.L - 1.0
+        self.Ne = self.Ne + 1
+
+    def increase_right_boundary(self):
+        """
+        increase the right boundary and counts
+        by one unit
+        """
+        self.R  = self.R + 1.0
+        self.Ne = self.Ne + 1
+        
+    def yield_sample(self, logLmin):
+        
+        while True:
+
+            sub_accepted    = 0
+            sub_counter     = 0
+            
+            j = 0
+            while j < self.poolsize:
+                oldparam        = self.evolution_points.popleft()
+                if oldparam.logL > logLmin:
+                    break
+                self.evolution_points.append(oldparam)
+                j += 1
+            
+            while True:
+                # Set Initial Interval Boundaries
+                self.reset_boundaries()
+                sub_counter += 1
+
+                direction_vector = self.proposal.get_direction(mu = self.mu)
+                if not(isinstance(direction_vector,parameter.LivePoint)):
+                    direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                
+                Y = logLmin
+                Yp = oldparam.logP-np.random.exponential()
+                J = np.floor(self.max_steps_out*np.random.uniform(0,1))
+                K = (self.max_steps_out-1)-J
+                # keep on expanding until we get outside the logL boundary from the left
+                # or the prior bound, whichever comes first
+                while J > 0:
+
+                    parameter_left = direction_vector * self.L + oldparam
+                    
+                    if self.model.in_bounds(parameter_left):
+                        if Y > self.model.log_likelihood(parameter_left):
+                            break
+                        else:
+                            self.increase_left_boundary()
+                            J -= 1
+                    # if we get out of bounds, break out
+                    else:
+                        break
+
+                # keep on expanding until we get outside the logL boundary from the right
+                # or the prior bound, whichever comes first
+                while K > 0:
+                
+                    parameter_right = direction_vector * self.R + oldparam
+                
+                    if self.model.in_bounds(parameter_right):
+                    
+                        if Y > self.model.log_likelihood(parameter_right):
+                            break
+                        else:
+                            self.increase_right_boundary()
+                            K -= 1
+                    # if we get out of bounds, break out
+                    else:
+                        break
+
+                # slice sample the likelihood-bound prior
+                #  if the search interval has shrunk  too much, break and start over
+                slice = 0
+                while slice < self.max_slices:
+                    # generate a new point between the boundaries we identified
+                    Xprime        = np.random.uniform(self.L,self.R)
+                    newparam      = direction_vector * Xprime + oldparam
+                    newparam.logP = self.model.log_prior(newparam)
+                    
+                    if newparam.logP > Yp:
+                        # compute the new value of logL
+                        newparam.logL = self.model.log_likelihood(newparam)
+                        if newparam.logL > Y:
+                            oldparam     = newparam.copy()
+                            sub_accepted += 1
+                            break
+                    # adapt the intervals shrinking them
+                    if Xprime < 0.0:
+                        self.L = Xprime
+                        self.Nc = self.Nc + 1
+                    elif Xprime > 0.0:
+                        self.R = Xprime
+                        self.Nc = self.Nc + 1
+
+                    slice += 1
+                    
+                if sub_counter > self.Nmcmc and sub_accepted > 0:
+                    break
+                    
+                if sub_counter > self.maxmcmc:
+                    break
+            
+            self.evolution_points.append(oldparam)
+            self.samples.append(oldparam)
+            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter  += sub_counter
+            self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+            
+            if self.mcmc_counter < self.tuning_steps:
+                self.adapt_length_scale()
+            
+            yield (sub_counter, oldparam)

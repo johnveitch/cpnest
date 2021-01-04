@@ -9,6 +9,7 @@ from scipy.interpolate import LSQUnivariateSpline
 from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
+from itertools import permutations
 
 class Proposal(object):
     """
@@ -110,7 +111,101 @@ class ProposalCycle(EnsembleProposal):
         self.weights = self.weights + [weight]
         self.set_cycle()
 
+class EnsembleSlice(EnsembleProposal):
+    """
+    The Ensemble Slice proposal from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    log_J = 0.0 # Symmetric proposal
 
+class EnsembleSliceDifferential(EnsembleSlice):
+    """
+    The Ensemble Slice Differential move from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    
+    def get_direction(self, mu = 1.0):
+        """
+        Draws two random points and returns their direction
+        """
+        subset = sample(list(self.ensemble),2)
+        direction = reduce(type(self.ensemble[0]).__sub__,subset)
+        return direction * mu
+
+class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
+    """
+    The Ensemble Slice Correlated Gaussian move from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    mean = None
+    covariance=None
+    def set_ensemble(self,ensemble):
+        """
+        Over-ride default set_ensemble so that the
+        mean and covariance matrix are recomputed when it is updated
+        """
+        super(EnsembleSliceCorrelatedGaussian,self).set_ensemble(ensemble)
+        self.update_mean_covariance()
+
+    def update_mean_covariance(self):
+        """
+        Recompute mean and covariance matrix
+        of the ensemble
+        """
+        n   = len(self.ensemble)
+        dim = self.ensemble[0].dimension
+        cov_array = np.zeros((dim,n))
+        if dim == 1:
+            name=self.ensemble[0].names[0]
+            self.covariance = np.atleast_2d(np.var([self.ensemble[j][name] for j in range(n)]))
+            self.mean       = np.atleast_1d(np.mean([self.ensemble[j][name] for j in range(n)]))
+        else:
+            for i,name in enumerate(self.ensemble[0].names):
+                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
+            self.covariance = np.cov(cov_array)
+            self.mean       = np.mean(cov_array,axis=1)
+        
+    def get_direction(self, mu = 1.0):
+        """
+        Draws a random gaussian direction
+        """
+        direction = mu * np.random.multivariate_normal(self.mean, self.covariance)
+        return direction
+
+class EnsembleSliceGaussian(EnsembleSlice):
+    """
+    The Ensemble Slice Gaussian move from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    
+    def get_direction(self, mu = 1.0):
+        """
+        Draw a random gaussian direction
+        """
+        direction  = np.random.normal(0.0,1.0,size=len(self.ensemble[0].names))
+        direction /= np.linalg.norm(direction)
+        return direction * mu
+
+class EnsembleSliceProposalCycle(ProposalCycle):
+    def __init__(self, model=None):
+        """
+        A proposal cycle that uses the slice sampler :obj:`EnsembleSlice`
+        proposal.
+        """
+        weights = [1,1,1]
+        proposals = [EnsembleSliceDifferential(),EnsembleSliceGaussian(),EnsembleSliceCorrelatedGaussian()]
+        super(EnsembleSliceProposalCycle,self).__init__(proposals, weights)
+        
+    def get_direction(self, mu = 1.0, **kwargs):
+        """
+        Get a direction for the slice jump
+        """
+        self.idx = (self.idx + 1) % self.N
+        p = self.cycle[self.idx]
+        new = p.get_direction(mu = mu, **kwargs)
+        self.log_J = p.log_J
+        return new
+        
 class EnsembleWalk(EnsembleProposal):
     """
     The Ensemble "walk" move from Goodman & Weare
