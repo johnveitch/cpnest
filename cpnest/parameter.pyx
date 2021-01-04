@@ -92,27 +92,27 @@ cdef class LivePoint:
             self.values[i]-=other.values[i]
         return self
 
-    def __mul__(LivePoint self, float other):
+    def __mul__(LivePoint self, double other):
         cdef LivePoint result=LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=other*self.values[i]
         return result
 
-    def __imul__(LivePoint self, float other):
+    def __imul__(LivePoint self, double other):
         cdef Py_ssize_t i
         for i in range(self.dimension):
             self.values[i]*=other
         return self
 
-    def __truediv__(LivePoint self, float other):
+    def __truediv__(LivePoint self, double other):
         cdef LivePoint result = LivePoint(self.names)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=self.values[i]/other
         return result
 
-    def __itruediv__(LivePoint self, float other):
+    def __itruediv__(LivePoint self, double other):
         cdef Py_ssize_t i
         for i in range(self.dimension):
             self.values[i]/=other
