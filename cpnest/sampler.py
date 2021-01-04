@@ -135,6 +135,7 @@ class Sampler(object):
             self.estimate_nmcmc_on_the_fly()
 
         if self.sample_prior is True or self.verbose>=3:
+
             # save the poolsize as prior samples
 
             prior_samples = []

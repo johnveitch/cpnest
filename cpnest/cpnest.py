@@ -112,7 +112,6 @@ class CPNest(object):
                  periodic_checkpoint_interval=None,
                  prior_sampling = False
                  ):
-
         if nthreads is None:
             self.nthreads = mp.cpu_count()
         else:
@@ -124,7 +123,7 @@ class CPNest(object):
         self.logger = logging.getLogger('CPNest')
         self.logger.update(output=output, verbose=verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-        #FIXME: remove in the next release
+
         if n_periodic_checkpoint is not None:
             self.logger.critical(
                 "The n_periodic_checkpoint kwarg is deprecated, "
