@@ -415,9 +415,10 @@ class SliceSampler(Sampler):
         """
         Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
         """
-        self.mu             = 100.0
+        self.mu             = 1.0
         self.max_steps_out  = self.maxmcmc # maximum stepping out steps allowed
         self.max_slices     = self.maxmcmc # maximum number of slices allowed
+        self.tuning_steps   = 10*self.poolsize
         super(SliceSampler, self).reset()
 
     def adapt_length_scale(self):
@@ -475,13 +476,10 @@ class SliceSampler(Sampler):
                 # Set Initial Interval Boundaries
                 self.reset_boundaries()
                 sub_counter += 1
-        
-#                while True:
+
                 direction_vector = self.proposal.get_direction(mu = self.mu)
                 if not(isinstance(direction_vector,parameter.LivePoint)):
                     direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
-#                    if np.any(direction_vector.values):
-#                        break
                 
                 Y = logLmin
                 Yp = oldparam.logP-np.random.exponential()
@@ -559,5 +557,8 @@ class SliceSampler(Sampler):
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            self.adapt_length_scale()
+            
+            if self.mcmc_counter < self.tuning_steps:
+                self.adapt_length_scale()
+            
             yield (sub_counter, oldparam)

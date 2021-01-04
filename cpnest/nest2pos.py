@@ -173,13 +173,13 @@ def autocorrelation(x):
     Compute the autocorrelation of the chain
     using an FFT
     """
-    mean=x.mean()
-    var=np.var(x)
-    xp=x-mean
+    m=x.mean()
+    v=np.var(x)
+    xp=x-m
 
     cf=np.fft.fft(xp)
     sf=cf.conjugate()*cf
-    corr=np.fft.ifft(sf).real/var/len(x)
+    corr=np.fft.ifft(sf).real/v/len(x)
     return corr
 
 def acl(x, tolerance=0.01):
@@ -187,9 +187,9 @@ def acl(x, tolerance=0.01):
     Compute autocorrelation time for x
     """
     T=1
-    i=1
+    i=0
     acf = autocorrelation(x)
-    while acf[i]>tolerance and i<len(x):
+    while acf[i]>tolerance and i<len(acf):
         T+=2*acf[i]
         i+=1
     return T
