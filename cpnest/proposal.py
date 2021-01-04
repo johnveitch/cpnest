@@ -134,7 +134,7 @@ class EnsembleSliceDifferential(EnsembleSlice):
 
 class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
     """
-    The Ensemble Slice Gaussian move from Karamanis & Beutler
+    The Ensemble Slice Correlated Gaussian move from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mean = None
@@ -167,14 +167,14 @@ class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
         
     def get_direction(self, mu = 1.0):
         """
-        Draws a random guassian direction
+        Draws a random gaussian direction
         """
-        direction = mu * np.random.multivariate_normal(self.mean,self.covariance)
+        direction = mu * np.random.multivariate_normal(self.mean, self.covariance)
         return direction
 
 class EnsembleSliceGaussian(EnsembleSlice):
     """
-    The Ensemble Slice Differential move from Karamanis & Beutler
+    The Ensemble Slice Gaussian move from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     
