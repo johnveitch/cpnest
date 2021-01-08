@@ -185,11 +185,11 @@ class Sampler(object):
         samples = np.array([x.values for x in self.samples[-5*self.maxmcmc:]])
         # compute the ACL on 5 times the maxmcmc set of samples
         ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
-        
+
         if self.verbose >= 3:
             for i in range(len(self.model.names)):
                 self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
-        
+
         self.Nmcmc = int(np.max(ACL))
         if self.Nmcmc < 1:
             self.Nmcmc = 1
@@ -221,7 +221,7 @@ class Sampler(object):
 
             if self.logLmin.value==np.inf:
                 break
-            
+
             if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
                 self.checkpoint()
                 self.last_checkpoint_time = time.time()
@@ -229,7 +229,7 @@ class Sampler(object):
             # if the nested sampler is requesting for an update
             # produce a sample for it
             if self.producer_pipe.poll():
-            
+
                 p = self.producer_pipe.recv()
 
                 if p is None:
@@ -377,7 +377,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                         global_lmax = max(global_lmax, newparam.logL)
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
-            
+
             # append the sample to the array of samples
             self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
@@ -429,7 +429,7 @@ class SliceSampler(Sampler):
         Nc = max(1,self.Nc)
         ratio = Ne/(Ne+Nc)
         self.mu *= 2*ratio
-            
+
     def reset_boundaries(self):
         """
         resets the boundaries and counts
@@ -439,7 +439,7 @@ class SliceSampler(Sampler):
         self.R  = self.L + 1.0
         self.Ne = 0.0
         self.Nc = 0.0
-        
+
     def increase_left_boundary(self):
         """
         increase the left boundary and counts
@@ -455,14 +455,14 @@ class SliceSampler(Sampler):
         """
         self.R  = self.R + 1.0
         self.Ne = self.Ne + 1
-        
+
     def yield_sample(self, logLmin):
-        
+
         while True:
 
             sub_accepted    = 0
             sub_counter     = 0
-            
+
             j = 0
             while j < self.poolsize:
                 oldparam        = self.evolution_points.popleft()
@@ -470,7 +470,7 @@ class SliceSampler(Sampler):
                     break
                 self.evolution_points.append(oldparam)
                 j += 1
-            
+
             while True:
                 # Set Initial Interval Boundaries
                 self.reset_boundaries()
@@ -479,7 +479,7 @@ class SliceSampler(Sampler):
                 direction_vector = self.proposal.get_direction(mu = self.mu)
                 if not(isinstance(direction_vector,parameter.LivePoint)):
                     direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
-                
+
                 Y = logLmin
                 Yp = oldparam.logP-np.random.exponential()
                 J = np.floor(self.max_steps_out*np.random.uniform(0,1))
@@ -489,7 +489,7 @@ class SliceSampler(Sampler):
                 while J > 0:
 
                     parameter_left = direction_vector * self.L + oldparam
-                    
+
                     if self.model.in_bounds(parameter_left):
                         if Y > self.model.log_likelihood(parameter_left):
                             break
@@ -503,11 +503,11 @@ class SliceSampler(Sampler):
                 # keep on expanding until we get outside the logL boundary from the right
                 # or the prior bound, whichever comes first
                 while K > 0:
-                
+
                     parameter_right = direction_vector * self.R + oldparam
-                
+
                     if self.model.in_bounds(parameter_right):
-                    
+
                         if Y > self.model.log_likelihood(parameter_right):
                             break
                         else:
@@ -525,7 +525,7 @@ class SliceSampler(Sampler):
                     Xprime        = np.random.uniform(self.L,self.R)
                     newparam      = direction_vector * Xprime + oldparam
                     newparam.logP = self.model.log_prior(newparam)
-                    
+
                     if newparam.logP > Yp:
                         # compute the new value of logL
                         newparam.logL = self.model.log_likelihood(newparam)
@@ -543,21 +543,21 @@ class SliceSampler(Sampler):
                         self.Nc = self.Nc + 1
 
                     slice += 1
-                    
+
                 if sub_counter > self.Nmcmc and sub_accepted > 0:
                     break
-                    
+
                 if sub_counter > self.maxmcmc:
                     break
-            
+
             self.evolution_points.append(oldparam)
             self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            
+
             if self.mcmc_counter < self.tuning_steps:
                 self.adapt_length_scale()
-            
+
             yield (sub_counter, oldparam)

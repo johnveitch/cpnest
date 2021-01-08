@@ -64,10 +64,10 @@ class CPNest(object):
 
     nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
-        
+
     nslice: `int`
             number of sampler threads using an ensemble slice samplers. Default: 0
-            
+
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
 
@@ -77,7 +77,7 @@ class CPNest(object):
         'hmc' for the Hamiltonian Monte-Carlo sampler,
         'sli' for the slice sampler.
         'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
-    
+
     prior_sampling: `boolean`
         generates samples from the prior
 
@@ -263,7 +263,7 @@ class CPNest(object):
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
-        
+
         if self.verbose >= 2:
             self.logger.critical("Saving nested samples in {0}".format(self.output))
             self.nested_samples = self.get_nested_samples()
@@ -272,7 +272,7 @@ class CPNest(object):
         else:
             self.nested_samples = self.get_nested_samples(filename=None)
             self.posterior_samples = self.get_posterior_samples(filename=None)
-        
+
         if self.verbose>=3 or self.NS.prior_sampling:
             self.prior_samples = self.get_prior_samples(filename=None)
         if self.verbose>=3 and not self.NS.prior_sampling:
@@ -389,22 +389,22 @@ class CPNest(object):
         import os
 
         from numpy.lib.recfunctions import stack_arrays
-        
+
         # read in the samples from the prior coming from each sampler
         prior_samples = []
         for file in os.listdir(self.NS.output_folder):
             if 'prior_samples' in file:
                 prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
                 os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
-        
+
         # if we sampled the prior, the nested samples are samples from the prior
         if self.NS.prior_sampling:
             prior_samples.append(self.get_nested_samples())
-        
+
         if not prior_samples:
             self.logger.critical('ERROR, no prior samples found!')
             return None
-        
+
         prior_samples = stack_arrays([p for p in prior_samples])
         if filename:
             np.savetxt(os.path.join(
@@ -438,11 +438,11 @@ class CPNest(object):
             if 'mcmc_chain' in file:
                 mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
                 os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
-        
+
         if not mcmc_samples:
             self.logger.critical('ERROR, no MCMC samples found!')
             return None
-            
+
         # now stack all the mcmc chains
         mcmc_samples = stack_arrays([p for p in mcmc_samples])
         if filename:
@@ -452,7 +452,7 @@ class CPNest(object):
                        header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
         return mcmc_samples
-    
+
     def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
@@ -483,12 +483,12 @@ class CPNest(object):
                 plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
             else:
                 plotting_priors = None
-                
+
             if mc is not None:
                 plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
             else:
                 plotting_mcmc   = None
-            
+
             if corner:
                 plot.plot_corner(plotting_posteriors,
                                  ps=plotting_priors,
