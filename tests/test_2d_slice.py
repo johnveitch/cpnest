@@ -17,7 +17,7 @@ class GaussianModel(cpnest.model.Model):
 
     def log_prior(self,p):
         return super(GaussianModel,self).log_prior(p)
-    
+
     def force(self, p):
         f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
         return f
@@ -27,9 +27,7 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        gaussmodel = GaussianModel()
-        self.work=cpnest.CPNest(gaussmodel,verbose=2,nthreads=1,nlive=1000,maxmcmc=5000,poolsize=1000)
-        print('Sampling 2D gaussian with analytic evidence {0}'.format(gaussmodel.analytic_log_Z))
+        self.work=cpnest.CPNest(GaussianModel(),verbose=1,nthreads=1,nlive=1000,maxmcmc=5000,poolsize=1000,nslice=1)
 
     def test_run(self):
         self.work.run()
@@ -42,4 +40,4 @@ def test_all():
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
- 
+
