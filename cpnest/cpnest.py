@@ -200,7 +200,7 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
 
-        for i in range(nmhs+nhamiltonian,self.nthreads-nslice):
+        for i in range(nhamiltonian):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 sampler = HamiltonianMonteCarloSampler(self.user,
@@ -208,7 +208,7 @@ class CPNest(object):
                                   verbose     = verbose,
                                   output      = output,
                                   poolsize    = poolsize,
-                                  seed        = self.seed+i,
+                                  seed        = self.seed+nmhs+i,
                                   proposal    = proposals['hmc'](model=self.user),
                                   resume_file = resume_file,
                                   sample_prior = prior_sampling,
@@ -221,7 +221,7 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
 
-        for i in range(nmhs+nhamiltonian,self.nthreads):
+        for i in range(nslice):
             resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
             if not os.path.exists(resume_file) or resume == False:
                 sampler = SliceSampler(self.user,
@@ -229,7 +229,7 @@ class CPNest(object):
                                   verbose     = verbose,
                                   output      = output,
                                   poolsize    = poolsize,
-                                  seed        = self.seed+i,
+                                  seed        = self.seed+nmhs+nhamiltonian+i,
                                   proposal    = proposals['sli'](),
                                   resume_file = resume_file,
                                   manager     = self.manager
