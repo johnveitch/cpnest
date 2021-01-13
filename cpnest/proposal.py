@@ -388,19 +388,22 @@ class HamiltonianProposal(EnsembleEigenVector):
         energy and the :obj:`cpnest.Model.potential`.
         """
         super(HamiltonianProposal, self).__init__(**kwargs)
-        self.T              = self.kinetic_energy
-        self.V              = model.potential
-        self.normal         = None
-        self.dt             = 0.3
-        self.base_dt        = 0.3
-        self.scale          = 1.0
-        self.L              = 20
-        self.base_L         = 20
-        self.TARGET         = 0.500
-        self.ADAPTATIONSIZE = 0.001
-        self._initialised   = False
-        self.c              = self.counter()
-        self.DEBUG          = 0
+        self.T                      = self.kinetic_energy
+        self.V                      = model.potential
+        self.normal                 = None
+        self.dt                     = 1.0
+        self.leaps                  = 100
+#        self.c                      = self.counter()
+        self.DEBUG                  = 0
+        self.likelihood_gradient    = None
+        self.initialised            = False
+        self.TARGET                 = 0.65
+        self.ADAPTATIONSIZE         = 0.001
+        self.trajectories           = []
+
+        if no_smt == True:
+            print("ERROR! Current likelihood gradient approximation requires smt")
+            exit()
 
     def set_ensemble(self, ensemble):
         """
@@ -527,14 +530,11 @@ class HamiltonianProposal(EnsembleEigenVector):
         shortest and longest principal axes. The former sets to base time step
         while the latter sets the trajectory length
         """
-        ranges = [self.prior_bounds[j][1] - self.prior_bounds[j][0] for j in range(self.d)]
-
-        l, h = np.min(ranges), np.max(ranges)
-
-        self.base_L         = 10+int((h/l)*self.d**(1./4.))
-        self.base_dt        = (1.0/self.base_L)*l/h
-        self._initialised   = True
-
+        w, _                = np.linalg.eigh(self.covariance)
+        self.leaps          = int(np.ceil(w[-1]))
+        self.max_dt         = 2.0*w[0]
+        self.min_dt         = 1e-3
+        self.dt             = w[0]/2.
 
     def update_time_step(self, acceptance):
         """
@@ -545,11 +545,11 @@ class HamiltonianProposal(EnsembleEigenVector):
         acceptance : :obj:'numpy.float'
         """
         diff = acceptance - self.TARGET
-        new_log_scale = np.log(self.scale) + self.ADAPTATIONSIZE * diff
-        self.scale = np.exp(new_log_scale)
-        self.dt = self.base_dt * self.scale
+        new_log_dt = np.log(self.dt) + self.ADAPTATIONSIZE * diff
+        self.dt = np.minimum(np.exp(new_log_dt),self.max_dt)
+        self.dt = np.maximum(self.min_dt,self.dt)
 
-    def update_trajectory_length(self,nmcmc):
+    def update_trajectory_length(self, safety = 20):
         """
         Update the trajectory length according to the estimated ACL
         Parameters
@@ -557,6 +557,13 @@ class HamiltonianProposal(EnsembleEigenVector):
         nmcmc :`obj`:: int
         """
         self.L = self.base_L + np.random.randint(nmcmc,5*nmcmc)
+
+        ACL = np.array(ACL)
+        # average over all trajectories and take the maximum over the dimensions
+        self.leaps = int(np.max(np.average(ACL,axis=0)))
+        if self.leaps < safety:
+            self.leaps = safety
+        self.trajectories = []
 
     def kinetic_energy(self,p):
         """
@@ -807,7 +814,7 @@ class ConstrainedLeapFrog(LeapFrog):
         p: :obj:`numpy.ndarray` updated momentum vector
         q: :obj:`cpnest.parameter.LivePoint` position
         """
-
+        self.dt = np.random.uniform(self.min_dt, self.max_dt)
         trajectory = [(q0,p0)]
         # evolve forward in time
         i = 0

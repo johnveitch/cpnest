@@ -33,13 +33,13 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.model=GaussianModel(dim = 50)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=6, nlive=1000, maxmcmc=100, poolsize=1000, nslice=6)
+        self.model=GaussianModel(dim = 2)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=1, nlive=1000, maxmcmc=5000, poolsize=1000, nslice=0)
 
     def test_run(self):
         self.work.run()
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.nlive)
         self.assertTrue(np.abs(self.work.NS.logZ - self.model.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0} instead of {1}'.format(self.work.NS.logZ ,self.model.analytic_log_Z))
 
 def test_all():

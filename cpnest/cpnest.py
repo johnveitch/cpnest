@@ -19,6 +19,8 @@ from .utils import LEVELS, LogFile
 
 # module logger takes name according to its path
 LOGGER = logging.getLogger('cpnest.cpnest')
+import ray
+from ray.util import ActorPool
 
 class CheckPoint(Exception):
     pass
@@ -115,18 +117,20 @@ class CPNest(object):
                  proposals     = None,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
-                 prior_sampling = False
+                 prior_sampling = False,
+                 pool         = None
                  ):
+
         if nthreads is None:
-            self.nthreads = mp.cpu_count()
+            self.nthreads = os.cpu_count()
         else:
             self.nthreads = nthreads
 
+        self.pool = None
+        ray.init(num_cpus=nthreads)
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
-        self.verbose  = verbose
-        self.output   = output
         self.logger = logging.getLogger('cpnest.cpnest.CPNest')
 
         # The LogFile context manager ensures everything within is logged to
@@ -134,11 +138,8 @@ class CPNest(object):
         # finished.
         self.log_file = LogFile(os.path.join(self.output, 'cpnest.log'),
                                 verbose=self.verbose)
-
         with self.log_file:
-            # Everything in this context is logged to `log_file`
-            msg = 'Running with {0} parallel threads'.format(self.nthreads)
-            self.logger.critical(msg)
+            self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
 
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
@@ -148,10 +149,9 @@ class CPNest(object):
             if periodic_checkpoint_interval is None:
                 periodic_checkpoint_interval = np.inf
 
-            from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
+            from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler, SamplersCycle
             from .NestedSampling import NestedSampler
             from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
-
             if proposals is None:
                 proposals = dict(mhs=DefaultProposalCycle,
                                  hmc=HamiltonianProposalCycle,
@@ -161,6 +161,8 @@ class CPNest(object):
                                  hmc=proposals[1],
                                  sli=proposals[2])
             self.nlive    = nlive
+            self.verbose  = verbose
+            self.output   = output
             self.poolsize = poolsize
             self.posterior_samples = None
             self.prior_sampling = prior_sampling
@@ -168,97 +170,68 @@ class CPNest(object):
                 nthreads=self.nthreads,
                 periodic_checkpoint_interval=periodic_checkpoint_interval
             )
-            self.manager.start()
+#        self.manager.start()
             self.user     = usermodel
             self.resume = resume
 
-            if seed is None: self.seed = 1234
+            if seed is None: self.seed=1234
             else:
                 self.seed=seed
 
-            self.process_pool = []
+            self.samplers = []
 
-            # instantiate the nested sampler class
+            nmhs = self.nthreads-nhamiltonian-nslice
+            # instantiate the sampler class
+            for i in range(nmhs):
+                s = MetropolisHastingsSampler.remote(self.user,
+                                      maxmcmc,
+                                      verbose     = verbose,
+                                      output      = output,
+                                      poolsize    = poolsize,
+                                      seed        = self.seed+i,
+                                      proposal    = proposals['mhs'](),
+                                      sample_prior = prior_sampling
+                                      )
+                self.samplers.append(s)
+
+            for i in range(nhamiltonian):
+                s = HamiltonianMonteCarloSampler.remote(self.user,
+                                      maxmcmc,
+                                      verbose     = verbose,
+                                      output      = output,
+                                      poolsize    = poolsize,
+                                      seed        = self.seed+nmhs+i,
+                                      proposal    = proposals['hmc'](model=self.user),
+                                      sample_prior = prior_sampling
+                                      )
+                self.samplers.append(s)
+
+            for i in range(nslice):
+                s = SliceSampler.remote(self.user,
+                                      maxmcmc,
+                                      verbose     = verbose,
+                                      output      = output,
+                                      poolsize    = poolsize,
+                                      seed        = self.seed+nmhs+nhamiltonian+i,
+                                      proposal    = proposals['sli']()
+                                      )
+                self.samplers.append(s)
+
+            self.pool = ActorPool(self.samplers)
+
             resume_file = os.path.join(output, "nested_sampler_resume.pkl")
             if not os.path.exists(resume_file) or resume == False:
                 self.NS = NestedSampler(self.user,
+                            nthreads       = self.nthreads,
                             nlive          = nlive,
                             output         = output,
                             verbose        = verbose,
                             seed           = self.seed,
                             prior_sampling = self.prior_sampling,
-                            manager        = self.manager)
+                            periodic_checkpoint_interval = periodic_checkpoint_interval)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.manager,
-                                               self.user)
+                self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
-            nmhs = self.nthreads-nhamiltonian-nslice
-            # instantiate the sampler class
-            for i in range(nmhs):
-                resume_file = os.path.join(output,
-                                           "sampler_{0:d}.pkl".format(i))
-                if not os.path.exists(resume_file) or resume == False:
-                    sampler = MetropolisHastingsSampler(self.user,
-                                    maxmcmc,
-                                    verbose     = verbose,
-                                    output      = output,
-                                    poolsize    = poolsize,
-                                    seed        = self.seed+i,
-                                    proposal    = proposals['mhs'](),
-                                    resume_file = resume_file,
-                                    sample_prior = prior_sampling,
-                                    manager     = self.manager
-                                    )
-                else:
-                    sampler = MetropolisHastingsSampler.resume(resume_file,
-                                                            self.manager,
-                                                            self.user)
-
-                p = mp.Process(target=sampler.produce_sample)
-                self.process_pool.append(p)
-
-            for i in range(nhamiltonian):
-                resume_file = os.path.join(output,
-                                           "sampler_{0:d}.pkl".format(i))
-                if not os.path.exists(resume_file) or resume == False:
-                    sampler = HamiltonianMonteCarloSampler(
-                        self.user,
-                        maxmcmc,
-                        verbose     = verbose,
-                        output      = output,
-                        poolsize    = poolsize,
-                        seed        = self.seed+nmhs+i,
-                        proposal    = proposals['hmc'](model=self.user),
-                        resume_file = resume_file,
-                        sample_prior = prior_sampling,
-                        manager     = self.manager
-                    )
-                else:
-                    sampler = HamiltonianMonteCarloSampler.resume(resume_file,
-                                                                self.manager,
-                                                                self.user)
-                p = mp.Process(target=sampler.produce_sample)
-                self.process_pool.append(p)
-
-            for i in range(nslice):
-                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-                if not os.path.exists(resume_file) or resume == False:
-                    sampler = SliceSampler(self.user,
-                                    maxmcmc,
-                                    verbose     = verbose,
-                                    output      = output,
-                                    poolsize    = poolsize,
-                                    seed        = self.seed+nmhs+nhamiltonian+i,
-                                    proposal    = proposals['sli'](),
-                                    resume_file = resume_file,
-                                    manager     = self.manager
-                                    )
-                else:
-                    sampler = SliceSampler.resume(resume_file,
-                                                  self.manager,
-                                                  self.user)
-                p = mp.Process(target=sampler.produce_sample)
-                self.process_pool.append(p)
 
     def run(self):
         """
@@ -266,8 +239,6 @@ class CPNest(object):
         """
 
         with self.log_file:
-            # Everything in this context is logged to `log_file`
-
             if self.resume:
                 signal.signal(signal.SIGTERM, sighandler)
                 signal.signal(signal.SIGALRM, sighandler)
@@ -276,38 +247,28 @@ class CPNest(object):
                 signal.signal(signal.SIGUSR1, sighandler)
                 signal.signal(signal.SIGUSR2, sighandler)
 
-            #self.p_ns.start()
-            for each in self.process_pool:
-                each.start()
             try:
-                self.NS.nested_sampling_loop()
-                for each in self.process_pool:
-                    each.join()
+                self.NS.nested_sampling_loop(self.pool)
             except CheckPoint:
                 self.checkpoint()
                 sys.exit(130)
 
             if self.verbose >= 2:
-                self.logger.critical(
-                    "Saving nested samples in {0}".format(self.output)
-                )
+                self.logger.critical("Saving nested samples in {0}".format(self.output))
                 self.nested_samples = self.get_nested_samples()
-                self.logger.critical(
-                    "Saving posterior samples in {0}".format(self.output)
-                )
+                self.logger.critical("Saving posterior samples in {0}".format(self.output))
                 self.posterior_samples = self.get_posterior_samples()
             else:
                 self.nested_samples = self.get_nested_samples(filename=None)
-                self.posterior_samples = self.get_posterior_samples(
-                    filename=None
-                )
+                self.posterior_samples = self.get_posterior_samples(filename=None)
+
             if self.verbose>=3 or self.NS.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
             if self.verbose>=3 and not self.NS.prior_sampling:
                 self.mcmc_samples = self.get_mcmc_samples(filename=None)
             if self.verbose>=2:
                 self.plot(corner = False)
-
+            ray.shutdown()
             #TODO: Clean up the resume pickles
 
     def get_nested_samples(self, filename='nested_samples.dat'):
