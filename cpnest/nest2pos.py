@@ -6,9 +6,10 @@ from functools import reduce
 from scipy.stats import pearsonr
 
 if not logging.Logger.manager.loggerDict:
-    LOGGER = logging.getLogger('nest2pos')
+    # When does this happen? - A. Lyttle 14 Jan 20201
+    LOGGER = logging.getLogger('cpnest.nest2pos')
 else:
-    LOGGER = logging.getLogger('CPNest')
+    LOGGER = logging.getLogger('cpnest.cpnest.CPNest')
 
 def logsubexp(x,y):
     """

@@ -23,7 +23,7 @@ class _NSintegralState(object):
     def __init__(self, nlive):
         self.nlive = nlive
         self.reset()
-        self.logger = logging.getLogger('CPNest')
+        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
 
     def reset(self):
         """
@@ -98,7 +98,7 @@ class _NSintegralState(object):
 
     def __setstate__(self, state):
         if 'logger' not in state:
-            state['logger'] = logging.getLogger("CPNest")
+            state['logger'] = logging.getLogger("cpnest.cpnest.CPNest")
         self.__dict__ = state
 
 
@@ -162,7 +162,7 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.logger         = logging.getLogger('CPNest')
+        self.logger         = logging.getLogger('cpnest.cpnest.CPNest')
         self.model          = model
         self.manager        = manager
         self.prior_sampling = prior_sampling
@@ -397,7 +397,7 @@ class NestedSampler(object):
         obj.logLmax = obj.manager.logLmax
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
-        obj.logger = logging.getLogger("CPNest")
+        obj.logger = logging.getLogger("cpnest.cpnest.CPNest")
         del obj.__dict__['llmin']
         del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)
