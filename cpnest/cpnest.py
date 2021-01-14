@@ -15,13 +15,18 @@ from multiprocessing.managers import SyncManager
 
 import cProfile
 
+from .log import LEVELS, file_handler
+
+# module logger takes name according to its path
+_logger = logging.getLogger('cpnest.cpnest')
 
 class CheckPoint(Exception):
     pass
 
 
 def sighandler(signal, frame):
-    print("Handling signal {}".format(signal))
+    # print("Handling signal {}".format(signal))
+    _logger.critical("Handling signal {}".format(signal))
     raise CheckPoint()
 
 
@@ -120,8 +125,7 @@ class CPNest(object):
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
-        self.logger = logging.getLogger('CPNest')
-        self.logger.update(output=output, verbose=verbose)
+        self.logger = self._init_logger(output, verbose)
         self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
 
         if n_periodic_checkpoint is not None:
@@ -240,6 +244,18 @@ class CPNest(object):
                                                               self.user)
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
+
+    def _init_logger(self, output, verbose):
+        """
+        Initializes the logger for the CPNest class
+
+        output : str
+            path to output log file
+        """
+        logger = logging.getLogger('cpnest.cpnest.CPNest')
+        logger.addHandler(file_handler('cpnest.log', output))
+        logger.setLevel(LEVELS[verbose])  # Will apply to all handlers
+        return logger
 
     def run(self):
         """
