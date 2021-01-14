@@ -252,12 +252,6 @@ class SliceSampler(Sampler):
     max_steps_out  = 100 # maximum stepping out steps allowed
     max_slices     = 100 # maximum number of slices allowed
     tuning_steps   = 1000
-#    def __init__(self, *args, **kwargs):
-#        super(SliceSampler, self).__init__(*args, **kwargs)
-#        self.mu             = 1.0
-#        self.max_steps_out  = self.maxmcmc # maximum stepping out steps allowed
-#        self.max_slices     = self.maxmcmc # maximum number of slices allowed
-#        self.tuning_steps   = 10*self.poolsize
 
     def adapt_length_scale(self):
         """

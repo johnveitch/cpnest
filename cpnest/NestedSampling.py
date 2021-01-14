@@ -185,7 +185,7 @@ class NestedSampler(object):
         self.rejected       = 1
         self.queue_counter  = 0
         self.nlive          = nlive
-        self.live_points    = [None] * self.nlive
+        self.live_points    = None
         self.last_checkpoint_time = time.time()
         self.tolerance      = stopping
         self.condition      = np.inf
@@ -203,7 +203,16 @@ class NestedSampler(object):
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
+        self.initialise_live_points()
         self.initialised    = False
+
+    def initialise_live_points(self):
+        l = []
+        for i in range(self.nlive):
+            l.append(self.model.new_point())
+            l[-1].logP = self.model.log_prior(l[-1])
+            l[-1].logL = self.model.log_likelihood(l[-1])
+        self.live_points = LivePointsActor.remote(l)
 
     def setup_output(self,output):
         """
@@ -318,11 +327,6 @@ class NestedSampler(object):
         """
         nthreads=self.nthreads
 
-        for i in range(self.nlive):
-            self.live_points[i]      = self.model.new_point()
-            self.live_points[i].logP = self.model.log_prior(self.live_points[i])
-            self.live_points[i].logL = self.model.log_likelihood(self.live_points[i])
-
         # set up  the ensemble statistics
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
         p = pool.map(lambda a, v: a.produce_sample.remote(self.live_points[v], -np.inf), range(self.nlive))
@@ -436,3 +440,37 @@ class NestedSampler(object):
 
     def __setstate__(self, state):
         self.__dict__ = state
+
+@ray.remote
+class LivePointsActor:
+    def __init__(self, l):
+        self._list               = l
+        self.n                   = len(l)
+        self.dim                 = self._list[0].dimension
+        self.mean                = None
+        self.covariance          = None
+
+    def get(self, i):
+        return self._list[i]
+
+    def set(self, i, val):
+        self._list[i] = val
+
+    def to_list(self):
+        return self._list
+
+    def update_mean_covariance(self):
+        """
+        Recompute mean and covariance matrix
+        of the ensemble of Live points
+        """
+        cov_array = np.zeros((self.dim,self.n))
+        if dim == 1:
+            name=self._list[0].names[0]
+            self.covariance = np.atleast_2d(np.var([self._list[j][name] for j in range(self.n)]))
+            self.mean       = np.atleast_1d(np.mean([self._list[j][name] for j in range(self.n)]))
+        else:
+            for i,name in enumerate(self._list[0].names):
+                for j in range(self.n): cov_array[i,j] = self._list[j][name]
+            self.covariance = np.cov(cov_array)
+            self.mean       = np.mean(cov_array,axis=1)
