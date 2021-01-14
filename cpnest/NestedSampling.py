@@ -195,7 +195,6 @@ class NestedSampler(object):
         self.iteration      = 0
         self.nested_samples = []
         self.logZ           = None
-        self.state          = _NSintegralState(self.nlive)
         sys.stdout.flush()
         self.output_folder  = output
         self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
@@ -207,11 +206,15 @@ class NestedSampler(object):
         self.initialised    = False
 
     def initialise_live_points(self):
+
         l = []
+
         for i in range(self.nlive):
+
             l.append(self.model.new_point())
             l[-1].logP = self.model.log_prior(l[-1])
             l[-1].logL = self.model.log_likelihood(l[-1])
+
         self.live_points = LivePointsActor.remote(l)
         self.live_points.update_mean_covariance.remote()
 
@@ -253,8 +256,11 @@ class NestedSampler(object):
         Write the evidence logZ and maximum likelihood to the evidence_file
         """
         with open(self.evidence_file,"w") as f:
+
             f.write('#logZ\tlogLmax\tH\n')
-            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax, self.state.info))
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(ray.get(self.live_points.get_logZ.remote()),
+                                                       ray.get(self.live_points.get_logLmax.remote()),
+                                                       ray.get(self.live_points.get_info.remote())))
 
     def setup_random_seed(self,seed):
         """
@@ -272,14 +278,11 @@ class NestedSampler(object):
         self.worst   = ray.get(self.live_points.get_worst.remote(self.nthreads))
         self.logLmax = ray.get(self.live_points.get_logLmax.remote())
         self.logLmin = ray.get(self.live_points.get_logLmin.remote())
-        logLtmp = []
+        logLtmp = [p.logL for p in self.worst]
+        logZ = ray.get(self.live_points.get_logZ.remote())
+        info = ray.get(self.live_points.get_info.remote())
 
-        for p in self.worst:
-            self.state.increment(p.logL)
-            self.nested_samples.append(p)
-            logLtmp.append(p.logL)
-
-        self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.nlive))) - self.state.logZ
+        self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
         # Replace the points we just consumed with the next acceptable ones
         done = []
@@ -301,8 +304,8 @@ class NestedSampler(object):
                     if self.verbose:
 
                         self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                            .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, self.state.info,\
-                            logLtmp[i], proposed.logL, self.condition, self.state.logZ, self.logLmax))
+                            .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
+                            logLtmp[i], proposed.logL, self.condition, logZ, self.logLmax))
                 else:
                     self.rejected += 1
 
@@ -364,8 +367,9 @@ class NestedSampler(object):
             self.reset(pool)
 
         if self.prior_sampling:
-            for i in range(self.nlive):
-                self.nested_samples.append(self.live_points.get.remote(i))
+#            for i in range(self.nlive):
+#                self.nested_samples.append(self.live_points.get.remote(i))
+            self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
             self.write_chain_to_file()
             self.write_evidence_to_file()
             self.logLmin = np.inf
@@ -383,29 +387,19 @@ class NestedSampler(object):
             self.checkpoint()
             sys.exit(130)
 
-        # Signal worker threads to exit
-        self.logLmin = np.inf
-
-        left_over_live_points = ray.get([self.live_points.get.remote(i) for i in range(self.nlive)])
-        # final adjustments
-        left_over_live_points.sort(key=attrgetter('logL'))
-        for i,p in enumerate(left_over_live_points):
-            self.state.increment(p.logL,nlive=self.nlive-i)
-            self.nested_samples.append(p)
-
         # Refine evidence estimate
-        self.state.finalise()
-        self.logZ = self.state.logZ
+        self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
+        self.info = ray.get(self.live_points.get_info.remote())
         # output the chain and evidence
         self.write_chain_to_file()
         self.write_evidence_to_file()
-        self.logger.critical('Final evidence: {0:0.2f}'.format(self.state.logZ))
-        self.logger.critical('Information: {0:.2f}'.format(self.state.info))
+        self.logger.critical('Final evidence: {0:0.2f}'.format(self.logZ))
+        self.logger.critical('Information: {0:.2f}'.format(self.info))
 
         # Some diagnostics
         if self.verbose>1 :
-            self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
-        return self.state.logZ, self.nested_samples
+            ray.get(self.live_points.plot.remote(os.path.join(self.output_folder,'logXlogL.png')))
+        return self.logZ, self.nested_samples
 
     def checkpoint(self):
         """
@@ -464,6 +458,7 @@ class LivePointsActor:
         self.logLmin              = -np.inf
         self.state                = _NSintegralState(self.n)
         self.logger               = logging.getLogger('CPNest')
+        self.nested_samples       = []
         self.update_mean_covariance()
 
     def get(self, i):
@@ -528,10 +523,31 @@ class LivePointsActor:
         self.logLmin = np.float128(self._list[n-1].logL)
         self.logLmax = np.float128(self._list[-1].logL)
 
-        return self._list[:n]
+        worst = self._list[:n]
+
+        for p in worst:
+            self.state.increment(p.logL)
+            self.nested_samples.append(p)
+
+        return worst
 
     def get_info(self):
         return self.state.info
 
     def get_logZ(self):
         return self.state.logZ
+
+    def finalise(self):
+        # final adjustments
+        self._list.sort(key=attrgetter('logL'))
+        for i,p in enumerate(self._list):
+            self.state.increment(p.logL,nlive=self.n-i)
+            self.nested_samples.append(p)
+
+        # Refine evidence estimate
+        self.logZ = self.state.finalise()
+        return self.state.logZ, self.nested_samples
+
+    def plot(self,filename):
+        self.state.plot(filename)
+        return 0
