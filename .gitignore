@@ -49,3 +49,5 @@ dist
 # Profiler files
 *.prof
 
+# Visual Studio Code
+.vscode/
