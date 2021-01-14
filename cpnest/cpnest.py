@@ -15,7 +15,7 @@ from multiprocessing.managers import SyncManager
 
 import cProfile
 
-from .log import LEVELS, file_handler
+from .utils import LEVELS, file_handler
 
 # module logger takes name according to its path
 _logger = logging.getLogger('cpnest.cpnest')

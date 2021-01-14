@@ -1,5 +1,5 @@
 import logging
-from .log import stream_handler, LEVELS
+from .utils import stream_handler, LEVELS
 
 # Configure base logger for the cpnest package - applies to loggers with names 
 # prefixed by 'cpnest.'
