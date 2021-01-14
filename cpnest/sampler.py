@@ -83,7 +83,7 @@ class Sampler(object):
         self.manager = manager
         self.logLmin = self.manager.logLmin
         self.logLmax = self.manager.logLmax
-        self.logger = logging.getLogger('CPNest')
+        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
 
         if proposal is None:
             self.proposal = DefaultProposalCycle()
@@ -286,7 +286,7 @@ class Sampler(object):
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.logLmax = obj.manager.logLmax
-        obj.logger = logging.getLogger("CPNest")
+        obj.logger = logging.getLogger("cpnest.cpnest.CPNest")
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
         obj.last_checkpoint_time = time.time()
