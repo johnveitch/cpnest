@@ -1,5 +1,12 @@
 import logging
-from .logger import CPNestLogger
+from .log import stream_handler, LEVELS
+
+# Configure base logger for the cpnest package - applies to loggers with names 
+# prefixed by 'cpnest.'
+_logger = logging.getLogger('cpnest')
+_logger.addHandler(stream_handler())
+_logger.setLevel(LEVELS[0])  # default verbosity of 0
+
 from .cpnest import CPNest
 
 # Get the version number from git tag
@@ -10,8 +17,6 @@ except DistributionNotFound:
     # package is not installed
     __version__ = "dev"
 
-logging.setLoggerClass(CPNestLogger)
-
 __all__ = ['model',
            'NestedSampling',
            'parameter',
@@ -21,4 +26,3 @@ __all__ = ['model',
            'proposal',
            'plot',
            'logger']
-
