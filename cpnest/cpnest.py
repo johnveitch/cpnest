@@ -128,6 +128,7 @@ class CPNest(object):
 
         self.pool = None
         ray.init(num_cpus=nthreads)
+        assert ray.is_initialized() == True
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
@@ -270,6 +271,7 @@ class CPNest(object):
                 self.plot(corner = False)
             ray.shutdown()
             #TODO: Clean up the resume pickles
+            assert ray.is_initialized() == False
 
     def get_nested_samples(self, filename='nested_samples.dat'):
         """

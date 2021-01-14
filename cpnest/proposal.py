@@ -9,7 +9,15 @@ from scipy.interpolate import LSQUnivariateSpline
 from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
-from itertools import permutations
+from .nest2pos import acl
+from .parameter import LivePoint
+import ray
+
+try:
+    from smt.surrogate_models import RBF
+    no_smt = False
+except:
+    no_smt = True
 
 class Proposal(object):
     """
@@ -42,7 +50,7 @@ class EnsembleProposal(Proposal):
         """
         Set the ensemble of points to use
         """
-        self.ensemble=ensemble
+        self.ensemble = ensemble
 
 class ProposalCycle(EnsembleProposal):
     """
@@ -101,7 +109,7 @@ class ProposalCycle(EnsembleProposal):
         Updates the ensemble statistics
         by calling it on each :obj:`EnsembleProposal`
         """
-        self.ensemble=ensemble
+        self.ensemble = ensemble
         for p in self.proposals:
             if isinstance(p,EnsembleProposal):
                 p.set_ensemble(self.ensemble)
@@ -116,7 +124,17 @@ class EnsembleSlice(EnsembleProposal):
     The Ensemble Slice proposal from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
-    log_J = 0.0 # Symmetric proposal
+    log_J      = 0.0 # Symmetric proposal
+    mean       = None
+    covariance = None
+
+    def set_ensemble(self,ensemble):
+        """
+        Over-ride default set_ensemble so that the
+        mean and covariance matrix are recomputed when it is updated
+        """
+        super(EnsembleSlice,self).set_ensemble(ensemble)
+        self.mean, self.covariance = ray.get(ensemble.get_mean_covariance.remote())
 
 class EnsembleSliceDifferential(EnsembleSlice):
     """
@@ -128,8 +146,8 @@ class EnsembleSliceDifferential(EnsembleSlice):
         """
         Draws two random points and returns their direction
         """
-        subset = sample(list(self.ensemble),2)
-        direction = reduce(type(self.ensemble[0]).__sub__,subset)
+        subset = ray.get(self.ensemble.sample.remote(2))
+        direction = reduce(LivePoint.__sub__,subset)
         return direction * mu
 
 class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
@@ -137,34 +155,6 @@ class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
     The Ensemble Slice Correlated Gaussian move from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
-    mean = None
-    covariance=None
-    def set_ensemble(self,ensemble):
-        """
-        Over-ride default set_ensemble so that the
-        mean and covariance matrix are recomputed when it is updated
-        """
-        super(EnsembleSliceCorrelatedGaussian,self).set_ensemble(ensemble)
-        self.update_mean_covariance()
-
-    def update_mean_covariance(self):
-        """
-        Recompute mean and covariance matrix
-        of the ensemble
-        """
-        n   = len(self.ensemble)
-        dim = self.ensemble[0].dimension
-        cov_array = np.zeros((dim,n))
-        if dim == 1:
-            name=self.ensemble[0].names[0]
-            self.covariance = np.atleast_2d(np.var([self.ensemble[j][name] for j in range(n)]))
-            self.mean       = np.atleast_1d(np.mean([self.ensemble[j][name] for j in range(n)]))
-        else:
-            for i,name in enumerate(self.ensemble[0].names):
-                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
-            self.covariance = np.cov(cov_array)
-            self.mean       = np.mean(cov_array,axis=1)
-
     def get_direction(self, mu = 1.0):
         """
         Draws a random gaussian direction
@@ -182,7 +172,7 @@ class EnsembleSliceGaussian(EnsembleSlice):
         """
         Draw a random gaussian direction
         """
-        direction  = np.random.normal(0.0,1.0,size=len(self.ensemble[0].names))
+        direction  = np.random.normal(0.0,1.0,size=len(self.mean))
         direction /= np.linalg.norm(direction)
         return direction * mu
 
@@ -227,7 +217,7 @@ class EnsembleWalk(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        subset = sample(list(self.ensemble),self.Npoints)
+        subset = ray.get(self.ensemble.sample.remote(self.Npoints))
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
         for x in subset:
@@ -251,7 +241,7 @@ class EnsembleStretch(EnsembleProposal):
         """
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
-        a = random.choice(self.ensemble)
+        a = ray.get(self.ensemble.sample.remote(1))[0]
         # Pick the scale factor
         x = uniform(-1,1)*log(scale)
         Z = exp(x)
@@ -281,7 +271,7 @@ class DifferentialEvolution(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        a,b = sample(list(self.ensemble),2)
+        a, b = ray.get(self.ensemble.sample.remote(2))
         sigma = 1e-4 # scatter around difference vector by this factor
         out = old + (b-a)*gauss(1.0,sigma)
         return out
@@ -291,16 +281,17 @@ class EnsembleEigenVector(EnsembleProposal):
     A jump along a randomly-chosen eigenvector
     of the covariance matrix of the ensemble
     """
-    log_J = 0.0
-    eigen_values=None
-    eigen_vectors=None
-    covariance=None
-    def set_ensemble(self,ensemble):
+    log_J         = 0.0
+    eigen_values  = None
+    eigen_vectors = None
+    covariance    = None
+    ensemble      = None
+    def set_ensemble(self, ensemble):
         """
         Over-ride default set_ensemble so that the
         eigenvectors are recomputed when it is updated
         """
-        super(EnsembleEigenVector,self).set_ensemble(ensemble)
+        self.ensemble = ensemble
         self.update_eigenvectors()
 
     def update_eigenvectors(self):
@@ -308,19 +299,7 @@ class EnsembleEigenVector(EnsembleProposal):
         Recompute the eigenvectors and eigevalues
         of the covariance matrix of the ensemble
         """
-        n=len(self.ensemble)
-        dim = self.ensemble[0].dimension
-        cov_array = np.zeros((dim,n))
-        if dim == 1:
-            name=self.ensemble[0].names[0]
-            self.eigen_values = np.atleast_1d(np.var([self.ensemble[j][name] for j in range(n)]))
-            self.covariance = self.eigen_values
-            self.eigen_vectors = np.eye(1)
-        else:
-            for i,name in enumerate(self.ensemble[0].names):
-                for j in range(n): cov_array[i,j] = self.ensemble[j][name]
-            self.covariance = np.cov(cov_array)
-            self.eigen_values,self.eigen_vectors = np.linalg.eigh(self.covariance)
+        self.eigen_values, self.eigen_vectors = ray.get(self.ensemble.get_eigen_quantities.remote())
 
     def get_sample(self,old):
         """
@@ -378,8 +357,9 @@ class HamiltonianProposal(EnsembleEigenVector):
     """
     Base class for hamiltonian proposals
     """
-    mass_matrix = None
-    inverse_mass_matrix = None
+    covariance           = None
+    mass_matrix          = None
+    inverse_mass_matrix  = None
     momenta_distribution = None
 
     def __init__(self, model=None, **kwargs):

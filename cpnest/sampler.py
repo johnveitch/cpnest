@@ -150,7 +150,7 @@ class Sampler(object):
         # Send the sample to the Nested Sampler
 
         self.counter += 1
-        if self.counter%100 == 0:
+        if self.counter%10 == 0:
             self.estimate_nmcmc()
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
 
@@ -249,8 +249,8 @@ class SliceSampler(Sampler):
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 100 # maximum stepping out steps allowed
-    max_slices     = 100 # maximum number of slices allowed
+    max_steps_out  = 10000 # maximum stepping out steps allowed
+    max_slices     = 10000 # maximum number of slices allowed
     tuning_steps   = 1000
 
     def adapt_length_scale(self):

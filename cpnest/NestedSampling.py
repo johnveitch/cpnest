@@ -12,8 +12,8 @@ from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint
-import functools
 import ray
+import random
 from tqdm import tqdm
 
 def func(args):
@@ -213,6 +213,7 @@ class NestedSampler(object):
             l[-1].logP = self.model.log_prior(l[-1])
             l[-1].logL = self.model.log_likelihood(l[-1])
         self.live_points = LivePointsActor.remote(l)
+        self.live_points.update_mean_covariance.remote()
 
     def setup_output(self,output):
         """
@@ -268,45 +269,52 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        nreplace = len(self.manager.consumer_pipes)
-        logLmin = self.get_worst_n_live_points(nreplace)
-        self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
-        self.nested_samples.extend(self.params[:nreplace])
-        logLtmp=[p.logL for p in self.params[:nreplace]]
+        self.worst   = ray.get(self.live_points.get_worst.remote(self.nthreads))
+        self.logLmax = ray.get(self.live_points.get_logLmax.remote())
+        self.logLmin = ray.get(self.live_points.get_logLmin.remote())
+        logLtmp = []
+
+        for p in self.worst:
+            self.state.increment(p.logL)
+            self.nested_samples.append(p)
+            logLtmp.append(p.logL)
 
         self.condition = logaddexp(self.state.logZ,self.logLmax - self.iteration/(float(self.nlive))) - self.state.logZ
 
-        # make sure we are excluding the points to replace from the ensemble
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points[self.nthreads:]), range(self.nthreads)): s
         # Replace the points we just consumed with the next acceptable ones
+        done = []
         while len(self.worst) > 0:
 
-            indeces_to_remove = []
-            p = pool.map(lambda a, v: a.produce_sample.remote(self.live_points[v], self.logLmin), self.worst)
+            p = pool.map_unordered(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst)
 
-            for i, r in zip(self.worst,p):
+            for i, o, r in zip(range(self.nthreads),self.worst, p):
 
                 acceptance,sub_acceptance,self.jumps,proposed = r
 
                 if proposed.logL > self.logLmin:
                     # replace worst point with new one
-                    self.live_points[i] = proposed.copy()
+                    self.live_points.set.remote(i,proposed.copy())
+                    done.append(o)
                     self.accepted += 1
-                    indeces_to_remove.append(i)
                     self.iteration += 1
 
                     if self.verbose:
 
                         self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                             .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, self.state.info,\
-                            logLtmp[i], self.live_points[i].logL, self.condition, self.state.logZ, self.logLmax))
+                            logLtmp[i], proposed.logL, self.condition, self.state.logZ, self.logLmax))
                 else:
                     self.rejected += 1
 
                 self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-
-            for k in indeces_to_remove:
-                self.worst.remove(k)
+            if len(done) > 0:
+                for d in done:
+                    try:
+                        self.worst.remove(d)
+                    except:
+                        pass
+        self.live_points.update_mean_covariance.remote()
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
 
     def get_worst_n_live_points(self, n):
         """
@@ -325,23 +333,22 @@ class NestedSampler(object):
         Initialise the pool of `cpnest.parameter.LivePoint` by
         sampling them from the `cpnest.model.log_prior` distribution
         """
-        nthreads=self.nthreads
-
         # set up  the ensemble statistics
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
-        p = pool.map(lambda a, v: a.produce_sample.remote(self.live_points[v], -np.inf), range(self.nlive))
+        p = pool.map(lambda a, v: a.produce_sample.remote(self.live_points.get.remote(v), -np.inf), range(self.nlive))
         # send all live points to the samplers for start
-
         i = 0
-        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
+        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
             for j,r in enumerate(p):
-                acceptance,sub_acceptance,self.jumps,self.live_points[j] = r
-                if np.isnan(self.live_points[j].logL):
+                acceptance,sub_acceptance,self.jumps,x = r
+                self.live_points.set.remote(j,x)
+                if np.isnan(x.logL):
                     self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
                     self.logger.warn("You may want to check your likelihood function")
-                if self.live_points[j].logP!=-np.inf and self.live_points[j].logL!=-np.inf:
+                if x.logP!=-np.inf and x.logL!=-np.inf:
                     pbar.update()
 
+        self.live_points.update_mean_covariance.remote()
         # set up  the ensemble statistics
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
         if self.verbose:
@@ -358,7 +365,7 @@ class NestedSampler(object):
 
         if self.prior_sampling:
             for i in range(self.nlive):
-                self.nested_samples.append(self.live_points[i])
+                self.nested_samples.append(self.live_points.get.remote(i))
             self.write_chain_to_file()
             self.write_evidence_to_file()
             self.logLmin = np.inf
@@ -379,9 +386,10 @@ class NestedSampler(object):
         # Signal worker threads to exit
         self.logLmin = np.inf
 
+        left_over_live_points = ray.get([self.live_points.get.remote(i) for i in range(self.nlive)])
         # final adjustments
-        self.live_points.sort(key=attrgetter('logL'))
-        for i,p in enumerate(self.live_points):
+        left_over_live_points.sort(key=attrgetter('logL'))
+        for i,p in enumerate(left_over_live_points):
             self.state.increment(p.logL,nlive=self.nlive-i)
             self.nested_samples.append(p)
 
@@ -396,7 +404,7 @@ class NestedSampler(object):
 
         # Some diagnostics
         if self.verbose>1 :
-          self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
+            self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
         return self.state.logZ, self.nested_samples
 
     def checkpoint(self):
@@ -443,15 +451,41 @@ class NestedSampler(object):
 
 @ray.remote
 class LivePointsActor:
-    def __init__(self, l):
-        self._list               = l
-        self.n                   = len(l)
-        self.dim                 = self._list[0].dimension
-        self.mean                = None
-        self.covariance          = None
+
+    def __init__(self, l, verbose = 2):
+        self._list                = l
+        self.n                    = len(l)
+        self.dim                  = self._list[0].dimension
+        self.mean                 = None
+        self.covariance           = None
+        self.eigen_values         = None
+        self.eigen_vectors        = None
+        self.logLmax              = -np.inf
+        self.logLmin              = -np.inf
+        self.state                = _NSintegralState(self.n)
+        self.logger               = logging.getLogger('CPNest')
+        self.update_mean_covariance()
 
     def get(self, i):
         return self._list[i]
+
+    def get_mean_covariance(self):
+        return self.get_mean(), self.get_covariance()
+
+    def get_covariance(self):
+        return self.covariance
+
+    def get_mean(self):
+        return self.mean
+
+    def get_eigen_quantities(self):
+        return self.eigen_values, self.eigen_vectors
+
+    def get_length(self):
+        return self.n
+
+    def get_dimension(self):
+        return self.dim
 
     def set(self, i, val):
         self._list[i] = val
@@ -465,7 +499,7 @@ class LivePointsActor:
         of the ensemble of Live points
         """
         cov_array = np.zeros((self.dim,self.n))
-        if dim == 1:
+        if self.dim == 1:
             name=self._list[0].names[0]
             self.covariance = np.atleast_2d(np.var([self._list[j][name] for j in range(self.n)]))
             self.mean       = np.atleast_1d(np.mean([self._list[j][name] for j in range(self.n)]))
@@ -474,3 +508,30 @@ class LivePointsActor:
                 for j in range(self.n): cov_array[i,j] = self._list[j][name]
             self.covariance = np.cov(cov_array)
             self.mean       = np.mean(cov_array,axis=1)
+        self.eigen_values, self.eigen_vectors = np.linalg.eigh(self.covariance)
+
+    def sample(self, n):
+        return random.sample(self._list, n)
+
+    def get_logLmax(self):
+        return self.logLmax
+
+    def get_logLmin(self):
+        return self.logLmin
+
+    def get_worst(self, n):
+        """
+        selects the lowest likelihood N live points
+        for evolution
+        """
+        self._list.sort(key=attrgetter('logL'))
+        self.logLmin = np.float128(self._list[n-1].logL)
+        self.logLmax = np.float128(self._list[-1].logL)
+
+        return self._list[:n]
+
+    def get_info(self):
+        return self.state.info
+
+    def get_logZ(self):
+        return self.state.logZ
