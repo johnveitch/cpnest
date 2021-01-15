@@ -353,7 +353,7 @@ class HamiltonianProposalCycle(ProposalCycle):
         proposals = [ConstrainedLeapFrog(model=model)]
         super(HamiltonianProposalCycle,self).__init__(proposals, weights)
 
-class HamiltonianProposal(EnsembleEigenVector):
+class HamiltonianProposal(EnsembleProposal):
     """
     Base class for hamiltonian proposals
     """
@@ -370,8 +370,9 @@ class HamiltonianProposal(EnsembleEigenVector):
         super(HamiltonianProposal, self).__init__(**kwargs)
         self.T                      = self.kinetic_energy
         self.V                      = model.potential
-        self.normal                 = None
-        self.dt                     = 1.0
+        self.analytical_gradient    = None
+        self.likelihood_gradient    = None
+        self.dt                     = 0.01
         self.leaps                  = 100
 #        self.c                      = self.counter()
         self.DEBUG                  = 0
@@ -392,10 +393,16 @@ class HamiltonianProposal(EnsembleEigenVector):
         and to heuristically estimate the normal vector to the
         hard boundary defined by logLmin.
         """
-        super(HamiltonianProposal,self).set_ensemble(ensemble)
+        self.ensemble   = ensemble
         self.update_mass()
-        self.update_normal_vector()
         self.update_momenta_distribution()
+
+        if self.analytical_gradient == None:
+            self.update_normal_vector()
+            self.unit_normal = self.approximate_unit_normal
+        else:
+            self.likelihood_gradient = self.analytical_gradient
+            self.unit_normal = self.exact_unit_normal
 
     def update_normal_vector(self):
         """
@@ -405,51 +412,13 @@ class HamiltonianProposal(EnsembleEigenVector):
         This is an approximation which
         improves as the algorithm proceeds
         """
-        n = self.ensemble[0].dimension
-        tracers_array = np.zeros((len(self.ensemble),n))
-        for i,samp in enumerate(self.ensemble):
-            tracers_array[i,:] = samp.values
-        V_vals = np.atleast_1d([p.logL for p in self.ensemble])
+        self.likelihood_gradient = ray.get(self.ensemble.get_likelihood_gradient.remote())
 
-        self.normal = []
-        for i,x in enumerate(tracers_array.T):
-            # sort the values
-#            self.normal.append(lambda x: -x)
-            idx = x.argsort()
-            xs = x[idx]
-            Vs = V_vals[idx]
-            # remove potential duplicate entries
-            xs, ids = np.unique(xs, return_index = True)
-            Vs = Vs[ids]
-            # pick only finite values
-            idx = np.isfinite(Vs)
-            Vs  = Vs[idx]
-            xs  = xs[idx]
-            # filter to within the 90% range of the Pvals
-            Vl,Vh = np.percentile(Vs,[5,95])
-            (idx,) = np.where(np.logical_and(Vs > Vl,Vs < Vh))
-            Vs = Vs[idx]
-            xs = xs[idx]
-            # Pick knots for this parameters: Choose 5 knots between
-            # the 1st and 99th percentiles (heuristic tuning WDP)
-            knots = np.percentile(xs,np.linspace(1,99,5))
-            # Guesstimate the length scale for numerical derivatives
-            dimwidth = knots[-1]-knots[0]
-            delta = 0.1 * dimwidth / len(idx)
-            # Apply a Savtzky-Golay filter to the likelihoods (low-pass filter)
-            window_length = len(idx)//2+1 # Window for Savtzky-Golay filter
-            if window_length%2 == 0: window_length += 1
-            f = savgol_filter(Vs, window_length,
-                              5, # Order of polynominal filter
-                              deriv=1, # Take first derivative
-                              delta=delta, # delta for numerical deriv
-                              mode='mirror' # Reflective boundary conds.
-                              )
-            # construct a LSQ spline interpolant
-            self.normal.append(LSQUnivariateSpline(xs, f, knots, ext = 3, k = 3))
-            if self.DEBUG: np.savetxt('dlogL_spline_%d.txt'%i,np.column_stack((xs,Vs,self.normal[-1](xs),f)))
+    def exact_unit_normal(self, q):
+        v = self.likelihood_gradient(q)
+        return v/np.linalg.norm(v)
 
-    def unit_normal(self, q):
+    def approximate_unit_normal(self, q):
         """
         Returns the unit normal to the iso-Likelihood surface
         at x, obtained from the spline interpolation of the
@@ -496,7 +465,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         inverse mass matrix (precision matrix)
         from the ensemble, allowing for correlated momenta
         """
-        self.d                      = self.covariance.shape[0]
+        self.covariance             = ray.get(self.ensemble.get_covariance.remote())
         self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
         self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
@@ -529,7 +498,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.dt = np.minimum(np.exp(new_log_dt),self.max_dt)
         self.dt = np.maximum(self.min_dt,self.dt)
 
-    def update_trajectory_length(self, safety = 20):
+    def update_trajectory_length(self, safety = 10):
         """
         Update the trajectory length according to the estimated ACL
         Parameters
@@ -794,7 +763,6 @@ class ConstrainedLeapFrog(LeapFrog):
         p: :obj:`numpy.ndarray` updated momentum vector
         q: :obj:`cpnest.parameter.LivePoint` position
         """
-        self.dt = np.random.uniform(self.min_dt, self.max_dt)
         trajectory = [(q0,p0)]
         # evolve forward in time
         i = 0

@@ -15,10 +15,11 @@ from .cpnest import CheckPoint
 import ray
 import random
 from tqdm import tqdm
-
-def func(args):
-    f, p, l = args
-    return f(p, l)
+try:
+    from smt.surrogate_models import *
+    no_smt = False
+except:
+    no_smt = True
 
 logger = logging.getLogger('cpnest.NestedSampling')
 
@@ -450,6 +451,7 @@ class LivePointsActor:
         self.covariance           = None
         self.eigen_values         = None
         self.eigen_vectors        = None
+        self.likelihood_gradient  = None
         self.logLmax              = -np.inf
         self.logLmin              = -np.inf
         self.state                = _NSintegralState(self.n)
@@ -553,3 +555,16 @@ class LivePointsActor:
 
     def _set_internal_state(self, state):
         self.state = state
+
+    def get_likelihood_gradient(self):
+        tracers_array = np.empty((self.n//10,self.dim))
+        V_vals        = np.empty(self.n//10)
+        idx = np.random.choice(self.n, size=self.n//10, replace=False)
+        for i,k in enumerate(idx):
+            tracers_array[i,:] = self._list[k].values
+            V_vals[i] = self._list[k].logL
+        mask   = np.isfinite(V_vals)
+        self.likelihood_gradient = KPLS(print_global=False)
+        self.likelihood_gradient.set_training_values(tracers_array[mask,:], V_vals[mask])
+        self.likelihood_gradient.train()
+        return self.likelihood_gradient

@@ -70,6 +70,7 @@ class Sampler(object):
 
         self.counter = 0
         self.seed = seed
+        np.random.seed(seed=self.seed)
         self.model = model
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
