@@ -1,7 +1,7 @@
 # encoding: utf-8
 # cython: profile=False
 # cython: linetrace=False
-# cython: language_level=3, boundscheck=False, wraparound=False
+# cython: language_level=3, boundscheck=False, wraparound=False, infer_types=True
 
 from __future__ import division
 from numpy.math cimport INFINITY
@@ -22,7 +22,7 @@ cdef class LivePoint:
     logL: (optional) log likelihood of this sample
     logP: (optional) log prior of this sample
     """
-    def __cinit__(LivePoint self,
+    def __cinit__(self,
                   list names,
                   array.array d=None,
                   double logL=-INFINITY,
@@ -49,9 +49,9 @@ cdef class LivePoint:
         return (self.logL, self.logP, self.values)
     
     def __setstate__(self, state):
-          self.logL = state[0]
-          self.logP = state[1]
-          self.values = array.array('d',state[2])
+        self.logL = state[0]
+        self.logP = state[1]
+        self.values = array.array('d',state[2])
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})
@@ -65,7 +65,7 @@ cdef class LivePoint:
 
     def __add__(LivePoint self, LivePoint other):
         assert self.dimension == other.dimension
-        result=LivePoint(self.names,self.bounds)
+        cdef LivePoint result = LivePoint(self.names,self.bounds)
         cdef Py_ssize_t i
         for i in range(self.dimension):
             result.values[i]=self.values[i]+other.values[i]

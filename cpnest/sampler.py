@@ -42,9 +42,8 @@ class Sampler(object):
         :int: display debug information on screen
         Default: 0
 
-    poolsize:
-        :int: number of objects for the affine invariant sampling
-        Default: 1000
+    nlive:
+        :int: number of live points
 
     seed:
         :int: random seed to initialise the pseudo-random chain
@@ -66,7 +65,7 @@ class Sampler(object):
                  output       = None,
                  verbose      = False,
                  sample_prior = False,
-                 poolsize     = 1000,
+                 nlive        = 1000,
                  proposal     = None):
 
         self.counter = 0
@@ -84,8 +83,7 @@ class Sampler(object):
         self.Nmcmc              = self.initial_mcmc
         self.Nmcmc_exact        = float(self.initial_mcmc)
 
-        self.poolsize           = poolsize
-        self.evolution_points   = deque(maxlen = self.poolsize)
+        self.nlive              = nlive
         self.verbose            = verbose
         self.acceptance         = 0.0
         self.sub_acceptance     = 0.0
@@ -103,11 +101,11 @@ class Sampler(object):
         ACL = (2/acc) - 1
         multiplied by a safety margin of 5
         Uses moving average with decay time tau iterations
-        (default: :int:`self.poolsize`)
+        (default: :int:`self.nlive`)
 
         Taken from http://github.com/farr/Ensemble.jl
         """
-        if tau is None: tau = self.poolsize/safety
+        if tau is None: tau = self.nlive/safety
 
         if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact

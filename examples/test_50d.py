@@ -34,7 +34,7 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel(dim = 1)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=10, nlive=1000, maxmcmc=5000, poolsize=1000, nslice=0, nhamiltonian=0)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=10, nlive=1000, maxmcmc=500, nslice=0, nhamiltonian=0, resume=1)
 
     def test_run(self):
         self.work.run()
@@ -46,5 +46,7 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    unittest.main(verbosity=2)
- 
+#    unittest.main(verbosity=2)
+    model=GaussianModel(dim = 1)
+    work=cpnest.CPNest(model, verbose=2, nthreads=10, nlive=1000, maxmcmc=500, nslice=0, nhamiltonian=0, resume=1)
+    work.run()

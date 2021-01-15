@@ -25,12 +25,10 @@ from ray.util import ActorPool
 class CheckPoint(Exception):
     pass
 
-
 def sighandler(signal, frame):
     # print("Handling signal {}".format(signal))
     LOGGER.critical("Handling signal {}".format(signal))
     raise CheckPoint()
-
 
 class CPNest(object):
     """
@@ -45,9 +43,6 @@ class CPNest(object):
 
     nlive: `int`
         Number of live points (100)
-
-    poolsize: `int`
-        Number of objects in the sampler pool (100)
 
     output : `str`
         output directory (./)
@@ -64,7 +59,13 @@ class CPNest(object):
         random seed (default: 1234)
 
     maxmcmc: `int`
-        maximum MCMC points for sampling chains (100)
+        maximum MCMC points for MHS sampling chains (100)
+
+    maxslice: `int`
+        maximum number of slices points for Slice sampling chains (100)
+
+    maxleaps: `int`
+        maximum number of leaps points for HMC sampling chains (100)
 
     nthreads: `int` or `None`
         number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
@@ -105,11 +106,12 @@ class CPNest(object):
     def __init__(self,
                  usermodel,
                  nlive        = 100,
-                 poolsize     = 100,
                  output       = './',
                  verbose      = 0,
                  seed         = None,
                  maxmcmc      = 100,
+                 maxslice     = 100,
+                 maxleaps     = 100,
                  nthreads     = None,
                  nhamiltonian = 0,
                  nslice       = 0,
@@ -171,7 +173,25 @@ class CPNest(object):
                 nthreads=self.nthreads,
                 periodic_checkpoint_interval=periodic_checkpoint_interval
             )
-#        self.manager.start()
+            if periodic_checkpoint_interval is None:
+                periodic_checkpoint_interval = np.inf
+
+            from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler, SamplersCycle
+            from .NestedSampling import NestedSampler
+            from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
+            if proposals is None:
+                proposals = dict(mhs=DefaultProposalCycle,
+                                 hmc=HamiltonianProposalCycle,
+                                 sli=EnsembleSliceProposalCycle)
+            elif type(proposals) == list:
+                proposals = dict(mhs=proposals[0],
+                                 hmc=proposals[1],
+                                 sli=proposals[2])
+            self.nlive    = nlive
+            self.verbose  = verbose
+            self.output   = output
+            self.posterior_samples = None
+            self.prior_sampling = prior_sampling
             self.user     = usermodel
             self.resume = resume
 
@@ -188,7 +208,7 @@ class CPNest(object):
                                       maxmcmc,
                                       verbose     = verbose,
                                       output      = output,
-                                      poolsize    = poolsize,
+                                      nlive       = nlive,
                                       seed        = self.seed+i,
                                       proposal    = proposals['mhs'](),
                                       sample_prior = prior_sampling
@@ -197,10 +217,10 @@ class CPNest(object):
 
             for i in range(nhamiltonian):
                 s = HamiltonianMonteCarloSampler.remote(self.user,
-                                      maxmcmc,
+                                      maxleaps,
                                       verbose     = verbose,
                                       output      = output,
-                                      poolsize    = poolsize,
+                                      nlive       = nlive,
                                       seed        = self.seed+nmhs+i,
                                       proposal    = proposals['hmc'](model=self.user),
                                       sample_prior = prior_sampling
@@ -209,10 +229,10 @@ class CPNest(object):
 
             for i in range(nslice):
                 s = SliceSampler.remote(self.user,
-                                      maxmcmc,
+                                      maxslice,
                                       verbose     = verbose,
                                       output      = output,
-                                      poolsize    = poolsize,
+                                      nlive       = nlive,
                                       seed        = self.seed+nmhs+nhamiltonian+i,
                                       proposal    = proposals['sli']()
                                       )
@@ -231,7 +251,7 @@ class CPNest(object):
                             prior_sampling = self.prior_sampling,
                             periodic_checkpoint_interval = periodic_checkpoint_interval)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
+                self.NS = NestedSampler.resume(resume_file, self.user, self.pool)
 
 
     def run(self):
@@ -504,7 +524,7 @@ class CPNest(object):
             each.start()
 
     def checkpoint(self):
-        self.manager.checkpoint_flag=1
+        self.NS.checkpoint()
 
 
 class RunManager(SyncManager):
