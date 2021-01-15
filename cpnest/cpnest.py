@@ -240,8 +240,8 @@ class CPNest(object):
 
             self.pool = ActorPool(self.samplers)
 
-            resume_file = os.path.join(output, "nested_sampler_resume.pkl")
-            if not os.path.exists(resume_file) or resume == False:
+            self.resume_file = os.path.join(output, "nested_sampler_resume.pkl")
+            if not os.path.exists(self.resume_file) or resume == False:
                 self.NS = NestedSampler(self.user,
                             nthreads       = self.nthreads,
                             nlive          = nlive,
@@ -251,7 +251,7 @@ class CPNest(object):
                             prior_sampling = self.prior_sampling,
                             periodic_checkpoint_interval = periodic_checkpoint_interval)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.user, self.pool)
+                self.NS = NestedSampler.resume(self.resume_file, self.user, self.pool)
 
 
     def run(self):
@@ -290,8 +290,12 @@ class CPNest(object):
             if self.verbose>=2:
                 self.plot(corner = False)
             ray.shutdown()
-            #TODO: Clean up the resume pickles
             assert ray.is_initialized() == False
+            #TODO: Clean up the resume pickles
+            try:
+                os.remove(self.resume_file)
+            except OSError:
+                pass
 
     def get_nested_samples(self, filename='nested_samples.dat'):
         """

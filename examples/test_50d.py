@@ -48,5 +48,5 @@ def test_all():
 if __name__=='__main__':
 #    unittest.main(verbosity=2)
     model=GaussianModel(dim = 1)
-    work=cpnest.CPNest(model, verbose=2, nthreads=10, nlive=1000, maxmcmc=500, nslice=0, nhamiltonian=0, resume=1)
+    work=cpnest.CPNest(model, verbose=2, nthreads=1, nlive=1000, maxmcmc=500, maxleaps=20, nslice=0, nhamiltonian=1)
     work.run()
