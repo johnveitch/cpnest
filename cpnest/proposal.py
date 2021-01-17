@@ -374,7 +374,7 @@ class HamiltonianProposal(EnsembleProposal):
         self.likelihood_gradient    = None
         self.dt                     = 0.1
         self.leaps                  = 100
-#        self.c                      = self.counter()
+        self.maxleaps               = 1000
         self.DEBUG                  = 0
         self.likelihood_gradient    = None
         self.initialised            = False
@@ -510,6 +510,8 @@ class HamiltonianProposal(EnsembleProposal):
         self.leaps = int(np.max(np.average(ACL,axis=0)))
         if self.leaps < safety:
             self.leaps = safety
+        if self.leaps > self.maxleaps:
+            self.leaps = self.maxleaps
         self.trajectories = []
 
     def kinetic_energy(self,p):

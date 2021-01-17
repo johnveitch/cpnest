@@ -68,13 +68,12 @@ class Sampler(object):
                  nlive        = 1000,
                  proposal     = None):
 
-        self.counter = 0
-        self.seed = seed
-        np.random.seed(seed=self.seed)
-        self.model = model
-        self.initial_mcmc = maxmcmc//10
-        self.maxmcmc = maxmcmc
-        self.logger = logging.getLogger('cpnest.sampler.Sampler')
+        self.counter        = 0
+        self.seed           = seed
+        self.model          = model
+        self.initial_mcmc   = maxmcmc//10
+        self.maxmcmc        = maxmcmc
+        self.logger         = logging.getLogger('CPNest')
 
         if proposal is None:
             self.proposal = DefaultProposalCycle()
@@ -118,7 +117,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self, safety=1):
+    def estimate_nmcmc(self, safety=10):
         """
         Estimate autocorrelation length of the chain
         """
@@ -159,7 +158,7 @@ class Sampler(object):
                 p.set_ensemble(ensemble)
         return 0
 
-@ray.remote(num_cpus=1)
+@ray.remote
 class MetropolisHastingsSampler(Sampler):
     """
     metropolis-hastings acceptance rule
@@ -202,7 +201,7 @@ class MetropolisHastingsSampler(Sampler):
             # Yield the new sample
             yield (sub_counter, oldparam)
 
-@ray.remote(num_cpus=1)
+@ray.remote
 class HamiltonianMonteCarloSampler(Sampler):
     """
     HamiltonianMonteCarlo acceptance rule
@@ -226,6 +225,12 @@ class HamiltonianMonteCarloSampler(Sampler):
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
 
+                if sub_counter >= self.Nmcmc and sub_accepted > 0:
+                    break
+
+                if sub_counter > self.maxmcmc:
+                    break
+
             # append the sample to the array of samples
             self.samples.append(oldparam)
 
@@ -241,7 +246,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             yield (sub_counter, oldparam)
 
-@ray.remote(num_cpus=1)
+@ray.remote
 class SliceSampler(Sampler):
     """
     The Ensemble Slice sampler from Karamanis & Beutler
@@ -384,7 +389,7 @@ class SliceSampler(Sampler):
 
             yield (sub_counter, oldparam)
 
-@ray.remote(num_cpus=1)
+@ray.remote
 class SamplersCycle(Sampler):
     """
     A sampler that cycles through a list of

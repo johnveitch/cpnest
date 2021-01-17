@@ -110,8 +110,6 @@ class CPNest(object):
                  verbose      = 0,
                  seed         = None,
                  maxmcmc      = 5000,
-                 maxslice     = 5000,
-                 maxleaps     = 5000,
                  nthreads     = None,
                  nhamiltonian = 0,
                  nslice       = 0,
@@ -217,7 +215,7 @@ class CPNest(object):
 
             for i in range(nhamiltonian):
                 s = HamiltonianMonteCarloSampler.remote(self.user,
-                                      maxleaps,
+                                      maxmcmc,
                                       verbose     = verbose,
                                       output      = output,
                                       nlive       = nlive,
@@ -229,7 +227,7 @@ class CPNest(object):
 
             for i in range(nslice):
                 s = SliceSampler.remote(self.user,
-                                      maxslice,
+                                      maxmcmc,
                                       verbose     = verbose,
                                       output      = output,
                                       nlive       = nlive,
@@ -511,55 +509,5 @@ class CPNest(object):
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
 
-    def worker_sampler(self, producer_pipe, logLmin):
-        cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
-
-    def worker_ns(self):
-        cProfile.runctx('self.NS.nested_sampling_loop(self.consumer_pipes)', globals(), locals(), 'prof_nested_sampling.prof')
-
-    def profile(self):
-        for i in range(0,self.NUMBER_OF_PRODUCER_PROCESSES):
-            p = mp.Process(target=self.worker_sampler, args=(self.queues[i%len(self.queues)], self.NS.logLmin ))
-            self.process_pool.append(p)
-        for i in range(0,self.NUMBER_OF_CONSUMER_PROCESSES):
-            p = mp.Process(target=self.worker_ns, args=(self.queues, self.port, self.authkey))
-            self.process_pool.append(p)
-        for each in self.process_pool:
-            each.start()
-
     def checkpoint(self):
         self.NS.checkpoint()
-
-
-class RunManager(SyncManager):
-    def __init__(self, nthreads=None, **kwargs):
-        self.periodic_checkpoint_interval = kwargs.pop(
-            "periodic_checkpoint_interval", np.inf
-        )
-        super(RunManager,self).__init__(**kwargs)
-        self.nconnected=mp.Value(c_int,0)
-        self.producer_pipes = list()
-        self.consumer_pipes = list()
-        for i in range(nthreads):
-            consumer, producer = mp.Pipe(duplex=True)
-            self.producer_pipes.append(producer)
-            self.consumer_pipes.append(consumer)
-        self.logLmin = None
-        self.logLmax = None
-        self.nthreads=nthreads
-
-    def start(self):
-        super(RunManager, self).start()
-        self.logLmin = mp.Value(c_double,-np.inf)
-        self.logLmax = mp.Value(c_double,-np.inf)
-        self.checkpoint_flag=mp.Value(c_int,0)
-
-    def connect_producer(self):
-        """
-        Returns the producer's end of the pipe
-        """
-        with self.nconnected.get_lock():
-            n = self.nconnected.value
-            pipe = self.producer_pipes[n]
-            self.nconnected.value+=1
-        return pipe, n
