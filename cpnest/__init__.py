@@ -1,11 +1,16 @@
 import logging
-from .utils import stream_handler, LEVELS
+from .utils import ConsoleHandler, LEVELS
 
-# Configure base logger for the cpnest package - applies to loggers with names 
-# prefixed by 'cpnest.'
-_logger = logging.getLogger('cpnest')
-_logger.addHandler(stream_handler())
-_logger.setLevel(LEVELS[0])  # default verbosity of 0
+# Configure base logger for the cpnest package - inherited by all loggers with 
+# names prefixed by 'cpnest'
+logger = logging.getLogger('cpnest')
+logger.setLevel(LEVELS[-1])  # maximum verbosity recorded to base logger
+
+console_handler = ConsoleHandler(verbose=0)  # default console verbosity is 0 - CRITICAL
+logger.addHandler(console_handler)
+# To change the console handler verbosity:
+#   from cpnest import console_handler
+#   console_handler.set_verbosity(2)
 
 from .cpnest import CPNest
 
