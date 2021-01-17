@@ -370,9 +370,9 @@ class HamiltonianProposal(EnsembleProposal):
         super(HamiltonianProposal, self).__init__(**kwargs)
         self.T                      = self.kinetic_energy
         self.V                      = model.potential
-        self.analytical_gradient    = None
+        self.analytical_gradient    = lambda x: x.values
         self.likelihood_gradient    = None
-        self.dt                     = 0.01
+        self.dt                     = 0.1
         self.leaps                  = 100
 #        self.c                      = self.counter()
         self.DEBUG                  = 0
@@ -470,8 +470,6 @@ class HamiltonianProposal(EnsembleProposal):
         self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
         self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
         _, self.logdeterminant      = np.linalg.slogdet(self.mass_matrix)
-        if self._initialised == False:
-            self.set_integration_parameters()
 
     def set_integration_parameters(self):
         """
@@ -483,7 +481,7 @@ class HamiltonianProposal(EnsembleProposal):
         self.leaps          = int(np.ceil(w[-1]))
         self.max_dt         = 2.0*w[0]
         self.min_dt         = 1e-3
-        self.dt             = w[0]/2.
+        self.dt             = w[0]/self.leaps
 
     def update_time_step(self, acceptance):
         """
@@ -767,27 +765,31 @@ class ConstrainedLeapFrog(LeapFrog):
         # evolve forward in time
         i = 0
         p, q, reflected = self.evolve_trajectory_one_step_momentum(p0.copy(), q0.copy(), logLmin, half = True)
-        while (i < self.L):
+        while (i < self.leaps):
             p, q            = self.evolve_trajectory_one_step_position(p, q)
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
             trajectory.append((q.copy(),p.copy()))
             i += 1
 
-        # evolve backward in time
-        i = 0
-        p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
-        while (i < self.L):
-            p, q            = self.evolve_trajectory_one_step_position(p, q)
-            p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
-            trajectory.append((q.copy(),p.copy()))
-            i += 1
-#            if i == 3*self.L: break
         p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
+#        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
+#
+#        # evolve backward in time
+#        i = 0
+#        p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
+#        while (i < self.leaps//2):
+#            p, q            = self.evolve_trajectory_one_step_position(p, q)
+#            p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
+#            trajectory.append((q.copy(),p.copy()))
+#            i += 1
+#
+#        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
 
-        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
-        return self.sample_trajectory(trajectory)
-#        print("dt:",self.dt,"L:",self.L,"actual L:",i,"maxL:",3*self.L)
-#        return trajectory[-1]
+#        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
+#        q, p = self.sample_trajectory(trajectory)
+
+        self.trajectories.append(trajectory)
+        return q, -p
 
     def sample_trajectory(self, trajectory):
         """

@@ -291,7 +291,7 @@ class NestedSampler(object):
 
             p = pool.map_unordered(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst)
 
-            for i, o, r in zip(range(self.nthreads),self.worst, p):
+            for i, o, r in zip(range(self.nthreads), self.worst, p):
 
                 acceptance,sub_acceptance,self.jumps,proposed = r
 
@@ -311,26 +311,16 @@ class NestedSampler(object):
                     self.rejected += 1
 
                 self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
+
             if len(done) > 0:
                 for d in done:
                     try:
                         self.worst.remove(d)
                     except:
                         pass
+
         self.live_points.update_mean_covariance.remote()
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
-
-    def get_worst_n_live_points(self, n):
-        """
-        selects the lowest likelihood N live points
-        for evolution
-        """
-        self.live_points.sort(key=attrgetter('logL'))
-        self.worst = list(np.arange(n))
-        self.logLmin = np.float128(self.live_points[n-1].logL)
-        self.logLmax = np.float128(self.live_points[-1].logL)
-
-        return np.float128(self.logLmin)
 
     def reset(self, pool):
         """
@@ -368,8 +358,6 @@ class NestedSampler(object):
             self.reset(pool)
 
         if self.prior_sampling:
-#            for i in range(self.nlive):
-#                self.nested_samples.append(self.live_points.get.remote(i))
             self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
             self.write_chain_to_file()
             self.write_evidence_to_file()
@@ -440,7 +428,7 @@ class NestedSampler(object):
     def __setstate__(self, state):
         self.__dict__ = state
 
-@ray.remote
+@ray.remote(num_cpus=1)
 class LivePointsActor:
 
     def __init__(self, l, verbose = 2):

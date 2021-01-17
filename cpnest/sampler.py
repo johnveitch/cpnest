@@ -118,7 +118,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self, safety=20):
+    def estimate_nmcmc(self, safety=1):
         """
         Estimate autocorrelation length of the chain
         """
@@ -159,7 +159,7 @@ class Sampler(object):
                 p.set_ensemble(ensemble)
         return 0
 
-@ray.remote
+@ray.remote(num_cpus=1)
 class MetropolisHastingsSampler(Sampler):
     """
     metropolis-hastings acceptance rule
@@ -202,7 +202,7 @@ class MetropolisHastingsSampler(Sampler):
             # Yield the new sample
             yield (sub_counter, oldparam)
 
-@ray.remote
+@ray.remote(num_cpus=1)
 class HamiltonianMonteCarloSampler(Sampler):
     """
     HamiltonianMonteCarlo acceptance rule
@@ -241,15 +241,15 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             yield (sub_counter, oldparam)
 
-@ray.remote
+@ray.remote(num_cpus=1)
 class SliceSampler(Sampler):
     """
     The Ensemble Slice sampler from Karamanis & Beutler
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 10000 # maximum stepping out steps allowed
-    max_slices     = 10000 # maximum number of slices allowed
+    max_steps_out  = 100 # maximum stepping out steps allowed
+    max_slices     = 100 # maximum number of slices allowed
     tuning_steps   = 1000
 
     def adapt_length_scale(self):
@@ -384,7 +384,7 @@ class SliceSampler(Sampler):
 
             yield (sub_counter, oldparam)
 
-@ray.remote
+@ray.remote(num_cpus=1)
 class SamplersCycle(Sampler):
     """
     A sampler that cycles through a list of
