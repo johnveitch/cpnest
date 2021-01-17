@@ -16,6 +16,9 @@ from .cpnest import CheckPoint
 from tqdm import tqdm
 
 
+logger = logging.getLogger('cpnest.NestedSampling')
+
+
 class _NSintegralState(object):
     """
     Stores the state of the nested sampling integrator
@@ -23,7 +26,7 @@ class _NSintegralState(object):
     def __init__(self, nlive):
         self.nlive = nlive
         self.reset()
-        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
+        self.logger = logging.getLogger('cpnest.NestedSampling._NSintegralState')
 
     def reset(self):
         """
@@ -98,7 +101,7 @@ class _NSintegralState(object):
 
     def __setstate__(self, state):
         if 'logger' not in state:
-            state['logger'] = logging.getLogger("cpnest.cpnest.CPNest")
+            state['logger'] = logging.getLogger("cpnest.NestedSampling._NSintegralState")
         self.__dict__ = state
 
 
@@ -162,7 +165,7 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.logger         = logging.getLogger('cpnest.cpnest.CPNest')
+        self.logger         = logging.getLogger('cpnest.NestedSampling.NestedSampler')
         self.model          = model
         self.manager        = manager
         self.prior_sampling = prior_sampling
@@ -397,7 +400,7 @@ class NestedSampler(object):
         obj.logLmax = obj.manager.logLmax
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
-        obj.logger = logging.getLogger("cpnest.cpnest.CPNest")
+        obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         del obj.__dict__['llmin']
         del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)
