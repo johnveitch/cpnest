@@ -482,8 +482,6 @@ class HamiltonianProposal(EnsembleProposal):
         """
         w, _                = ray.get(self.ensemble.get_eigen_quantities.remote())
         self.leaps          = int(np.ceil(w[-1]))
-        self.max_dt         = 2.0*w[0]
-        self.min_dt         = 1e-3
         self.dt             = np.sqrt(w[0]/self.leaps)
 
     def update_time_step(self, acceptance):

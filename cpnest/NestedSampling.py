@@ -320,7 +320,8 @@ class NestedSampler(object):
                         pass
 
         self.live_points.update_mean_covariance.remote()
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
 
     def reset(self, pool):
         """
@@ -328,7 +329,8 @@ class NestedSampler(object):
         sampling them from the `cpnest.model.log_prior` distribution
         """
         # set up  the ensemble statistics
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
         p = pool.map(lambda a, v: a.produce_sample.remote(self.live_points.get.remote(v), -np.inf), range(self.nlive))
         # send all live points to the samplers for start
         i = 0
@@ -344,7 +346,8 @@ class NestedSampler(object):
 
         self.live_points.update_mean_covariance.remote()
         # set up  the ensemble statistics
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)): s
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -412,7 +415,8 @@ class NestedSampler(object):
         ray.get(obj.live_points._set_internal_state.remote(obj.integral_state))
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(obj.live_points), range(obj.nthreads)): s
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(obj.live_points), range(obj.nthreads)):
+            pass
         return obj
 
     def __getstate__(self):
