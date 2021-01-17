@@ -18,6 +18,7 @@ class Handler(logging.Handler):
         return self._verbose
 
     def set_verbosity(self, verbose):
+        self.warning('Setting verbosity to {}'.format(verbose))
         self._verbose = verbose
         self.setLevel(LEVELS[verbose])
         
