@@ -25,16 +25,18 @@ class GaussianModel(cpnest.model.Model):
     
     def force(self, p):
         f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
-#        for n in p.names: f[n] = p[n]
         return f
+    
+    def analytical_gradient(self, p):
+        return p.values
 
 class GaussianTestCase(unittest.TestCase):
     """
     Test the gaussian model
     """
     def setUp(self):
-        self.model=GaussianModel(dim = 1)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=10, nlive=1000, maxmcmc=500, nslice=0, nhamiltonian=0, resume=1)
+        self.model=GaussianModel(dim = 10)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=10, nlive=1000, maxmcmc=500, nslice=0, nhamiltonian=10, resume=1)
 
     def test_run(self):
         self.work.run()
@@ -46,7 +48,4 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-#    unittest.main(verbosity=2)
-    model=GaussianModel(dim = 10)
-    work=cpnest.CPNest(model, verbose=2, nthreads=1, nlive=1000, maxmcmc=5000, nslice=0, nhamiltonian=1)
-    work.run()
+    unittest.main(verbosity=2)

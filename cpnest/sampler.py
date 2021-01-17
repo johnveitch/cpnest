@@ -117,7 +117,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self, safety=10):
+    def estimate_nmcmc(self, safety=20):
         """
         Estimate autocorrelation length of the chain
         """
@@ -214,7 +214,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             sub_accepted    = 0
             sub_counter     = 0
 
-            while sub_accepted == 0:
+            while True:
 
                 sub_counter += 1
                 newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
@@ -241,8 +241,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             for p in self.proposal.proposals:
 #                p.update_time_step(self.acceptance)
-                p.update_trajectory_length(self.Nmcmc)
-#                print(p.dt,p.leaps)
+                p.update_trajectory_length(safety=10)
 
             yield (sub_counter, oldparam)
 

@@ -105,6 +105,17 @@ class Model(object):
         """
         pass
 
+    def analytical_gradient(self,param):
+        """
+        returns the gradient of the likelihood (-grad potential)
+        Required for Hamiltonian sampling
+
+        ----------
+        Parameter:
+        param: :obj:`cpnest.parameter.LivePoint`
+        """
+        pass
+
     def strsample(self,sample):
         """
         Return a string representation for the sample to be written

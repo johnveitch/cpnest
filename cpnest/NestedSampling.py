@@ -216,7 +216,7 @@ class NestedSampler(object):
             l[-1].logP = self.model.log_prior(l[-1])
             l[-1].logL = self.model.log_likelihood(l[-1])
 
-        self.live_points = LivePointsActor.remote(l)
+        self.live_points = LivePoints.remote(l)
         self.live_points.update_mean_covariance.remote()
 
     def setup_output(self,output):
@@ -408,7 +408,7 @@ class NestedSampler(object):
             obj = pickle.load(f)
         obj.model = usermodel
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
-        obj.live_points = LivePointsActor.remote(obj.live)
+        obj.live_points = LivePoints.remote(obj.live)
         ray.get(obj.live_points._set_internal_state.remote(obj.integral_state))
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
@@ -429,7 +429,7 @@ class NestedSampler(object):
         self.__dict__ = state
 
 @ray.remote(num_cpus=1)
-class LivePointsActor:
+class LivePoints:
 
     def __init__(self, l, verbose = 2):
         self._list                = l

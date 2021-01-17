@@ -370,7 +370,10 @@ class HamiltonianProposal(EnsembleProposal):
         super(HamiltonianProposal, self).__init__(**kwargs)
         self.T                      = self.kinetic_energy
         self.V                      = model.potential
-        self.analytical_gradient    = lambda x: x.values
+        self.dV                     = model.force
+        self.prior_bounds           = model.bounds
+        self.dimension              = len(self.prior_bounds)
+        self.analytical_gradient    = model.analytical_gradient
         self.likelihood_gradient    = None
         self.dt                     = 0.1
         self.leaps                  = 100
@@ -382,9 +385,20 @@ class HamiltonianProposal(EnsembleProposal):
         self.ADAPTATIONSIZE         = 0.001
         self.trajectories           = []
 
+        self.set_mass_parameters()
+        self.set_momenta_distribution()
+        self._ensemble_initialised  = False
+
         if no_smt == True:
             print("ERROR! Current likelihood gradient approximation requires smt")
             exit()
+
+    def set_mass_parameters(self):
+        x = np.array([1 for _ in self.prior_bounds])# = np.array([p[1]-p[0] for p in self.prior_bounds])
+        self.mass_matrix = np.diagflat(np.sqrt(x))
+        self.inverse_mass_matrix         = np.linalg.inv(self.mass_matrix)
+        self.inverse_mass        = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
+        _, self.logdeterminant   = np.linalg.slogdet(self.mass_matrix)
 
     def set_ensemble(self, ensemble):
         """
@@ -393,9 +407,10 @@ class HamiltonianProposal(EnsembleProposal):
         and to heuristically estimate the normal vector to the
         hard boundary defined by logLmin.
         """
-        self.ensemble   = ensemble
-        self.update_mass()
-        self.update_momenta_distribution()
+        if self._ensemble_initialised == False:
+            self.ensemble = ensemble
+            self.set_integration_parameters()
+            self._ensemble_initialised = True
 
         if self.analytical_gradient == None:
             self.update_normal_vector()
@@ -452,24 +467,12 @@ class HamiltonianProposal(EnsembleProposal):
         dV = self.dV(q)
         return dV.view(np.float64)
 
-    def update_momenta_distribution(self):
+    def set_momenta_distribution(self):
         """
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)#
-
-    def update_mass(self):
-        """
-        Update the mass matrix (covariance matrix) and
-        inverse mass matrix (precision matrix)
-        from the ensemble, allowing for correlated momenta
-        """
-        self.covariance             = ray.get(self.ensemble.get_covariance.remote())
-        self.inverse_mass_matrix    = np.atleast_2d(self.covariance)
-        self.mass_matrix            = np.linalg.inv(self.inverse_mass_matrix)
-        self.inverse_mass           = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
-        _, self.logdeterminant      = np.linalg.slogdet(self.mass_matrix)
+        self.momenta_distribution = multivariate_normal(cov=np.identity(self.dimension))
 
     def set_integration_parameters(self):
         """
@@ -477,11 +480,11 @@ class HamiltonianProposal(EnsembleProposal):
         shortest and longest principal axes. The former sets to base time step
         while the latter sets the trajectory length
         """
-        w, _                = np.linalg.eigh(self.covariance)
+        w, _                = ray.get(self.ensemble.get_eigen_quantities.remote())
         self.leaps          = int(np.ceil(w[-1]))
         self.max_dt         = 2.0*w[0]
         self.min_dt         = 1e-3
-        self.dt             = w[0]/self.leaps
+        self.dt             = np.sqrt(w[0]/self.leaps)
 
     def update_time_step(self, acceptance):
         """
@@ -496,7 +499,7 @@ class HamiltonianProposal(EnsembleProposal):
         self.dt = np.minimum(np.exp(new_log_dt),self.max_dt)
         self.dt = np.maximum(self.min_dt,self.dt)
 
-    def update_trajectory_length(self, safety = 10):
+    def update_trajectory_length(self, safety = 20):
         """
         Update the trajectory length according to the estimated ACL
         Parameters
@@ -508,10 +511,13 @@ class HamiltonianProposal(EnsembleProposal):
         ACL = np.array(ACL)
         # average over all trajectories and take the maximum over the dimensions
         self.leaps = int(np.max(np.average(ACL,axis=0)))
+
         if self.leaps < safety:
             self.leaps = safety
+
         if self.leaps > self.maxleaps:
             self.leaps = self.maxleaps
+
         self.trajectories = []
 
     def kinetic_energy(self,p):
@@ -576,10 +582,13 @@ class LeapFrog(HamiltonianProposal):
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
         initial_energy = self.hamiltonian(p0,q0)
         # evolve along the trajectory
-        q, p = self.evolve_trajectory(p0, q0, *args)
+        q, p, r = self.evolve_trajectory(p0, q0, *args)
         # minus sign from the definition of the potential
-        final_energy   = self.hamiltonian(p,q)
-        self.log_J = min(0.0, initial_energy-final_energy)
+        final_energy   = self.hamiltonian(p, q)
+        if r == 1:
+            self.log_J = -np.inf
+        else:
+            self.log_J = min(0.0, initial_energy-final_energy)
         return q
 
     def evolve_trajectory(self, p0, q0, *args):
@@ -626,7 +635,7 @@ class LeapFrog(HamiltonianProposal):
         # Do a final update of the momentum for a half step
         p += - 0.5 * self.dt * dV
 
-        return q, -p
+        return q, -p, 0
 
 class ConstrainedLeapFrog(LeapFrog):
     """
@@ -763,41 +772,41 @@ class ConstrainedLeapFrog(LeapFrog):
         p: :obj:`numpy.ndarray` updated momentum vector
         q: :obj:`cpnest.parameter.LivePoint` position
         """
-        trajectory = [(q0,p0)]
+        trajectory = [(q0,p0,0)]
         # evolve forward in time
         i = 0
         p, q, reflected = self.evolve_trajectory_one_step_momentum(p0.copy(), q0.copy(), logLmin, half = True)
-        while (i < self.leaps):
+        while (i < self.leaps//2):
             p, q            = self.evolve_trajectory_one_step_position(p, q)
             p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
-            trajectory.append((q.copy(),p.copy()))
+            trajectory.append((q.copy(),p.copy(),reflected))
             i += 1
 
         p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
-#        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
-#
-#        # evolve backward in time
-#        i = 0
-#        p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
-#        while (i < self.leaps//2):
-#            p, q            = self.evolve_trajectory_one_step_position(p, q)
-#            p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
-#            trajectory.append((q.copy(),p.copy()))
-#            i += 1
-#
-#        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
+        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
 
-#        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
-#        q, p = self.sample_trajectory(trajectory)
+        # evolve backward in time
+        i = 0
+        p, q, reflected = self.evolve_trajectory_one_step_momentum(-p0.copy(), q0.copy(), logLmin, half = True)
+        while (i < self.leaps//2):
+            p, q            = self.evolve_trajectory_one_step_position(p, q)
+            p, q, reflected = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = False)
+            trajectory.append((q.copy(),p.copy(),reflected))
+            i += 1
+
+        p, q, reflected     = self.evolve_trajectory_one_step_momentum(p, q, logLmin, half = True)
+
+        if self.DEBUG: self.save_trajectory(trajectory, logLmin)
+        q, p, reflected = self.sample_trajectory(trajectory)
 
         self.trajectories.append(trajectory)
-        return q, -p
+        return q, -p, reflected
 
     def sample_trajectory(self, trajectory):
         """
 
         """
-        logw = np.array([-self.hamiltonian(p,q) for q,p in trajectory[1:-1]])
+        logw = np.array([-self.hamiltonian(p,q) for q,p,_ in trajectory[1:-1]])
         norm = logsumexp(logw)
         idx  = np.random.choice(range(1,len(trajectory)-1), p = np.exp(logw  - norm))
         return trajectory[idx]
