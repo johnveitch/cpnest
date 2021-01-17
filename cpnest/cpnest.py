@@ -15,10 +15,10 @@ from multiprocessing.managers import SyncManager
 
 import cProfile
 
-from .utils import LEVELS, file_handler
+from .utils import LEVELS, LogFile
 
 # module logger takes name according to its path
-_logger = logging.getLogger('cpnest.cpnest')
+LOGGER = logging.getLogger('cpnest.cpnest')
 
 class CheckPoint(Exception):
     pass
@@ -26,7 +26,7 @@ class CheckPoint(Exception):
 
 def sighandler(signal, frame):
     # print("Handling signal {}".format(signal))
-    _logger.critical("Handling signal {}".format(signal))
+    LOGGER.critical("Handling signal {}".format(signal))
     raise CheckPoint()
 
 
@@ -125,8 +125,11 @@ class CPNest(object):
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
-        self.logger = self._init_logger(output, verbose)
-        self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
+        
+        # Shouldn't the line below be in the `run` function not `__init__`? 
+        # self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+        # I have moved it to `run` so that is it logged within the context manager.
 
         if n_periodic_checkpoint is not None:
             self.logger.critical(
@@ -245,56 +248,51 @@ class CPNest(object):
             p = mp.Process(target=sampler.produce_sample)
             self.process_pool.append(p)
 
-    def _init_logger(self, output, verbose):
-        """
-        Initializes the logger for the CPNest class
-
-        output : str
-            path to output log file
-        """
-        logger = logging.getLogger('cpnest.cpnest.CPNest')
-        logger.addHandler(file_handler('cpnest.log', output))
-        logger.setLevel(LEVELS[verbose])  # Will apply to all handlers
-        return logger
-
     def run(self):
         """
         Run the sampler
         """
-        if self.resume:
-            signal.signal(signal.SIGTERM, sighandler)
-            signal.signal(signal.SIGALRM, sighandler)
-            signal.signal(signal.SIGQUIT, sighandler)
-            signal.signal(signal.SIGINT, sighandler)
-            signal.signal(signal.SIGUSR1, sighandler)
-            signal.signal(signal.SIGUSR2, sighandler)
 
-        #self.p_ns.start()
-        for each in self.process_pool:
-            each.start()
-        try:
-            self.NS.nested_sampling_loop()
+        # The LogFile context manager ensures everything within is logged to 'cpnest.log'
+        # but the file handler is safely closed once the run is finished.
+        with LogFile(os.path.join(self.output, 'cpnest.log')):
+            
+            self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+            
+            if self.resume:
+                signal.signal(signal.SIGTERM, sighandler)
+                signal.signal(signal.SIGALRM, sighandler)
+                signal.signal(signal.SIGQUIT, sighandler)
+                signal.signal(signal.SIGINT, sighandler)
+                signal.signal(signal.SIGUSR1, sighandler)
+                signal.signal(signal.SIGUSR2, sighandler)
+
+            #self.p_ns.start()
             for each in self.process_pool:
-                each.join()
-        except CheckPoint:
-            self.checkpoint()
-            sys.exit(130)
+                each.start()
+            try:
+                self.NS.nested_sampling_loop()
+                for each in self.process_pool:
+                    each.join()
+            except CheckPoint:
+                self.checkpoint()
+                sys.exit(130)
 
-        if self.verbose >= 2:
-            self.logger.critical("Saving nested samples in {0}".format(self.output))
-            self.nested_samples = self.get_nested_samples()
-            self.logger.critical("Saving posterior samples in {0}".format(self.output))
-            self.posterior_samples = self.get_posterior_samples()
-        else:
-            self.nested_samples = self.get_nested_samples(filename=None)
-            self.posterior_samples = self.get_posterior_samples(filename=None)
+            if self.verbose >= 2:
+                self.logger.critical("Saving nested samples in {0}".format(self.output))
+                self.nested_samples = self.get_nested_samples()
+                self.logger.critical("Saving posterior samples in {0}".format(self.output))
+                self.posterior_samples = self.get_posterior_samples()
+            else:
+                self.nested_samples = self.get_nested_samples(filename=None)
+                self.posterior_samples = self.get_posterior_samples(filename=None)
 
-        if self.verbose>=3 or self.NS.prior_sampling:
-            self.prior_samples = self.get_prior_samples(filename=None)
-        if self.verbose>=3 and not self.NS.prior_sampling:
-            self.mcmc_samples = self.get_mcmc_samples(filename=None)
-        if self.verbose>=2:
-            self.plot(corner = False)
+            if self.verbose>=3 or self.NS.prior_sampling:
+                self.prior_samples = self.get_prior_samples(filename=None)
+            if self.verbose>=3 and not self.NS.prior_sampling:
+                self.mcmc_samples = self.get_mcmc_samples(filename=None)
+            if self.verbose>=2:
+                self.plot(corner = False)
 
         #TODO: Clean up the resume pickles
 
