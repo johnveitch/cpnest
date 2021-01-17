@@ -255,7 +255,7 @@ class CPNest(object):
 
         # The LogFile context manager ensures everything within is logged to 'cpnest.log'
         # but the file handler is safely closed once the run is finished.
-        with LogFile(os.path.join(self.output, 'cpnest.log')):
+        with LogFile(os.path.join(self.output, 'cpnest.log'), verbose=self.verbose):
             
             self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
             
