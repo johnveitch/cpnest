@@ -18,12 +18,11 @@ class Handler(logging.Handler):
         return self._verbose
 
     def set_verbosity(self, verbose):
-        self.warning('Setting verbosity to {}'.format(verbose))
         self._verbose = verbose
         self.setLevel(LEVELS[verbose])
         
 
-class ConsoleHandler(Handler, logging.StreamHandler):
+class StreamHandler(Handler, logging.StreamHandler):
     def __init__(self, verbose=0, **kwargs):
         super().__init__(verbose=verbose, **kwargs)
 
