@@ -7,7 +7,7 @@ LEVELS = ['CRITICAL', 'WARNING', 'INFO', 'DEBUG']
 LOGGER = logging.getLogger('cpnest.utils')
 
 
-class Handler(logging.Handler):
+class _Handler(logging.Handler):
 
     def __init__(self, verbose=0, **kwargs):
         super().__init__(**kwargs)
@@ -23,12 +23,12 @@ class Handler(logging.Handler):
         self.setLevel(LEVELS[verbose])
         
 
-class StreamHandler(Handler, logging.StreamHandler):
+class StreamHandler(_Handler, logging.StreamHandler):
     def __init__(self, verbose=0, **kwargs):
         super().__init__(verbose=verbose, **kwargs)
 
 
-class FileHandler(Handler, logging.FileHandler):
+class FileHandler(_Handler, logging.FileHandler):
     def __init__(self, filename, verbose=0, **kwargs):
         super().__init__(filename=filename, verbose=verbose, **kwargs)
 
