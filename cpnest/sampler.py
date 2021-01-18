@@ -256,8 +256,29 @@ class SliceSampler(Sampler):
     """
     mu             = 1.0
     max_steps_out  = 1000 # maximum stepping out steps allowed
-    max_slices     = 10 # maximum number of slices allowed
+    max_slices     = 1000 # maximum number of slices allowed
     tuning_steps   = 1000
+
+    def estimate_nmcmc(self,):
+        """
+        Estimate autocorrelation length of the chain
+        """
+        # first of all, build a numpy array out of
+        # the stored samples
+        ACL = []
+        s   = list(self.samples)
+        samples = np.array([x.values for x in s[-5*self.maxmcmc:]])
+        # compute the ACL on 5 times the maxmcmc set of samples
+        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+
+        if self.verbose >= 3:
+            for i in range(len(self.model.names)):
+                self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
+
+        self.Nmcmc = int(np.max(ACL))
+        if self.Nmcmc < 1:
+            self.Nmcmc = 1
+        return self.Nmcmc
 
     def adapt_length_scale(self):
         """
