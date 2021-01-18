@@ -124,18 +124,21 @@ class CPNest(object):
 
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
-        
+
         self.verbose  = verbose
         self.output   = output
         self.logger = logging.getLogger('cpnest.cpnest.CPNest')
 
-        # The LogFile context manager ensures everything within is logged to 'cpnest.log'
-        # but the file handler is safely closed once the run is finished.
-        self.log_file = LogFile(os.path.join(self.output, 'cpnest.log'), verbose=self.verbose)
-        
+        # The LogFile context manager ensures everything within is logged to
+        # 'cpnest.log' but the file handler is safely closed once the run is
+        # finished.
+        self.log_file = LogFile(os.path.join(self.output, 'cpnest.log'),
+                                verbose=self.verbose)
+
         with self.log_file:
             # Everything in this context is logged to `log_file`
-            self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+            msg = 'Running with {0} parallel threads'.format(self.nthreads)
+            self.logger.critical(msg)
 
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
@@ -148,14 +151,15 @@ class CPNest(object):
             from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
             from .NestedSampling import NestedSampler
             from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
+
             if proposals is None:
                 proposals = dict(mhs=DefaultProposalCycle,
-                                hmc=HamiltonianProposalCycle,
-                                sli=EnsembleSliceProposalCycle)
+                                 hmc=HamiltonianProposalCycle,
+                                 sli=EnsembleSliceProposalCycle)
             elif type(proposals) == list:
                 proposals = dict(mhs=proposals[0],
-                                hmc=proposals[1],
-                                sli=proposals[2])
+                                 hmc=proposals[1],
+                                 sli=proposals[2])
             self.nlive    = nlive
             self.poolsize = poolsize
             self.posterior_samples = None
@@ -168,7 +172,7 @@ class CPNest(object):
             self.user     = usermodel
             self.resume = resume
 
-            if seed is None: self.seed=1234
+            if seed is None: self.seed = 1234
             else:
                 self.seed=seed
 
@@ -185,12 +189,14 @@ class CPNest(object):
                             prior_sampling = self.prior_sampling,
                             manager        = self.manager)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
+                self.NS = NestedSampler.resume(resume_file, self.manager,
+                                               self.user)
 
             nmhs = self.nthreads-nhamiltonian-nslice
             # instantiate the sampler class
             for i in range(nmhs):
-                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                resume_file = os.path.join(output,
+                                           "sampler_{0:d}.pkl".format(i))
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = MetropolisHastingsSampler(self.user,
                                     maxmcmc,
@@ -212,19 +218,21 @@ class CPNest(object):
                 self.process_pool.append(p)
 
             for i in range(nhamiltonian):
-                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                resume_file = os.path.join(output,
+                                           "sampler_{0:d}.pkl".format(i))
                 if not os.path.exists(resume_file) or resume == False:
-                    sampler = HamiltonianMonteCarloSampler(self.user,
-                                    maxmcmc,
-                                    verbose     = verbose,
-                                    output      = output,
-                                    poolsize    = poolsize,
-                                    seed        = self.seed+nmhs+i,
-                                    proposal    = proposals['hmc'](model=self.user),
-                                    resume_file = resume_file,
-                                    sample_prior = prior_sampling,
-                                    manager     = self.manager
-                                    )
+                    sampler = HamiltonianMonteCarloSampler(
+                        self.user,
+                        maxmcmc,
+                        verbose     = verbose,
+                        output      = output,
+                        poolsize    = poolsize,
+                        seed        = self.seed+nmhs+i,
+                        proposal    = proposals['hmc'](model=self.user),
+                        resume_file = resume_file,
+                        sample_prior = prior_sampling,
+                        manager     = self.manager
+                    )
                 else:
                     sampler = HamiltonianMonteCarloSampler.resume(resume_file,
                                                                 self.manager,
@@ -247,8 +255,8 @@ class CPNest(object):
                                     )
                 else:
                     sampler = SliceSampler.resume(resume_file,
-                                                                self.manager,
-                                                                self.user)
+                                                  self.manager,
+                                                  self.user)
                 p = mp.Process(target=sampler.produce_sample)
                 self.process_pool.append(p)
 
@@ -259,8 +267,9 @@ class CPNest(object):
 
         with self.log_file:
             # Everything in this context is logged to `log_file`
-            self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-            
+            msg = 'Running with {0} parallel threads'.format(self.nthreads)
+            self.logger.critical(msg)
+
             if self.resume:
                 signal.signal(signal.SIGTERM, sighandler)
                 signal.signal(signal.SIGALRM, sighandler)
@@ -281,14 +290,19 @@ class CPNest(object):
                 sys.exit(130)
 
             if self.verbose >= 2:
-                self.logger.critical("Saving nested samples in {0}".format(self.output))
+                self.logger.critical(
+                    "Saving nested samples in {0}".format(self.output)
+                )
                 self.nested_samples = self.get_nested_samples()
-                self.logger.critical("Saving posterior samples in {0}".format(self.output))
+                self.logger.critical(
+                    "Saving posterior samples in {0}".format(self.output)
+                )
                 self.posterior_samples = self.get_posterior_samples()
             else:
                 self.nested_samples = self.get_nested_samples(filename=None)
-                self.posterior_samples = self.get_posterior_samples(filename=None)
-
+                self.posterior_samples = self.get_posterior_samples(
+                    filename=None
+                )
             if self.verbose>=3 or self.NS.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
             if self.verbose>=3 and not self.NS.prior_sampling:

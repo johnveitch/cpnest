@@ -26,7 +26,8 @@ class _NSintegralState(object):
     def __init__(self, nlive):
         self.nlive = nlive
         self.reset()
-        self.logger = logging.getLogger('cpnest.NestedSampling._NSintegralState')
+        loggername = 'cpnest.NestedSampling._NSintegralState'
+        self.logger = logging.getLogger(loggername)
 
     def reset(self):
         """
@@ -101,7 +102,8 @@ class _NSintegralState(object):
 
     def __setstate__(self, state):
         if 'logger' not in state:
-            state['logger'] = logging.getLogger("cpnest.NestedSampling._NSintegralState")
+            loggername = "cpnest.NestedSampling._NSintegralState"
+            state['logger'] = logging.getLogger(loggername)
         self.__dict__ = state
 
 
@@ -165,7 +167,8 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.logger         = logging.getLogger('cpnest.NestedSampling.NestedSampler')
+        loggername = 'cpnest.NestedSampling.NestedSampler'
+        self.logger         = logging.getLogger(loggername)
         self.model          = model
         self.manager        = manager
         self.prior_sampling = prior_sampling
@@ -256,7 +259,7 @@ class NestedSampler(object):
             self.state.increment(self.params[k].logL)
             self.nested_samples.append(self.params[k])
             logLtmp.append(self.params[k].logL)
-            
+
         # Make sure we are mixing the chains
         for i in np.random.permutation(range(len(self.worst))): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
