@@ -267,8 +267,6 @@ class CPNest(object):
 
         with self.log_file:
             # Everything in this context is logged to `log_file`
-            msg = 'Running with {0} parallel threads'.format(self.nthreads)
-            self.logger.critical(msg)
 
             if self.resume:
                 signal.signal(signal.SIGTERM, sighandler)
