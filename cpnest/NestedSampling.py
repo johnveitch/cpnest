@@ -339,7 +339,7 @@ class NestedSampler(object):
                 acceptance,sub_acceptance,self.jumps,x = r
                 self.live_points.set.remote(j,x)
                 if np.isnan(x.logL):
-                    self.logger.warn("Likelihood function returned NaN for params "+str(self.params))
+                    self.logger.warn("Likelihood function returned NaN for params "+str(x))
                     self.logger.warn("You may want to check your likelihood function")
                 if x.logP!=-np.inf and x.logL!=-np.inf:
                     pbar.update()
@@ -444,6 +444,7 @@ class LivePoints:
         self.eigen_values         = None
         self.eigen_vectors        = None
         self.likelihood_gradient  = None
+        self.worst                = None
         self.logLmax              = -np.inf
         self.logLmin              = -np.inf
         self.state                = _NSintegralState(self.n)
@@ -496,7 +497,11 @@ class LivePoints:
         self.eigen_values, self.eigen_vectors = np.linalg.eigh(self.covariance)
 
     def sample(self, n):
-        return random.sample(self._list, n)
+        if self.worst == None:
+            return random.sample(self._list, n)
+        else:
+            k = len(self.worst)
+            return random.sample(self._list[k:], n)
 
     def get_logLmax(self):
         return self.logLmax
@@ -512,14 +517,13 @@ class LivePoints:
         self._list.sort(key=attrgetter('logL'))
         self.logLmin = np.float128(self._list[n-1].logL)
         self.logLmax = np.float128(self._list[-1].logL)
+        self.worst = self._list[:n]
 
-        worst = self._list[:n]
-
-        for p in worst:
+        for p in self.worst:
             self.state.increment(p.logL)
             self.nested_samples.append(p)
 
-        return worst
+        return self.worst
 
     def get_info(self):
         return self.state.info

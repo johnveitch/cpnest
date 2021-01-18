@@ -255,8 +255,8 @@ class SliceSampler(Sampler):
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 100 # maximum stepping out steps allowed
-    max_slices     = 100 # maximum number of slices allowed
+    max_steps_out  = 1000 # maximum stepping out steps allowed
+    max_slices     = 10 # maximum number of slices allowed
     tuning_steps   = 1000
 
     def adapt_length_scale(self):
