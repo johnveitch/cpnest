@@ -92,7 +92,8 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.sample_prior       = sample_prior
-        self.samples            = deque(maxlen = None if self.verbose >=3 else 5*self.maxmcmc) # the list of samples from the mcmc chain
+        self.max_storage        = 25000
+        self.samples            = deque(maxlen = None if self.verbose >=3 else self.max_storage) # the list of samples from the mcmc chain
         self.last_checkpoint_time = time.time()
 
     def estimate_nmcmc_on_the_fly(self, safety=5, tau=None):
@@ -125,7 +126,7 @@ class Sampler(object):
         # the stored samples
         ACL = []
         s   = list(self.samples)
-        samples = np.array([x.values for x in s[-5*self.maxmcmc:]])
+        samples = np.array([x.values for x in s[-self.max_storage:]])
         # compute the ACL on 5 times the maxmcmc set of samples
         ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
 

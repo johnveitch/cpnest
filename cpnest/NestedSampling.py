@@ -285,42 +285,36 @@ class NestedSampler(object):
 
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
+        idx = np.arange(self.nthreads)
+#        # Shuffle as to mix the chains
+        np.random.shuffle(idx)
         # Replace the points we just consumed with the next acceptable ones
-        done = []
-        # Shuffle as to mix the chains
-        np.random.shuffle(self.worst)
+        for i in idx:
+            pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst[i])
 
-        while len(self.worst) > 0:
+        i = 0
+        while pool.has_next():
 
-            p = pool.map(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst)
+            acceptance, sub_acceptance, self.jumps, proposed = pool.get_next()
 
-            for i, o, r in zip(range(self.nthreads), self.worst, p):
+            if proposed.logL > self.logLmin:
+                # replace worst point with new one
+                self.live_points.set.remote(idx[i%self.nthreads],proposed.copy())
+                self.accepted  += 1
+                self.iteration += 1
 
-                acceptance,sub_acceptance,self.jumps,proposed = r
+                if self.verbose:
+                    self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
+                        .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
+                        logLtmp[idx[i%self.nthreads]], proposed.logL, self.condition, logZ, self.logLmax))
 
-                if proposed.logL > self.logLmin:
-                    # replace worst point with new one
-                    self.live_points.set.remote(i,proposed.copy())
-                    done.append(o)
-                    self.accepted += 1
-                    self.iteration += 1
+                i += 1
 
-                    if self.verbose:
+            else:
+                self.rejected += 1
+                p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst[idx[i%self.nthreads]])
 
-                        self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                            .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
-                            logLtmp[i], proposed.logL, self.condition, logZ, self.logLmax))
-                else:
-                    self.rejected += 1
-
-                self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-
-            if len(done) > 0:
-                for d in done:
-                    try:
-                        self.worst.remove(d)
-                    except:
-                        pass
+            self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
 
         self.live_points.update_mean_covariance.remote()
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
@@ -334,18 +328,24 @@ class NestedSampler(object):
         # set up  the ensemble statistics
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
-        p = pool.map(lambda a, v: a.produce_sample.remote(self.live_points.get.remote(v), -np.inf), range(self.nlive))
+
         # send all live points to the samplers for start
+        for i in range(self.nlive):
+            pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
+
         i = 0
         with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
-            for j,r in enumerate(p):
-                acceptance,sub_acceptance,self.jumps,x = r
-                self.live_points.set.remote(j,x)
+            while pool.has_next():
+                acceptance,sub_acceptance,self.jumps,x = pool.get_next()
                 if np.isnan(x.logL):
                     self.logger.warn("Likelihood function returned NaN for params "+str(x))
                     self.logger.warn("You may want to check your likelihood function")
-                if x.logP!=-np.inf and x.logL!=-np.inf:
+                if np.isfinite(x.logP) and np.isfinite(x.logL):
+                    self.live_points.set.remote(i,x)
+                    i += 1
                     pbar.update()
+                else:
+                    pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
 
         self.live_points.update_mean_covariance.remote()
         # set up  the ensemble statistics
