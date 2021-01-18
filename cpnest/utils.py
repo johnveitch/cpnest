@@ -3,7 +3,7 @@ import logging
 
 # Default formats and level names
 FORMATTER = logging.Formatter(
-    '%(asctime)s - %(name)-8s: %(message)s',
+    '%(asctime)s - %(name)-38s: %(message)s',
     datefmt='%Y-%m-%d, %H:%M:%S'
 )
 LEVELS = ['CRITICAL', 'WARNING', 'INFO', 'DEBUG']
