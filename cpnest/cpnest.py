@@ -124,139 +124,141 @@ class CPNest(object):
 
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
-
-        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
         
-        # Shouldn't the line below be in the `run` function not `__init__`? 
-        # self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-        # I have moved it to `run` so that is it logged within the context manager.
-
-        if n_periodic_checkpoint is not None:
-            self.logger.critical(
-                "The n_periodic_checkpoint kwarg is deprecated, "
-                "use periodic_checkpoint_interval instead."
-            )
-        if periodic_checkpoint_interval is None:
-            periodic_checkpoint_interval = np.inf
-
-        from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
-        from .NestedSampling import NestedSampler
-        from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
-        if proposals is None:
-            proposals = dict(mhs=DefaultProposalCycle,
-                             hmc=HamiltonianProposalCycle,
-                             sli=EnsembleSliceProposalCycle)
-        elif type(proposals) == list:
-            proposals = dict(mhs=proposals[0],
-                             hmc=proposals[1],
-                             sli=proposals[2])
-        self.nlive    = nlive
         self.verbose  = verbose
         self.output   = output
-        self.poolsize = poolsize
-        self.posterior_samples = None
-        self.prior_sampling = prior_sampling
-        self.manager = RunManager(
-            nthreads=self.nthreads,
-            periodic_checkpoint_interval=periodic_checkpoint_interval
-        )
-        self.manager.start()
-        self.user     = usermodel
-        self.resume = resume
+        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
 
-        if seed is None: self.seed=1234
-        else:
-            self.seed=seed
+        # The LogFile context manager ensures everything within is logged to 'cpnest.log'
+        # but the file handler is safely closed once the run is finished.
+        self.log_file = LogFile(os.path.join(self.output, 'cpnest.log'), verbose=self.verbose)
+        
+        with self.log_file:
+            # Everything in this context is logged to `log_file`
+            self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
 
-        self.process_pool = []
+            if n_periodic_checkpoint is not None:
+                self.logger.critical(
+                    "The n_periodic_checkpoint kwarg is deprecated, "
+                    "use periodic_checkpoint_interval instead."
+                )
+            if periodic_checkpoint_interval is None:
+                periodic_checkpoint_interval = np.inf
 
-        # instantiate the nested sampler class
-        resume_file = os.path.join(output, "nested_sampler_resume.pkl")
-        if not os.path.exists(resume_file) or resume == False:
-            self.NS = NestedSampler(self.user,
-                        nlive          = nlive,
-                        output         = output,
-                        verbose        = verbose,
-                        seed           = self.seed,
-                        prior_sampling = self.prior_sampling,
-                        manager        = self.manager)
-        else:
-            self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
+            from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler
+            from .NestedSampling import NestedSampler
+            from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
+            if proposals is None:
+                proposals = dict(mhs=DefaultProposalCycle,
+                                hmc=HamiltonianProposalCycle,
+                                sli=EnsembleSliceProposalCycle)
+            elif type(proposals) == list:
+                proposals = dict(mhs=proposals[0],
+                                hmc=proposals[1],
+                                sli=proposals[2])
+            self.nlive    = nlive
+            self.poolsize = poolsize
+            self.posterior_samples = None
+            self.prior_sampling = prior_sampling
+            self.manager = RunManager(
+                nthreads=self.nthreads,
+                periodic_checkpoint_interval=periodic_checkpoint_interval
+            )
+            self.manager.start()
+            self.user     = usermodel
+            self.resume = resume
 
-        nmhs = self.nthreads-nhamiltonian-nslice
-        # instantiate the sampler class
-        for i in range(nmhs):
-            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-            if not os.path.exists(resume_file) or resume == False:
-                sampler = MetropolisHastingsSampler(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+i,
-                                  proposal    = proposals['mhs'](),
-                                  resume_file = resume_file,
-                                  sample_prior = prior_sampling,
-                                  manager     = self.manager
-                                  )
+            if seed is None: self.seed=1234
             else:
-                sampler = MetropolisHastingsSampler.resume(resume_file,
-                                                           self.manager,
-                                                           self.user)
+                self.seed=seed
 
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+            self.process_pool = []
 
-        for i in range(nhamiltonian):
-            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+            # instantiate the nested sampler class
+            resume_file = os.path.join(output, "nested_sampler_resume.pkl")
             if not os.path.exists(resume_file) or resume == False:
-                sampler = HamiltonianMonteCarloSampler(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+nmhs+i,
-                                  proposal    = proposals['hmc'](model=self.user),
-                                  resume_file = resume_file,
-                                  sample_prior = prior_sampling,
-                                  manager     = self.manager
-                                  )
+                self.NS = NestedSampler(self.user,
+                            nlive          = nlive,
+                            output         = output,
+                            verbose        = verbose,
+                            seed           = self.seed,
+                            prior_sampling = self.prior_sampling,
+                            manager        = self.manager)
             else:
-                sampler = HamiltonianMonteCarloSampler.resume(resume_file,
-                                                              self.manager,
-                                                              self.user)
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+                self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
-        for i in range(nslice):
-            resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
-            if not os.path.exists(resume_file) or resume == False:
-                sampler = SliceSampler(self.user,
-                                  maxmcmc,
-                                  verbose     = verbose,
-                                  output      = output,
-                                  poolsize    = poolsize,
-                                  seed        = self.seed+nmhs+nhamiltonian+i,
-                                  proposal    = proposals['sli'](),
-                                  resume_file = resume_file,
-                                  manager     = self.manager
-                                  )
-            else:
-                sampler = SliceSampler.resume(resume_file,
-                                                              self.manager,
-                                                              self.user)
-            p = mp.Process(target=sampler.produce_sample)
-            self.process_pool.append(p)
+            nmhs = self.nthreads-nhamiltonian-nslice
+            # instantiate the sampler class
+            for i in range(nmhs):
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                if not os.path.exists(resume_file) or resume == False:
+                    sampler = MetropolisHastingsSampler(self.user,
+                                    maxmcmc,
+                                    verbose     = verbose,
+                                    output      = output,
+                                    poolsize    = poolsize,
+                                    seed        = self.seed+i,
+                                    proposal    = proposals['mhs'](),
+                                    resume_file = resume_file,
+                                    sample_prior = prior_sampling,
+                                    manager     = self.manager
+                                    )
+                else:
+                    sampler = MetropolisHastingsSampler.resume(resume_file,
+                                                            self.manager,
+                                                            self.user)
+
+                p = mp.Process(target=sampler.produce_sample)
+                self.process_pool.append(p)
+
+            for i in range(nhamiltonian):
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                if not os.path.exists(resume_file) or resume == False:
+                    sampler = HamiltonianMonteCarloSampler(self.user,
+                                    maxmcmc,
+                                    verbose     = verbose,
+                                    output      = output,
+                                    poolsize    = poolsize,
+                                    seed        = self.seed+nmhs+i,
+                                    proposal    = proposals['hmc'](model=self.user),
+                                    resume_file = resume_file,
+                                    sample_prior = prior_sampling,
+                                    manager     = self.manager
+                                    )
+                else:
+                    sampler = HamiltonianMonteCarloSampler.resume(resume_file,
+                                                                self.manager,
+                                                                self.user)
+                p = mp.Process(target=sampler.produce_sample)
+                self.process_pool.append(p)
+
+            for i in range(nslice):
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                if not os.path.exists(resume_file) or resume == False:
+                    sampler = SliceSampler(self.user,
+                                    maxmcmc,
+                                    verbose     = verbose,
+                                    output      = output,
+                                    poolsize    = poolsize,
+                                    seed        = self.seed+nmhs+nhamiltonian+i,
+                                    proposal    = proposals['sli'](),
+                                    resume_file = resume_file,
+                                    manager     = self.manager
+                                    )
+                else:
+                    sampler = SliceSampler.resume(resume_file,
+                                                                self.manager,
+                                                                self.user)
+                p = mp.Process(target=sampler.produce_sample)
+                self.process_pool.append(p)
 
     def run(self):
         """
         Run the sampler
         """
 
-        # The LogFile context manager ensures everything within is logged to 'cpnest.log'
-        # but the file handler is safely closed once the run is finished.
-        with LogFile(os.path.join(self.output, 'cpnest.log'), verbose=self.verbose):
-            
+        with self.log_file:
+            # Everything in this context is logged to `log_file`
             self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
             
             if self.resume:
@@ -294,7 +296,7 @@ class CPNest(object):
             if self.verbose>=2:
                 self.plot(corner = False)
 
-        #TODO: Clean up the resume pickles
+            #TODO: Clean up the resume pickles
 
     def get_nested_samples(self, filename='nested_samples.dat'):
         """

@@ -5,6 +5,7 @@ from .utils import StreamHandler, LEVELS
 # names prefixed by 'cpnest'
 logger = logging.getLogger('cpnest')
 logger.setLevel(LEVELS[-1])  # maximum verbosity recorded to base logger
+logger.addHandler(logging.NullHandler())
 
 console_handler = StreamHandler(verbose=0)  # default console verbosity is 0 - CRITICAL
 logger.addHandler(console_handler)
