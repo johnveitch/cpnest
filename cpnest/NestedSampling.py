@@ -287,9 +287,12 @@ class NestedSampler(object):
 
         # Replace the points we just consumed with the next acceptable ones
         done = []
+        # Shuffle as to mix the chains
+        np.random.shuffle(self.worst)
+
         while len(self.worst) > 0:
 
-            p = pool.map_unordered(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst)
+            p = pool.map(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst)
 
             for i, o, r in zip(range(self.nthreads), self.worst, p):
 
