@@ -2,7 +2,10 @@ import os
 import logging
 
 # Default formats and level names
-FORMATTER = logging.Formatter('%(asctime)s - %(name)-8s: %(message)s', datefmt='%Y-%m-%d, %H:%M:%S')
+FORMATTER = logging.Formatter(
+    '%(asctime)s - %(name)-8s: %(message)s',
+    datefmt='%Y-%m-%d, %H:%M:%S'
+)
 LEVELS = ['CRITICAL', 'WARNING', 'INFO', 'DEBUG']
 LOGGER = logging.getLogger('cpnest.utils')
 
@@ -13,7 +16,7 @@ class _Handler(logging.Handler):
         super().__init__(**kwargs)
         self.set_verbosity(verbose)
         self.setFormatter(FORMATTER)
-    
+
     def get_verbosity(self):
         return self._verbose
 
@@ -21,7 +24,7 @@ class _Handler(logging.Handler):
         LOGGER.warning('Setting verbosity to {}'.format(verbose))
         self._verbose = verbose
         self.setLevel(LEVELS[verbose])
-        
+
 
 class StreamHandler(_Handler, logging.StreamHandler):
     def __init__(self, verbose=0, **kwargs):
@@ -35,18 +38,19 @@ class FileHandler(_Handler, logging.FileHandler):
 
 class LogFile:
     """
-    Context manager for file logging. It logs everything from `logger` in some file at a given `filename`.
+    Context manager for file logging. It logs everything from `logger`
+    in some file at a given `filename`.
 
     Parameters
     ----------
     filename : str
         Filename under which to save the log.
-    
+
     verbose : int, optional
         Logging level verbosity 0='CRITICAL' 1='WARNING' 2='INFO' 3='DEBUG'.
-    
+
     loggername : str, optional
-        Name of the logger to send to file at `path`. Default is `'cpnest'` so 
+        Name of the logger to send to file at `path`. Default is `'cpnest'` so
         all cpnest logs are recorded. E.g. specify `'cpnest.cpnest'` to only
         record logs from the `cpnest.py` module.
 
@@ -68,7 +72,7 @@ class LogFile:
 
     with flog:
         # Do some stuff here and it will be logged to 'example.log'
-        ... 
+        ...
     ```
 
     """
@@ -91,6 +95,6 @@ class LogFile:
     def __enter__(self):
         self.open()
         return self
-    
+
     def __exit__(self, type, value, traceback):
         self.close()
