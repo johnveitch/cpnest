@@ -18,6 +18,7 @@ class Handler(logging.Handler):
         return self._verbose
 
     def set_verbosity(self, verbose):
+        LOGGER.warning('Setting verbosity to {}'.format(verbose))
         self._verbose = verbose
         self.setLevel(LEVELS[verbose])
         
@@ -74,16 +75,22 @@ class LogFile:
 
     def __init__(self, filename, verbose=0, loggername='cpnest'):
         self.filename = filename
-        self.verbose = verbose
-        self.logger = logging.getLogger(loggername)
+        self._verbose = verbose
+        self._logger = logging.getLogger(loggername)
+        self.handler = None
+
+    def open(self):
+        self.handler = FileHandler(self._filename, verbose=self._verbose)
+        self._logger.addHandler(self.handler)
+
+    def close(self):
+        self._logger.removeHandler(self.handler)
+        self.handler.close()
         self.handler = None
 
     def __enter__(self):
-        self.handler = FileHandler(self.filename, verbose=self.verbose)
-        self.logger.addHandler(self.handler)
+        self.open()
         return self
     
     def __exit__(self, type, value, traceback):
-        self.logger.removeHandler(self.handler)
-        self.handler.close()  # Safely closes file handler
-        self.handler = None
+        self.close()
