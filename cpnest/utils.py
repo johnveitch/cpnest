@@ -78,7 +78,7 @@ class LogFile:
     """
 
     def __init__(self, filename, verbose=0, loggername='cpnest'):
-        self.filename = filename
+        self._filename = filename
         self._verbose = verbose
         self._logger = logging.getLogger(loggername)
         self.handler = None
