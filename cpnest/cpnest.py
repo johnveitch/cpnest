@@ -288,6 +288,8 @@ class CPNest(object):
                 sys.exit(130)
 
             if self.verbose >= 2:
+                self.NS.check_insertion_indices(rolling=False,
+                                                filename='insertion_indices.dat')
                 self.logger.critical(
                     "Saving nested samples in {0}".format(self.output)
                 )
@@ -297,12 +299,12 @@ class CPNest(object):
                 )
                 self.posterior_samples = self.get_posterior_samples()
             else:
+                self.NS.check_insertion_indices(rolling=False,
+                                                filename=None)
                 self.nested_samples = self.get_nested_samples(filename=None)
                 self.posterior_samples = self.get_posterior_samples(
                     filename=None
                 )
-                self.NS.check_insertion_indices(rolling=False,
-                                                filename='insertion_indices.dat')
 
             if self.verbose>=3 or self.NS.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
