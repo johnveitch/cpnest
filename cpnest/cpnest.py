@@ -528,8 +528,7 @@ class CPNest(object):
                                  ms=plotting_mcmc,
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
-            plot.plot_indices(self.NS.insertion_indices, nlive=self.nlive,
-                    filename=os.path.join(self.output, 'insertion_indices.pdf'))
+            plot.plot_indices(self.NS.insertion_indices, filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')

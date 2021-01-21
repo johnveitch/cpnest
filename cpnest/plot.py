@@ -72,28 +72,30 @@ def plot_hist(x, name=None, prior_samples=None, mcmc_samples=None, filename=None
     plt.close()
 
 
-def plot_indices(indices, nlive=None, u=None, name=None, filename=None):
+def plot_indices(indices, filename=None):
     """
-    Histogram indices for index insertion tests
+    Histogram indices for insertion indices tests.
+
+    Parameters
+    ----------
+    indices : list
+        List of insertion indices
+    filename : str, optional
+        Filename used to saved resulting figure. If not specified figure
+        is not saved.
     """
-    import random
     fig = plt.figure()
     ax  = fig.add_subplot(111)
-    ax.hist(indices, density = True, color='tab:blue', linewidth = 1.25,
-                histtype='step', bins=len(indices)//50, label = 'produced')
-    if u is not None:
-        ax.hist(u, density = True, color='tab:orange', linewidth = 1.25,
-                    histtype='step', bins=len(u)//50, label = 'expected')
-    if nlive is not None:
-        ax.axhline(1, color='black', linewidth=1.25, linestyle=':',
-                label='pdf')
 
-    ax.legend(loc='upper left')
-    ax.set_xlabel('insertion indices [0, 1]')
-    if name is not None:
-        ax.set_xlabel(name)
-        if filename is None:
-            filename=name+'_hist.pdf'
+    ax.hist(indices, density = True, color='tab:blue', linewidth = 1.25,
+                histtype='step', bins=min(len(indices)//100, 30))
+    # Theoretical distribution
+    ax.axhline(1, color='black', linewidth=1.25, linestyle=':',
+            label='pdf')
+
+    ax.legend()
+    ax.set_xlabel('Insertion indices [0, 1]')
+
     if filename is not None:
         plt.savefig(filename, bbox_inches='tight')
     plt.close()
