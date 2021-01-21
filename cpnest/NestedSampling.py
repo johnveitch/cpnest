@@ -18,6 +18,9 @@ from .cpnest import CheckPoint
 from tqdm import tqdm
 
 
+logger = logging.getLogger('cpnest.NestedSampling')
+
+
 class KeyOrderedList(list):
 
     def __init__(self, iterable, key=lambda x: x):
@@ -69,7 +72,8 @@ class _NSintegralState(object):
     def __init__(self, nlive):
         self.nlive = nlive
         self.reset()
-        self.logger = logging.getLogger('CPNest')
+        loggername = 'cpnest.NestedSampling._NSintegralState'
+        self.logger = logging.getLogger(loggername)
 
     def reset(self):
         """
@@ -144,7 +148,8 @@ class _NSintegralState(object):
 
     def __setstate__(self, state):
         if 'logger' not in state:
-            state['logger'] = logging.getLogger("CPNest")
+            loggername = "cpnest.NestedSampling._NSintegralState"
+            state['logger'] = logging.getLogger(loggername)
         self.__dict__ = state
 
 
@@ -208,7 +213,8 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.logger         = logging.getLogger('CPNest')
+        loggername = 'cpnest.NestedSampling.NestedSampler'
+        self.logger         = logging.getLogger(loggername)
         self.model          = model
         self.manager        = manager
         self.prior_sampling = prior_sampling
@@ -279,7 +285,8 @@ class NestedSampler(object):
         Write the evidence logZ and maximum likelihood to the evidence_file
         """
         with open(self.evidence_file,"w") as f:
-            f.write('{0:.5f} {1:.5f}\n'.format(self.state.logZ, self.logLmax.value))
+            f.write('#logZ\tlogLmax\tH\n')
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax.value, self.state.info))
 
     def setup_random_seed(self,seed):
         """
@@ -478,7 +485,7 @@ class NestedSampler(object):
         obj.logLmax = obj.manager.logLmax
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
-        obj.logger = logging.getLogger("CPNest")
+        obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         del obj.__dict__['llmin']
         del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)

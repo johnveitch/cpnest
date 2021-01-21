@@ -32,6 +32,9 @@
 *.dSYM/
 *.su
 
+# Cython output files
+cpnest/*.c
+
 # Compiled python
 *.pyc
 
@@ -46,3 +49,5 @@ dist
 # Profiler files
 *.prof
 
+# Visual Studio Code
+.vscode/

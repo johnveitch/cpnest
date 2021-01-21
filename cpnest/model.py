@@ -4,6 +4,10 @@ from array import array
 from .parameter import LivePoint
 from numpy.random import uniform
 
+import logging
+LOGGER = logging.getLogger('cpnest.model')  # <--- for module-level logging
+
+
 class Model(object):
     """
     Base class for user's model. User should subclass this

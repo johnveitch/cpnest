@@ -55,7 +55,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'CPNest'
-copyright = '2017-2020, W. Del Pozzo, J. Veitch'
+copyright = '2017-2021, W. Del Pozzo, J. Veitch'
 author = 'W. Del Pozzo, J. Veitch'
 
 # The version info for the project you're documenting, acts as replacement for

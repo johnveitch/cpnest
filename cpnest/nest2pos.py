@@ -3,11 +3,16 @@ import numpy as np
 from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
+from scipy.stats import pearsonr
 
-if not logging.Logger.manager.loggerDict:
-    LOGGER = logging.getLogger('nest2pos')
-else:
-    LOGGER = logging.getLogger('CPNest')
+# if not logging.Logger.manager.loggerDict:
+#     LOGGER = logging.getLogger('cpnest.nest2pos')
+# else:
+#     LOGGER = logging.getLogger('cpnest.cpnest.CPNest')
+
+# Note - logger should take the name of the module. It inherits from the base
+# cpnest logger.
+LOGGER = logging.getLogger('cpnest.nest2pos')
 
 def logsubexp(x,y):
     """
@@ -101,7 +106,7 @@ def draw_posterior_many(datas, Nlives, verbose=False):
     for post,frac in zip(posts,fracs):
       mask = uniform(size=len(post))<frac
       bigpos.append(post[mask])
-    result = vstack(bigpos).flatten()
+    result = np.concatenate([bigpos[i] for i in range(len(bigpos))], axis=None)
     LOGGER.critical('Samples produced: {0:d}'.format(result.shape[0]))
     return result
 
@@ -147,7 +152,7 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
     ACL = []
     for n in chain.dtype.names:
         if n != 'logL' and n != 'logPrior':
-            ACL.append(acl(autocorrelation(chain[n])))
+            ACL.append(acl(chain[n]))
     ACL = int(np.round(np.max(ACL)))
 
     LOGGER.critical('Measured autocorrelation length {0!s}'.format(str(ACL)))
@@ -170,15 +175,25 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
 def autocorrelation(x):
     """
     Compute the autocorrelation of the chain
+    using an FFT
     """
-    N = len(x)
-    X=np.fft.fft(x-x.mean())
-    # We take the real part just to convert the complex output of fft to a real numpy float. The imaginary part if already 0 when coming out of the fft.
-    R = np.real(np.fft.ifft(X*X.conj()))
-    # Divide by an additional factor of 1/N since we are taking two fft and one ifft without unitary normalization, see: https://docs.scipy.org/doc/numpy/reference/routines.fft.html#module-numpy.fft
-    return R/N
+    m=x.mean()
+    v=np.var(x)
+    xp=x-m
 
-def acl(acf):
-    for i in range(len(acf)):
-        if acf[i] < i/5.0:
-            return acf[i]+1
+    cf=np.fft.fft(xp)
+    sf=cf.conjugate()*cf
+    corr=np.fft.ifft(sf).real/v/len(x)
+    return corr
+
+def acl(x, tolerance=0.01):
+    """
+    Compute autocorrelation time for x
+    """
+    T=1
+    i=0
+    acf = autocorrelation(x)
+    while acf[i]>tolerance and i<len(acf):
+        T+=2*acf[i]
+        i+=1
+    return T

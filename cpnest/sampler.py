@@ -15,6 +15,8 @@ from .cpnest import CheckPoint, RunManager
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
+import array
+from .nest2pos import acl
 
 import pickle
 __checkpoint_flag = False
@@ -64,13 +66,14 @@ class Sampler(object):
     def __init__(self,
                  model,
                  maxmcmc,
-                 seed        = None,
-                 output      = None,
-                 verbose     = False,
-                 poolsize    = 1000,
-                 proposal    = None,
-                 resume_file = None,
-                 manager     = None):
+                 seed         = None,
+                 output       = None,
+                 verbose      = False,
+                 sample_prior = False,
+                 poolsize     = 1000,
+                 proposal     = None,
+                 resume_file  = None,
+                 manager      = None):
 
         self.seed = seed
         self.model = model
@@ -80,8 +83,7 @@ class Sampler(object):
         self.manager = manager
         self.logLmin = self.manager.logLmin
         self.logLmax = self.manager.logLmax
-
-        self.logger = logging.getLogger('CPNest')
+        self.logger = logging.getLogger('cpnest.sampler.Sampler')
 
         if proposal is None:
             self.proposal = DefaultProposalCycle()
@@ -100,7 +102,8 @@ class Sampler(object):
         self.mcmc_counter       = 0
         self.initialised        = False
         self.output             = output
-        self.samples            = [] # the list of samples from the mcmc chain
+        self.sample_prior       = sample_prior
+        self.samples            = deque(maxlen = None if self.verbose >=3 else 5*self.maxmcmc) # the list of samples from the mcmc chain
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
         self.last_checkpoint_time = time.time()
 
@@ -123,14 +126,18 @@ class Sampler(object):
             self.evolution_points.append(p)
 
         self.proposal.set_ensemble(self.evolution_points)
-
+        # initialise the structure to store the mcmc chain
+        self.samples = []
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             _, p = next(self.yield_sample(-np.inf))
-        if self.verbose >= 3:
+            self.estimate_nmcmc_on_the_fly()
+
+        if self.sample_prior is True or self.verbose>=3:
+
             # save the poolsize as prior samples
-            
+
             prior_samples = []
             for k in tqdm(range(self.maxmcmc), desc='SMPLR {} generating prior samples'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -146,7 +153,7 @@ class Sampler(object):
         self.proposal.set_ensemble(self.evolution_points)
         self.initialised=True
 
-    def estimate_nmcmc(self, safety=5, tau=None):
+    def estimate_nmcmc_on_the_fly(self, safety=5, tau=None):
         """
         Estimate autocorrelation length of chain using acceptance fraction
         ACL = (2/acc) - 1
@@ -166,6 +173,28 @@ class Sampler(object):
         self.Nmcmc_exact = float(min(self.Nmcmc_exact,self.maxmcmc))
         self.Nmcmc = max(safety,int(self.Nmcmc_exact))
 
+        return self.Nmcmc
+
+    def estimate_nmcmc(self, safety=20):
+        """
+        Estimate autocorrelation length of the chain
+        """
+        # first of all, build a numpy array out of
+        # the stored samples
+        ACL = []
+        samples = np.array([x.values for x in self.samples[-5*self.maxmcmc:]])
+        # compute the ACL on 5 times the maxmcmc set of samples
+        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+
+        if self.verbose >= 3:
+            for i in range(len(self.model.names)):
+                self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
+
+        self.Nmcmc = int(np.max(ACL))
+        if self.Nmcmc < 1:
+            self.Nmcmc = 1
+        if self.Nmcmc < safety:
+            self.Nmcmc = safety
         return self.Nmcmc
 
     def produce_sample(self):
@@ -202,6 +231,7 @@ class Sampler(object):
             # if the nested sampler is requesting for an update
             # produce a sample for it
             if self.producer_pipe.poll():
+
                 p = self.producer_pipe.recv()
 
                 if p is None:
@@ -214,21 +244,21 @@ class Sampler(object):
                 (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
                 # Send the sample to the Nested Sampler
                 self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
-            
+
             # otherwise, keep on sampling from the previous boundary
             else:
-                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
+                _, _ = next(self.yield_sample(self.logLmin.value))
             # Update the ensemble every now and again
             if (self.counter%(self.poolsize//4))==0:
                 self.proposal.set_ensemble(self.evolution_points)
+                self.estimate_nmcmc()
 
             self.counter += 1
 
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
 #        self.samples.extend(self.evolution_points)
-        
-        if self.verbose >=3:
-            
+
+        if self.verbose >=3 and not(self.sample_prior):
             self.mcmc_samples = rfn.stack_arrays([self.samples[j].asnparray()
                                                   for j in range(0,len(self.samples))],usemask=False)
             np.savetxt(os.path.join(self.output,'mcmc_chain_%s.dat'%os.getpid()),
@@ -258,7 +288,7 @@ class Sampler(object):
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.logLmax = obj.manager.logLmax
-        obj.logger = logging.getLogger("CPNest")
+        obj.logger = logging.getLogger("cpnest.sample.Sampler")
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
         obj.last_checkpoint_time = time.time()
@@ -307,16 +337,16 @@ class MetropolisHastingsSampler(Sampler):
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
+                # append the sample to the array of samples
+                self.samples.append(oldparam)
 
                 if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
                     break
 
             # Put sample back in the stack, unless that sample led to zero accepted points
             self.evolution_points.append(oldparam)
-            if np.isfinite(logLmin) and self.verbose >=3:
-                self.samples.append(oldparam)
+
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.estimate_nmcmc()
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter += sub_counter
             self.acceptance    = float(self.mcmc_accepted)/float(self.mcmc_counter)
@@ -350,10 +380,9 @@ class HamiltonianMonteCarloSampler(Sampler):
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
 
+            # append the sample to the array of samples
+            self.samples.append(oldparam)
             self.evolution_points.append(oldparam)
-
-            if self.verbose >= 3:
-                self.samples.append(oldparam)
 
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
@@ -363,7 +392,7 @@ class HamiltonianMonteCarloSampler(Sampler):
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
-                p.update_trajectory_length(self.estimate_nmcmc())
+                p.update_trajectory_length(self.Nmcmc)
                 #print(p.dt,p.L)
 
             yield (sub_counter, oldparam)
@@ -377,3 +406,160 @@ class HamiltonianMonteCarloSampler(Sampler):
         self.evolution_points.append(p)
         self.evolution_points.rotate(-k)
         return self.proposal.get_sample(p.copy(),logLmin=p.logL)
+
+class SliceSampler(Sampler):
+    """
+    The Ensemble Slice sampler from Karamanis & Beutler
+    https://arxiv.org/pdf/2002.06212v1.pdf
+    """
+    def reset(self):
+        """
+        Initialise the sampler by generating :int:`poolsize` `cpnest.parameter.LivePoint`
+        """
+        self.mu             = 1.0
+        self.max_steps_out  = self.maxmcmc # maximum stepping out steps allowed
+        self.max_slices     = self.maxmcmc # maximum number of slices allowed
+        self.tuning_steps   = 10*self.poolsize
+        super(SliceSampler, self).reset()
+
+    def adapt_length_scale(self):
+        """
+        adapts the length scale of the expansion/contraction
+        following the rule in (Robbins and Monro, 1951) of Tibbits et al. (2014)
+        """
+        Ne = max(1,self.Ne)
+        Nc = max(1,self.Nc)
+        ratio = Ne/(Ne+Nc)
+        self.mu *= 2*ratio
+
+    def reset_boundaries(self):
+        """
+        resets the boundaries and counts
+        for the slicing
+        """
+        self.L  = - np.random.uniform(0.0,1.0)
+        self.R  = self.L + 1.0
+        self.Ne = 0.0
+        self.Nc = 0.0
+
+    def increase_left_boundary(self):
+        """
+        increase the left boundary and counts
+        by one unit
+        """
+        self.L  = self.L - 1.0
+        self.Ne = self.Ne + 1
+
+    def increase_right_boundary(self):
+        """
+        increase the right boundary and counts
+        by one unit
+        """
+        self.R  = self.R + 1.0
+        self.Ne = self.Ne + 1
+
+    def yield_sample(self, logLmin):
+
+        while True:
+
+            sub_accepted    = 0
+            sub_counter     = 0
+
+            j = 0
+            while j < self.poolsize:
+                oldparam        = self.evolution_points.popleft()
+                if oldparam.logL > logLmin:
+                    break
+                self.evolution_points.append(oldparam)
+                j += 1
+
+            while True:
+                # Set Initial Interval Boundaries
+                self.reset_boundaries()
+                sub_counter += 1
+
+                direction_vector = self.proposal.get_direction(mu = self.mu)
+                if not(isinstance(direction_vector,parameter.LivePoint)):
+                    direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
+
+                Y = logLmin
+                Yp = oldparam.logP-np.random.exponential()
+                J = np.floor(self.max_steps_out*np.random.uniform(0,1))
+                K = (self.max_steps_out-1)-J
+                # keep on expanding until we get outside the logL boundary from the left
+                # or the prior bound, whichever comes first
+                while J > 0:
+
+                    parameter_left = direction_vector * self.L + oldparam
+
+                    if self.model.in_bounds(parameter_left):
+                        if Y > self.model.log_likelihood(parameter_left):
+                            break
+                        else:
+                            self.increase_left_boundary()
+                            J -= 1
+                    # if we get out of bounds, break out
+                    else:
+                        break
+
+                # keep on expanding until we get outside the logL boundary from the right
+                # or the prior bound, whichever comes first
+                while K > 0:
+
+                    parameter_right = direction_vector * self.R + oldparam
+
+                    if self.model.in_bounds(parameter_right):
+
+                        if Y > self.model.log_likelihood(parameter_right):
+                            break
+                        else:
+                            self.increase_right_boundary()
+                            K -= 1
+                    # if we get out of bounds, break out
+                    else:
+                        break
+
+                # slice sample the likelihood-bound prior
+                #  if the search interval has shrunk  too much, break and start over
+                slice = 0
+                while slice < self.max_slices:
+                    # generate a new point between the boundaries we identified
+                    Xprime        = np.random.uniform(self.L,self.R)
+                    newparam      = direction_vector * Xprime + oldparam
+                    newparam.logP = self.model.log_prior(newparam)
+
+                    if newparam.logP > Yp:
+                        # compute the new value of logL
+                        newparam.logL = self.model.log_likelihood(newparam)
+                        if newparam.logL > Y:
+                            self.logLmax.value = max(self.logLmax.value, newparam.logL)
+                            oldparam     = newparam.copy()
+                            sub_accepted += 1
+                            break
+                    # adapt the intervals shrinking them
+                    if Xprime < 0.0:
+                        self.L = Xprime
+                        self.Nc = self.Nc + 1
+                    elif Xprime > 0.0:
+                        self.R = Xprime
+                        self.Nc = self.Nc + 1
+
+                    slice += 1
+
+                if sub_counter > self.Nmcmc and sub_accepted > 0:
+                    break
+
+                if sub_counter > self.maxmcmc:
+                    break
+
+            self.evolution_points.append(oldparam)
+            self.samples.append(oldparam)
+            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+            self.mcmc_accepted += sub_accepted
+            self.mcmc_counter  += sub_counter
+            self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+
+            if self.mcmc_counter < self.tuning_steps:
+                self.adapt_length_scale()
+
+            yield (sub_counter, oldparam)
