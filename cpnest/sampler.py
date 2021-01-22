@@ -2,7 +2,6 @@ from __future__ import division
 import sys
 import os
 import logging
-import time
 import numpy as np
 from math import log
 from collections import deque
@@ -11,8 +10,6 @@ from random import random,randrange
 from . import parameter
 from .proposal import DefaultProposalCycle, EnsembleProposal
 from . import proposal
-from tqdm import tqdm
-from operator import attrgetter
 import numpy.lib.recfunctions as rfn
 import array
 from .nest2pos import acl
@@ -92,9 +89,8 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.sample_prior       = sample_prior
-        self.max_storage        = 25000
+        self.max_storage        = 32768
         self.samples            = deque(maxlen = None if self.verbose >=3 else self.max_storage) # the list of samples from the mcmc chain
-        self.last_checkpoint_time = time.time()
 
     def estimate_nmcmc_on_the_fly(self, safety=5, tau=None):
         """
@@ -211,6 +207,27 @@ class HamiltonianMonteCarloSampler(Sampler):
     HamiltonianMonteCarlo acceptance rule
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
+    def estimate_nmcmc(self):
+        """
+        Estimate autocorrelation length of the chain
+        """
+        # first of all, build a numpy array out of
+        # the stored samples
+        ACL = []
+        s   = list(self.samples)
+        samples = np.array([x.values for x in s[-5*self.max_storage:]])
+        # compute the ACL on 5 times the maxmcmc set of samples
+        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
+
+        if self.verbose >= 3:
+            for i in range(len(self.model.names)):
+                self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
+
+        self.Nmcmc = int(np.max(ACL))
+        if self.Nmcmc < 1:
+            self.Nmcmc = 1
+        return self.Nmcmc
+
     def yield_sample(self, oldparam, logLmin):
 
         while True:
@@ -232,7 +249,7 @@ class HamiltonianMonteCarloSampler(Sampler):
                 if sub_counter >= self.Nmcmc and sub_accepted > 0:
                     break
 
-                if sub_counter > self.maxmcmc:
+                if sub_counter >= self.maxmcmc:
                     break
 
             # append the sample to the array of samples
@@ -256,31 +273,9 @@ class SliceSampler(Sampler):
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 1000 # maximum stepping out steps allowed
-    max_slices     = 1000 # maximum number of slices allowed
+    max_steps_out  = 100 # maximum stepping out steps allowed
+    max_slices     = 100 # maximum number of slices allowed
     tuning_steps   = 1000
-
-    def estimate_nmcmc(self,):
-        """
-        Estimate autocorrelation length of the chain
-        """
-        # first of all, build a numpy array out of
-        # the stored samples
-        ACL = []
-        s   = list(self.samples)
-        samples = np.array([x.values for x in s[-5*self.maxmcmc:]])
-        # compute the ACL on 5 times the maxmcmc set of samples
-        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
-
-        if self.verbose >= 3:
-            for i in range(len(self.model.names)):
-                self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
-
-        self.Nmcmc = int(np.max(ACL))
-        if self.Nmcmc < 1:
-            self.Nmcmc = 1
-        return self.Nmcmc
-
     def adapt_length_scale(self):
         """
         adapts the length scale of the expansion/contraction
@@ -399,7 +394,7 @@ class SliceSampler(Sampler):
                 if sub_counter >= self.Nmcmc and sub_accepted > 0:
                     break
 
-                if sub_counter > self.maxmcmc:
+                if sub_counter >= self.maxmcmc:
                     break
 
             self.samples.append(oldparam)

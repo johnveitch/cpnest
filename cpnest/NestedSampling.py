@@ -51,6 +51,8 @@ class _NSintegralState(object):
         """
         Increment the state of the evidence integrator
         Simply uses rectangle rule for initial estimate
+        see: https://www.cell.com/biophysj/pdf/S0006-3495(12)00055-0.pdf
+        for parallel implementation
         """
         if(logL<=self.logLs[-1]):
             self.logger.warning('NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1], logL))
@@ -210,13 +212,15 @@ class NestedSampler(object):
 
         l = []
 
-        for i in range(self.nlive):
+        with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=0) as pbar:
+            for i in range(self.nlive):
 
-            l.append(self.model.new_point())
-            l[-1].logP = self.model.log_prior(l[-1])
-            l[-1].logL = self.model.log_likelihood(l[-1])
+                l.append(self.model.new_point())
+                l[-1].logP = self.model.log_prior(l[-1])
+                l[-1].logL = self.model.log_likelihood(l[-1])
+                pbar.update()
 
-        self.live_points = LivePoints.remote(l)
+        self.live_points = LivePoints.remote(l, self.nthreads)
         self.live_points.update_mean_covariance.remote()
 
     def setup_output(self,output):
@@ -334,7 +338,7 @@ class NestedSampler(object):
             pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
 
         i = 0
-        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=self.nthreads) as pbar:
+        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: sampling prior', position=self.nthreads) as pbar:
             while pool.has_next():
                 acceptance,sub_acceptance,self.jumps,x = pool.get_next()
                 if np.isnan(x.logL):
@@ -437,8 +441,8 @@ class NestedSampler(object):
 
 @ray.remote(num_cpus=1)
 class LivePoints:
-
-    def __init__(self, l, verbose = 2):
+    def __init__(self, l, n_replace = 1, verbose = 2):
+        self.n_replace            = n_replace
         self._list                = l
         self.n                    = len(l)
         self.dim                  = self._list[0].dimension
@@ -523,8 +527,11 @@ class LivePoints:
         self.worst = self._list[:n]
 
         for p in self.worst:
-            self.state.increment(p.logL)
+#            self.state.increment(p.logL)
             self.nested_samples.append(p)
+#        for p in self.worst:
+        self.state.increment(self.worst[n-1].logL, n=self.n_replace)
+        self.nested_samples.append(self.worst[n-1])
 
         return self.worst
 
@@ -538,7 +545,7 @@ class LivePoints:
         # final adjustments
         self._list.sort(key=attrgetter('logL'))
         for i,p in enumerate(self._list):
-            self.state.increment(p.logL,nlive=self.n-i)
+            self.state.increment(p.logL,nlive=self.n-i, n = 1)
             self.nested_samples.append(p)
 
         # Refine evidence estimate
