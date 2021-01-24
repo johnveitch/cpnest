@@ -527,12 +527,9 @@ class LivePoints:
         self.worst = self._list[:n]
 
         for p in self.worst:
-#            self.state.increment(p.logL)
             self.nested_samples.append(p)
-#        for p in self.worst:
-        self.state.increment(self.worst[n-1].logL, n=self.n_replace)
-        self.nested_samples.append(self.worst[n-1])
 
+        self.state.increment(self.worst[n-1].logL, n=self.n_replace)
         return self.worst
 
     def get_info(self):

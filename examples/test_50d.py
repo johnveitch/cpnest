@@ -35,8 +35,8 @@ class GaussianTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.model=GaussianModel(dim = 20)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=1, nlive=1000, maxmcmc=100, nslice=1, nhamiltonian=0, resume=0)
+        self.model=GaussianModel(dim = 10)
+        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=4, nlive=1000, maxmcmc=1000, nslice=0, nhamiltonian=0, resume=0)
 
     def test_run(self):
         self.work.run()
