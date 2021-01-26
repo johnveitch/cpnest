@@ -375,28 +375,27 @@ class HamiltonianProposal(EnsembleProposal):
         self.dimension              = len(self.prior_bounds)
         self.analytical_gradient    = model.analytical_gradient
         self.likelihood_gradient    = None
-        self.dt                     = 0.1
-        self.leaps                  = 100
+        self.dt                     = 1.0
+        self.leaps                  = 20*int(self.dimension**0.25)
         self.maxleaps               = 1000
         self.DEBUG                  = 0
         self.likelihood_gradient    = None
         self.initialised            = False
-        self.TARGET                 = 0.65
+        self.TARGET                 = 0.8
         self.ADAPTATIONSIZE         = 0.001
         self.trajectories           = []
+        self.covariance             = np.identity(self.dimension)
 
         self.set_mass_parameters()
         self.set_momenta_distribution()
-        self._ensemble_initialised  = False
 
         if no_smt == True:
             print("ERROR! Current likelihood gradient approximation requires smt")
             exit()
 
     def set_mass_parameters(self):
-        x = np.array([1 for _ in self.prior_bounds])# = np.array([p[1]-p[0] for p in self.prior_bounds])
-        self.mass_matrix = np.diagflat(np.sqrt(x))
-        self.inverse_mass_matrix         = np.linalg.inv(self.mass_matrix)
+        self.mass_matrix         = self.covariance
+        self.inverse_mass_matrix = np.linalg.inv(self.mass_matrix)
         self.inverse_mass        = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
         _, self.logdeterminant   = np.linalg.slogdet(self.mass_matrix)
 
@@ -407,10 +406,11 @@ class HamiltonianProposal(EnsembleProposal):
         and to heuristically estimate the normal vector to the
         hard boundary defined by logLmin.
         """
-        if self._ensemble_initialised == False:
-            self.ensemble = ensemble
-            self.set_integration_parameters()
-            self._ensemble_initialised = True
+        self.ensemble = ensemble
+        self.set_integration_parameters()
+        self.covariance = ray.get(self.ensemble.get_covariance.remote())
+        self.set_mass_parameters()
+        self.set_momenta_distribution()
 
         if self.analytical_gradient == None:
             self.update_normal_vector()
@@ -472,7 +472,7 @@ class HamiltonianProposal(EnsembleProposal):
         update the momenta distribution using the
         mass matrix (precision matrix of the ensemble).
         """
-        self.momenta_distribution = multivariate_normal(cov=np.identity(self.dimension))
+        self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
 
     def set_integration_parameters(self):
         """
@@ -481,8 +481,7 @@ class HamiltonianProposal(EnsembleProposal):
         while the latter sets the trajectory length
         """
         w, _                = ray.get(self.ensemble.get_eigen_quantities.remote())
-        self.leaps          = int(np.ceil(w[-1]))
-        self.dt             = np.sqrt(w[0]/self.leaps)
+        self.dt             = w[0]
 
     def update_time_step(self, acceptance):
         """
@@ -494,10 +493,9 @@ class HamiltonianProposal(EnsembleProposal):
         """
         diff = acceptance - self.TARGET
         new_log_dt = np.log(self.dt) + self.ADAPTATIONSIZE * diff
-        self.dt = np.minimum(np.exp(new_log_dt),self.max_dt)
-        self.dt = np.maximum(self.min_dt,self.dt)
+        self.dt = np.exp(new_log_dt)
 
-    def update_trajectory_length(self, safety = 20):
+    def update_trajectory_length(self, safety = 2):
         """
         Update the trajectory length according to the estimated ACL
         Parameters

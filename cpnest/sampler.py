@@ -207,27 +207,6 @@ class HamiltonianMonteCarloSampler(Sampler):
     HamiltonianMonteCarlo acceptance rule
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
-    def estimate_nmcmc(self):
-        """
-        Estimate autocorrelation length of the chain
-        """
-        # first of all, build a numpy array out of
-        # the stored samples
-        ACL = []
-        s   = list(self.samples)
-        samples = np.array([x.values for x in s[-5*self.max_storage:]])
-        # compute the ACL on 5 times the maxmcmc set of samples
-        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
-
-        if self.verbose >= 3:
-            for i in range(len(self.model.names)):
-                self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
-
-        self.Nmcmc = int(np.max(ACL))
-        if self.Nmcmc < 1:
-            self.Nmcmc = 1
-        return self.Nmcmc
-
     def yield_sample(self, oldparam, logLmin):
 
         while True:
@@ -260,9 +239,9 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
 
-            for p in self.proposal.proposals:
+#            for p in self.proposal.proposals:
 #                p.update_time_step(self.acceptance)
-                p.update_trajectory_length(safety=10)
+#                p.update_trajectory_length(safety=10)
 
             yield (sub_counter, oldparam)
 
