@@ -18,7 +18,7 @@ try:
     no_smt = False
 except:
     no_smt = True
-
+    
 class Proposal(object):
     """
     Base abstract class for jump proposals
@@ -127,7 +127,7 @@ class EnsembleSlice(EnsembleProposal):
     log_J      = 0.0 # Symmetric proposal
     mean       = None
     covariance = None
-
+            
     def set_ensemble(self,ensemble):
         """
         Over-ride default set_ensemble so that the
@@ -135,7 +135,7 @@ class EnsembleSlice(EnsembleProposal):
         """
         super(EnsembleSlice,self).set_ensemble(ensemble)
         self.mean, self.covariance = ray.get(ensemble.get_mean_covariance.remote())
-
+        
 class EnsembleSliceDifferential(EnsembleSlice):
     """
     The Ensemble Slice Differential move from Karamanis & Beutler
@@ -385,20 +385,20 @@ class HamiltonianProposal(EnsembleProposal):
         self.ADAPTATIONSIZE         = 0.001
         self.trajectories           = []
         self.covariance             = np.identity(self.dimension)
-
+        
         self.set_mass_parameters()
         self.set_momenta_distribution()
-
+        
         if no_smt == True:
             print("ERROR! Current likelihood gradient approximation requires smt")
             exit()
-
+    
     def set_mass_parameters(self):
         self.mass_matrix         = self.covariance
         self.inverse_mass_matrix = np.linalg.inv(self.mass_matrix)
         self.inverse_mass        = np.atleast_1d(np.squeeze(np.diag(self.inverse_mass_matrix)))
         _, self.logdeterminant   = np.linalg.slogdet(self.mass_matrix)
-
+            
     def set_ensemble(self, ensemble):
         """
         override the set ensemble method
@@ -411,7 +411,7 @@ class HamiltonianProposal(EnsembleProposal):
         self.covariance = ray.get(self.ensemble.get_covariance.remote())
         self.set_mass_parameters()
         self.set_momenta_distribution()
-
+        
         if self.analytical_gradient == None:
             self.update_normal_vector()
             self.unit_normal = self.approximate_unit_normal
@@ -432,12 +432,12 @@ class HamiltonianProposal(EnsembleProposal):
     def exact_unit_normal(self, q):
         v = self.likelihood_gradient(q)
         return v/np.linalg.norm(v)
-
+    
     def approximate_unit_normal(self, q):
         """
         Returns the unit normal to the iso-Likelihood surface
-        at x, obtained from the spline interpolation of the
-        directional derivatives of the likelihood
+        at x, obtained from the gradient of a RBF interpolation of the
+        likelihood
         Parameters
         ----------
         q : :obj:`cpnest.parameter.LivePoint`
@@ -447,9 +447,10 @@ class HamiltonianProposal(EnsembleProposal):
         ----------
         n: :obj:`numpy.ndarray` unit normal to the logLmin contour evaluated at q
         """
-        v               = np.array([self.normal[i](q[n]) for i,n in enumerate(q.names)])
-        v[np.isnan(v)]  = -1.0
-        n               = v/np.linalg.norm(v)
+        x = np.atleast_2d(np.array([q[n] for n in q.names]))
+        v = np.squeeze(np.array([self.likelihood_gradient.predict_derivatives(x,i) for i in range(len(q.names))]))
+        v[~np.isfinite(v)] = -1.0
+        n = v/np.linalg.norm(v)
         return n
 
     def gradient(self, q):
@@ -476,9 +477,10 @@ class HamiltonianProposal(EnsembleProposal):
 
     def set_integration_parameters(self):
         """
-        Set the integration length according to the N-dimensional ellipsoid
-        shortest and longest principal axes. The former sets to base time step
-        while the latter sets the trajectory length
+        Set the initial integration length and maximum adimissible value of
+        the time step according to the N-dimensional ellipsoid
+        longest and shortest principal axes
+        (see http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.2.2).
         """
         w, _                = ray.get(self.ensemble.get_eigen_quantities.remote())
         self.dt             = w[0]
@@ -494,7 +496,7 @@ class HamiltonianProposal(EnsembleProposal):
         diff = acceptance - self.TARGET
         new_log_dt = np.log(self.dt) + self.ADAPTATIONSIZE * diff
         self.dt = np.exp(new_log_dt)
-
+        
     def update_trajectory_length(self, safety = 2):
         """
         Update the trajectory length according to the estimated ACL
@@ -502,20 +504,23 @@ class HamiltonianProposal(EnsembleProposal):
         ----------
         nmcmc :`obj`:: int
         """
-        self.L = self.base_L + np.random.randint(nmcmc,5*nmcmc)
+        ACL = []
+        for j,t in enumerate(self.trajectories):
+            samples = np.array([x[0].values for x in t])
+            ACL.append([acl(samples[:,i]) for i in range(samples.shape[1])])
 
         ACL = np.array(ACL)
         # average over all trajectories and take the maximum over the dimensions
         self.leaps = int(np.max(np.average(ACL,axis=0)))
-
+        
         if self.leaps < safety:
             self.leaps = safety
-
+        
         if self.leaps > self.maxleaps:
             self.leaps = self.maxleaps
 
         self.trajectories = []
-
+        
     def kinetic_energy(self,p):
         """
         kinetic energy part for the Hamiltonian.
@@ -528,7 +533,7 @@ class HamiltonianProposal(EnsembleProposal):
         ----------
         T: :float: kinetic energy
         """
-        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))-self.logdeterminant-0.5*self.d*np.log(2.0*np.pi)
+        return 0.5 * np.dot(p,np.dot(self.inverse_mass_matrix,p))-self.logdeterminant
 
     def hamiltonian(self, p, q):
         """
@@ -609,8 +614,9 @@ class LeapFrog(HamiltonianProposal):
         # Updating the momentum a half-step
         p = p0 - 0.5 * self.dt * self.gradient(q0)
         q = q0.copy()
+        
+        for i in range(self.leaps):
 
-        for i in range(self.L):
             # do a step
             for j,k in enumerate(q.names):
                 u,l = self.prior_bounds[j][1], self.prior_bounds[j][0]
@@ -647,7 +653,7 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         super(ConstrainedLeapFrog, self).__init__(model=model, **kwargs)
         self.log_likelihood = model.log_likelihood
-
+        
     def get_sample(self, q0, logLmin=-np.inf):
         """
         Generate new sample with constrained HMC, starting at q0.
@@ -794,7 +800,7 @@ class ConstrainedLeapFrog(LeapFrog):
 
         if self.DEBUG: self.save_trajectory(trajectory, logLmin)
         q, p, reflected = self.sample_trajectory(trajectory)
-
+        
         self.trajectories.append(trajectory)
         return q, -p, reflected
 

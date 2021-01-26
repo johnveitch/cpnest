@@ -137,8 +137,8 @@ class CPNest(object):
         # The LogFile context manager ensures everything within is logged to
         # 'cpnest.log' but the file handler is safely closed once the run is
         # finished.
-        self.log_file = LogFile(os.path.join(self.output, 'cpnest.log'),
-                                verbose=self.verbose)
+        self.log_file = LogFile(os.path.join(output, 'cpnest.log'),
+                                verbose=verbose)
         with self.log_file:
             self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
 
@@ -147,30 +147,6 @@ class CPNest(object):
                     "The n_periodic_checkpoint kwarg is deprecated, "
                     "use periodic_checkpoint_interval instead."
                 )
-            if periodic_checkpoint_interval is None:
-                periodic_checkpoint_interval = np.inf
-
-            from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler, SamplersCycle
-            from .NestedSampling import NestedSampler
-            from .proposal import DefaultProposalCycle, HamiltonianProposalCycle, EnsembleSliceProposalCycle
-            if proposals is None:
-                proposals = dict(mhs=DefaultProposalCycle,
-                                 hmc=HamiltonianProposalCycle,
-                                 sli=EnsembleSliceProposalCycle)
-            elif type(proposals) == list:
-                proposals = dict(mhs=proposals[0],
-                                 hmc=proposals[1],
-                                 sli=proposals[2])
-            self.nlive    = nlive
-            self.verbose  = verbose
-            self.output   = output
-            self.poolsize = poolsize
-            self.posterior_samples = None
-            self.prior_sampling = prior_sampling
-            self.manager = RunManager(
-                nthreads=self.nthreads,
-                periodic_checkpoint_interval=periodic_checkpoint_interval
-            )
             if periodic_checkpoint_interval is None:
                 periodic_checkpoint_interval = np.inf
 
