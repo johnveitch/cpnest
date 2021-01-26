@@ -42,7 +42,7 @@ class _NSintegralState(object):
         self.logLs = [-inf]  # Likelihoods sampled
         self.log_vols = [0.0]  # Volumes enclosed by contours
 
-    def increment(self, logL, nlive=None):
+    def increment(self, logL, nlive=None, nreplace=1):
         """
         Increment the state of the evidence integrator
         Simply uses rectangle rule for initial estimate
@@ -52,7 +52,7 @@ class _NSintegralState(object):
         if nlive is None:
             nlive = self.nlive
         oldZ = self.logZ
-        logt=-1.0/nlive
+        logt=-nreplace/nlive
         Wt = self.logw + logL + logsubexp(0,logt)
         self.logZ = logaddexp(self.logZ,Wt)
         # Update information estimate
@@ -253,12 +253,11 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
-        logLtmp = []
-        for k in self.worst:
-            self.state.increment(self.params[k].logL)
-            self.nested_samples.append(self.params[k])
-            logLtmp.append(self.params[k].logL)
+        nreplace = len(self.manager.consumer_pipes)
+        logLmin = self.get_worst_n_live_points(nreplace)
+        self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
+        self.nested_samples.extend(self.params[:nreplace])
+        logLtmp=[p.logL for p in self.params[:nreplace]]
 
         # Make sure we are mixing the chains
         for i in np.random.permutation(range(len(self.worst))): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
