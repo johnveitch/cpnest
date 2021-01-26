@@ -493,7 +493,7 @@ class SliceSampler(Sampler):
                     parameter_left = direction_vector * self.L + oldparam
 
                     if self.model.in_bounds(parameter_left):
-                        if Y > self.model.log_likelihood(parameter_left):
+                        if Yp > self.model.log_prior(parameter_left):
                             break
                         else:
                             self.increase_left_boundary()
@@ -510,7 +510,7 @@ class SliceSampler(Sampler):
 
                     if self.model.in_bounds(parameter_right):
 
-                        if Y > self.model.log_likelihood(parameter_right):
+                        if Yp > self.model.log_prior(parameter_right):
                             break
                         else:
                             self.increase_right_boundary()
