@@ -298,7 +298,7 @@ class NestedSampler(object):
 
         i = 0
         while pool.has_next():
-
+            print(i, self.logLmin)
             acceptance, sub_acceptance, self.jumps, proposed = pool.get_next()
 
             if proposed.logL > self.logLmin:
@@ -311,7 +311,7 @@ class NestedSampler(object):
                     self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                         .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
                         logLtmp[idx[i%self.nthreads]], proposed.logL, self.condition, logZ, self.logLmax))
-
+            
                 i += 1
 
             else:
@@ -542,7 +542,7 @@ class LivePoints:
         # final adjustments
         self._list.sort(key=attrgetter('logL'))
         for i,p in enumerate(self._list):
-            self.state.increment(p.logL,nlive=self.n-i, n = 1)
+            self.state.increment(p.logL, nlive=self.n-i, nreplace = 1)
             self.nested_samples.append(p)
 
         # Refine evidence estimate
