@@ -177,6 +177,7 @@ class NestedSampler(object):
         """
         loggername = 'cpnest.NestedSampling.NestedSampler'
         self.logger         = logging.getLogger(loggername)
+        self.logger.addHandler(logging.StreamHandler())
         self.periodic_checkpoint_interval = periodic_checkpoint_interval
         self.model          = model
         self.nthreads       = nthreads
@@ -298,7 +299,7 @@ class NestedSampler(object):
 
         i = 0
         while pool.has_next():
-            print(i, self.logLmin)
+
             acceptance, sub_acceptance, self.jumps, proposed = pool.get_next()
 
             if proposed.logL > self.logLmin:
