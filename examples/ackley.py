@@ -10,8 +10,8 @@ class AckleyModel(cpnest.model.Model):
     names=['x','y']
     bounds=[[-5,5],[-5,5]]
     data = None
-    @staticmethod
-    def log_likelihood(x):
+
+    def log_likelihood(self,x):
         return log(ackley(x['x'],x['y']))
 
     def force(self,x):
@@ -25,7 +25,7 @@ def ackley(x, y):
     r = np.sqrt(0.5*(x*x+y*y))
     first = 20.0*np.exp(r)
     second = np.exp(0.5*(np.cos(2.0*np.pi*x)+np.cos(2.0*np.pi*y)))
-    return -(first+second-np.exp(1)-20)
+    return (first+second-np.exp(1)-20)
 
 class AckleyTestCase(unittest.TestCase):
     """
