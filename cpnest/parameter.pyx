@@ -31,9 +31,9 @@ cdef class LivePoint:
         self.names = names
         self.dimension = len(names)
         if d is not None:
-            self.values             = np.array(d, dtype=np.float32)
+            self.values             = np.array(d, dtype=np.float64)
         else:
-            self.values             = np.zeros(self.dimension, dtype=np.float32)
+            self.values             = np.zeros(self.dimension, dtype=np.float64)
 
     def keys(self):
         return self.names
@@ -50,7 +50,7 @@ cdef class LivePoint:
     def __setstate__(self, state):
         self.logL   = state[0]
         self.logP   = state[1]
-        self.values = np.array(state[2])
+        self.values = np.array(state[2], dtype=np.float64)
 
     def __str__(LivePoint self):
         return str({n:self[n] for n in self.names})

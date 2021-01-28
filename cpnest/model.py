@@ -44,7 +44,7 @@ class Model(object):
         while(logP==-inf):
             p = LivePoint(self.names,
                           d=np.array([uniform(self.bounds[i][0],
-                                               self.bounds[i][1])
+                                              self.bounds[i][1])
                                        for i, _ in enumerate(self.names) ]
                                     )
                          )
