@@ -68,8 +68,8 @@ class CPNest(object):
         maximum number of leaps points for HMC sampling chains (100)
 
     nthreads: `int` or `None`
-        number of parallel samplers. Default (None) uses mp.cpu_count() to autodetermine
-
+        number of parallel samplers. Default (None) uses psutil.cpu_count() to autodetermine
+        
     nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
 
@@ -121,10 +121,13 @@ class CPNest(object):
                  pool         = None
                  ):
 
+        import psutil
+        self.max_threads = psutil.cpu_count()
         if nthreads is None:
-            self.nthreads = os.cpu_count()
+            self.nthreads = self.max_threads
         else:
             self.nthreads = nthreads
+            assert self.nthreads <= self.max_threads, "more cpu than available are being requested!"
 
         self.pool = None
         ray.init(num_cpus=nthreads)
