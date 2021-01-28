@@ -36,7 +36,7 @@ class HalfGaussianTestCase(unittest.TestCase):
 
     def test_evidence(self):
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        tolerance = 2.0*np.sqrt(self.work.NS.info/self.work.NS.nlive)
         print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
         print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
         print('Estimated logZ {0}'.format(self.work.NS.logZ))

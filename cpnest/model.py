@@ -93,7 +93,8 @@ class Model(object):
             :obj: -`cpnest.model.log_prior`
         """
         return -self.log_prior(param)
-
+    
+    @abstractmethod
     def force(self,param):
         """
         returns the force (-grad potential)
@@ -105,6 +106,7 @@ class Model(object):
         """
         pass
 
+    @abstractmethod
     def analytical_gradient(self,param):
         """
         returns the gradient of the likelihood (-grad potential)
