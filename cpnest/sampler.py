@@ -305,7 +305,7 @@ class SliceSampler(Sampler):
 
                 direction_vector = self.proposal.get_direction(mu = self.mu)
                 if not(isinstance(direction_vector,parameter.LivePoint)):
-                    direction_vector = parameter.LivePoint(oldparam.names,d=array.array('d',direction_vector.tolist()))
+                    direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
 
                 Y = logLmin
                 Yp = oldparam.logP-np.random.exponential()
@@ -345,7 +345,6 @@ class SliceSampler(Sampler):
                         break
 
                 # slice sample the likelihood-bound prior
-                #  if the search interval has shrunk  too much, break and start over
                 slice = 0
                 while slice < self.max_slices:
                     # generate a new point between the boundaries we identified

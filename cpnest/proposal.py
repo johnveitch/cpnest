@@ -316,8 +316,7 @@ class EnsembleEigenVector(EnsembleProposal):
         # pick a random eigenvector
         i = randrange(old.dimension)
         jumpsize = sqrt(fabs(self.eigen_values[i]))*gauss(0,1)
-        for k,n in enumerate(out.names):
-            out[n]+=jumpsize*self.eigen_vectors[k,i]
+        out.values += jumpsize*self.eigen_vectors[:,i]
         return out
 
 
@@ -334,10 +333,10 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [5,
-                   5,
-                   10,
-                   10]
+        weights = [1,
+                   1,
+                   2,
+                   4]
         super(DefaultProposalCycle,self).__init__(proposals, weights)
 
 class HamiltonianProposalCycle(ProposalCycle):

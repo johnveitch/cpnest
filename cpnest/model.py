@@ -1,6 +1,6 @@
 from abc import ABCMeta,abstractmethod,abstractproperty
 from numpy import inf
-from array import array
+import numpy as np
 from .parameter import LivePoint
 from numpy.random import uniform
 
@@ -40,14 +40,13 @@ class Model(object):
         Return:
             p: :obj:`cpnest.parameter.LivePoint`
         """
-        logP=-inf
+        logP = -inf
         while(logP==-inf):
             p = LivePoint(self.names,
-                          d=array('d',
-                                      [uniform(self.bounds[i][0],
+                          d=np.array([uniform(self.bounds[i][0],
                                                self.bounds[i][1])
                                        for i, _ in enumerate(self.names) ]
-                                 )
+                                    )
                          )
             logP=self.log_prior(p)
         return p
