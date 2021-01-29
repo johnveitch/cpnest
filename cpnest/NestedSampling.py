@@ -16,6 +16,9 @@ from .cpnest import CheckPoint
 from tqdm import tqdm
 
 
+logger = logging.getLogger('cpnest.NestedSampling')
+
+
 class _NSintegralState(object):
     """
     Stores the state of the nested sampling integrator
@@ -23,7 +26,8 @@ class _NSintegralState(object):
     def __init__(self, nlive):
         self.nlive = nlive
         self.reset()
-        self.logger = logging.getLogger('CPNest')
+        loggername = 'cpnest.NestedSampling._NSintegralState'
+        self.logger = logging.getLogger(loggername)
 
     def reset(self):
         """
@@ -38,7 +42,7 @@ class _NSintegralState(object):
         self.logLs = [-inf]  # Likelihoods sampled
         self.log_vols = [0.0]  # Volumes enclosed by contours
 
-    def increment(self, logL, nlive=None):
+    def increment(self, logL, nlive=None, nreplace=1):
         """
         Increment the state of the evidence integrator
         Simply uses rectangle rule for initial estimate
@@ -48,7 +52,7 @@ class _NSintegralState(object):
         if nlive is None:
             nlive = self.nlive
         oldZ = self.logZ
-        logt=-1.0/nlive
+        logt=-nreplace/nlive
         Wt = self.logw + logL + logsubexp(0,logt)
         self.logZ = logaddexp(self.logZ,Wt)
         # Update information estimate
@@ -98,7 +102,8 @@ class _NSintegralState(object):
 
     def __setstate__(self, state):
         if 'logger' not in state:
-            state['logger'] = logging.getLogger("CPNest")
+            loggername = "cpnest.NestedSampling._NSintegralState"
+            state['logger'] = logging.getLogger(loggername)
         self.__dict__ = state
 
 
@@ -162,7 +167,8 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.logger         = logging.getLogger('CPNest')
+        loggername = 'cpnest.NestedSampling.NestedSampler'
+        self.logger         = logging.getLogger(loggername)
         self.model          = model
         self.manager        = manager
         self.prior_sampling = prior_sampling
@@ -247,13 +253,12 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        logLmin = self.get_worst_n_live_points(len(self.manager.consumer_pipes))
-        logLtmp = []
-        for k in self.worst:
-            self.state.increment(self.params[k].logL)
-            self.nested_samples.append(self.params[k])
-            logLtmp.append(self.params[k].logL)
-            
+        nreplace = len(self.manager.consumer_pipes)
+        logLmin = self.get_worst_n_live_points(nreplace)
+        self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
+        self.nested_samples.extend(self.params[:nreplace])
+        logLtmp=[p.logL for p in self.params[:nreplace]]
+
         # Make sure we are mixing the chains
         for i in np.random.permutation(range(len(self.worst))): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
@@ -397,7 +402,7 @@ class NestedSampler(object):
         obj.logLmax = obj.manager.logLmax
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
-        obj.logger = logging.getLogger("CPNest")
+        obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         del obj.__dict__['llmin']
         del obj.__dict__['llmax']
         obj.logger.critical('Resuming NestedSampler from ' + filename)

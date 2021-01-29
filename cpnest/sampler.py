@@ -84,7 +84,7 @@ class Sampler(object):
         self.manager = manager
         self.logLmin = self.manager.logLmin
         self.logLmax = self.manager.logLmax
-        self.logger = logging.getLogger('CPNest')
+        self.logger = logging.getLogger('cpnest.sampler.Sampler')
 
         if proposal is None:
             self.proposal = DefaultProposalCycle()
@@ -176,7 +176,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self):
+    def estimate_nmcmc(self, safety=20):
         """
         Estimate autocorrelation length of the chain
         """
@@ -194,6 +194,8 @@ class Sampler(object):
         self.Nmcmc = int(np.max(ACL))
         if self.Nmcmc < 1:
             self.Nmcmc = 1
+        if self.Nmcmc < safety:
+            self.Nmcmc = safety
         return self.Nmcmc
 
     def produce_sample(self):
@@ -287,7 +289,7 @@ class Sampler(object):
         obj.manager = manager
         obj.logLmin = obj.manager.logLmin
         obj.logLmax = obj.manager.logLmax
-        obj.logger = logging.getLogger("CPNest")
+        obj.logger = logging.getLogger("cpnest.sample.Sampler")
         obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
         obj.last_checkpoint_time = time.time()
@@ -492,7 +494,7 @@ class SliceSampler(Sampler):
                     parameter_left = direction_vector * self.L + oldparam
 
                     if self.model.in_bounds(parameter_left):
-                        if Y > self.model.log_likelihood(parameter_left):
+                        if Yp > self.model.log_prior(parameter_left):
                             break
                         else:
                             self.increase_left_boundary()
@@ -509,7 +511,7 @@ class SliceSampler(Sampler):
 
                     if self.model.in_bounds(parameter_right):
 
-                        if Y > self.model.log_likelihood(parameter_right):
+                        if Yp > self.model.log_prior(parameter_right):
                             break
                         else:
                             self.increase_right_boundary()

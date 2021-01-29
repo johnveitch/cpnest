@@ -5,10 +5,14 @@ from numpy.random import uniform
 from functools import reduce
 from scipy.stats import pearsonr
 
-if not logging.Logger.manager.loggerDict:
-    LOGGER = logging.getLogger('nest2pos')
-else:
-    LOGGER = logging.getLogger('CPNest')
+# if not logging.Logger.manager.loggerDict:
+#     LOGGER = logging.getLogger('cpnest.nest2pos')
+# else:
+#     LOGGER = logging.getLogger('cpnest.cpnest.CPNest')
+
+# Note - logger should take the name of the module. It inherits from the base
+# cpnest logger.
+LOGGER = logging.getLogger('cpnest.nest2pos')
 
 def logsubexp(x,y):
     """
