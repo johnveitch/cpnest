@@ -22,7 +22,7 @@ if have_cython:  # convert the pyx file to a .c file if cython is available
     print('Running cython')
     ext_modules = [Extension("cpnest.parameter",
                              sources=[os.path.join("cpnest", "parameter.pyx")],
-                             include_dirs=['cpnest'],
+                             include_dirs=['cpnest',numpy.get_include()],
                              libraries=libraries,
                              extra_compile_args=["-O3","-ffast-math"])]
     ext_modules = cythonize(ext_modules)
