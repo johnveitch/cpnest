@@ -149,16 +149,15 @@ class Model(object):
         Returns:
             point: :obj:`cpnest.parameter.LivePoint`
         """
-        d=array('d',
-                [self.bounds[i][0]
+        d=np.array([self.bounds[i][0]
                  + normalised_value[i] * (self.bounds[i][1] - self.bounds[i][0])
                  for i, _ in enumerate(self.names)]
-                )
+                 )
         return LivePoint(self.names, d=d)
 
     def to_normalised(self, point):
         """
-        Maps the bounds of the parameters onto [-1,1]
+        Maps the bounds of the parameters onto [0,1]
         ----------
         Parameter:
             point: :obj:`cpnest.parameter.LivePoint`
@@ -167,5 +166,5 @@ class Model(object):
             normalised_value: :obj:`array.array`
                 The values of the parameter mapped into the Ndim-cube
         """
-        return array('d', [(v-b[0])/(b[1]-b[0]) for v, b
-                           in zip(value.values, self.bounds)])
+        return np.array([(v-b[0])/(b[1]-b[0]) for v, b
+                           in zip(point.values, self.bounds)])

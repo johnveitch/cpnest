@@ -1,17 +1,11 @@
 #! /usr/bin/env python
 # coding: utf-8
 
-import multiprocessing as mp
-from ctypes import c_double, c_int
 import numpy as np
 import os
 import sys
 import signal
 import logging
-
-from multiprocessing.sharedctypes import Value, Array
-from multiprocessing import Lock
-from multiprocessing.managers import SyncManager
 
 import cProfile
 

@@ -7,5 +7,5 @@ cdef class LivePoint:
     cdef public unsigned int dimension
     cdef public np.ndarray values
     cdef public list names
-    cpdef LivePoint copy(LivePoint self)
-    cpdef np.ndarray asnparray(LivePoint self)
+    cdef LivePoint _copy(LivePoint self)
+    cdef np.ndarray _asnparray(LivePoint self)

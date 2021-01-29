@@ -8,7 +8,10 @@ from numpy.math cimport INFINITY
 cimport numpy as np
 import numpy as np
 
-cpdef LivePoint rebuild_livepoint(list names):
+def rebuild_livepoint(list names):
+    return _rebuild_livepoint(names)
+
+cdef LivePoint _rebuild_livepoint(list names):
     cdef LivePoint lp = LivePoint(names)
     return lp
 
@@ -120,21 +123,28 @@ cdef class LivePoint:
                 return
         raise KeyError
     
-    cpdef LivePoint copy(LivePoint self):
+    def copy(LivePoint self):
+        return self._copy()
+    
+    cdef LivePoint _copy(LivePoint self):
         """
         Returns a copy of the current live point
         """
         cdef LivePoint result = LivePoint(self.names)
         result.__setstate__(self.__getstate__())
         return result
-      
-    cpdef np.ndarray asnparray(LivePoint self):
+    
+    def asnparray(LivePoint self):
+        return self._asnparray()
+    
+    cdef np.ndarray _asnparray(LivePoint self):
         """
         Return the sample as a numpy record array
         """
         cdef list names = self.names+['logL','logPrior']
         cdef np.ndarray x = np.zeros(1, dtype = {'names':names, 'formats':['f8' for _ in names]})
-        for n in self.names: x[n] = self[n]
+        for n in self.names:
+            x[n] = self[n]
         x['logL']     = self.logL
         x['logPrior'] = self.logP
         return x
