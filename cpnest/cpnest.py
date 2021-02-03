@@ -104,7 +104,7 @@ class CPNest(object):
                  verbose      = 0,
                  seed         = None,
                  maxmcmc      = 5000,
-                 nthreads     = None,
+                 nensemble    = 0,
                  nhamiltonian = 0,
                  nslice       = 0,
                  resume       = False,
@@ -114,22 +114,25 @@ class CPNest(object):
                  prior_sampling = False,
                  pool         = None
                  ):
-
+        
+        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
+        self.nsamplers = nensemble+nhamiltonian+nslice
+        assert self.nsamplers > 0, "no sampler processes requested!"
         import psutil
         self.max_threads = psutil.cpu_count()
-        if nthreads is None:
-            self.nthreads = self.max_threads
-        else:
-            self.nthreads = nthreads
-            assert self.nthreads <= self.max_threads, "more cpu than available are being requested!"
-
+        
+        self.nthreads = self.nsamplers+1
+        if self.nthreads > self.max_threads:
+            self.logger.warn("More cpu than available are being requested!")
+            self.logger.warn("This might result in excessive overhead")
+        
         self.pool = None
-        ray.init(num_cpus=nthreads)
+        ray.init(num_cpus=self.nthreads)
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
 
-        self.logger = logging.getLogger('cpnest.cpnest.CPNest')
+        
 
         # The LogFile context manager ensures everything within is logged to
         # 'cpnest.log' but the file handler is safely closed once the run is
@@ -172,17 +175,14 @@ class CPNest(object):
 
             self.samplers = []
 
-            nmhs = self.nthreads-nhamiltonian-nslice
             # instantiate the sampler class
-            for i in range(nmhs):
+            for i in range(nensemble):
                 s = MetropolisHastingsSampler.remote(self.user,
                                       maxmcmc,
                                       verbose     = verbose,
-                                      output      = output,
                                       nlive       = nlive,
                                       seed        = self.seed+i,
-                                      proposal    = proposals['mhs'](),
-                                      sample_prior = prior_sampling
+                                      proposal    = proposals['mhs']()
                                       )
                 self.samplers.append(s)
 
@@ -190,11 +190,9 @@ class CPNest(object):
                 s = HamiltonianMonteCarloSampler.remote(self.user,
                                       maxmcmc,
                                       verbose     = verbose,
-                                      output      = output,
                                       nlive       = nlive,
-                                      seed        = self.seed+nmhs+i,
-                                      proposal    = proposals['hmc'](model=self.user),
-                                      sample_prior = prior_sampling
+                                      seed        = self.seed+nensemble+i,
+                                      proposal    = proposals['hmc'](model=self.user)
                                       )
                 self.samplers.append(s)
 
@@ -202,9 +200,8 @@ class CPNest(object):
                 s = SliceSampler.remote(self.user,
                                       maxmcmc,
                                       verbose     = verbose,
-                                      output      = output,
                                       nlive       = nlive,
-                                      seed        = self.seed+nmhs+nhamiltonian+i,
+                                      seed        = self.seed+nensemble+nhamiltonian+i,
                                       proposal    = proposals['sli']()
                                       )
                 self.samplers.append(s)

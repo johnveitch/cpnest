@@ -59,9 +59,7 @@ class Sampler(object):
                  model,
                  maxmcmc,
                  seed         = None,
-                 output       = None,
                  verbose      = False,
-                 sample_prior = False,
                  nlive        = 1000,
                  proposal     = None):
 
@@ -87,8 +85,6 @@ class Sampler(object):
         self.mcmc_accepted      = 0
         self.mcmc_counter       = 0
         self.initialised        = False
-        self.output             = output
-        self.sample_prior       = sample_prior
         self.max_storage        = 32768
         self.samples            = deque(maxlen = None if self.verbose >=3 else self.max_storage) # the list of samples from the mcmc chain
 
@@ -252,9 +248,9 @@ class SliceSampler(Sampler):
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 32 # maximum stepping out steps allowed
-    max_slices     = 32 # maximum number of slices allowed
-    tuning_steps   = 1000
+    max_steps_out  = 1000 # maximum stepping out steps allowed
+    max_slices     = 100 # maximum number of slices allowed
+
     def adapt_length_scale(self):
         """
         adapts the length scale of the expansion/contraction
@@ -381,7 +377,7 @@ class SliceSampler(Sampler):
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
 
-            if self.mcmc_counter < self.tuning_steps:
+            if logLmin == -np.inf:
                 self.adapt_length_scale()
 
             yield (sub_counter, oldparam)

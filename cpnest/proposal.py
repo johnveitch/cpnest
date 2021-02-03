@@ -5,8 +5,6 @@ from math import log,sqrt,fabs,exp
 from abc import ABCMeta,abstractmethod
 import random
 from random import sample,gauss,randrange,uniform
-from scipy.interpolate import LSQUnivariateSpline
-from scipy.signal import savgol_filter
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
 from .nest2pos import acl

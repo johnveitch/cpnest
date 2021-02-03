@@ -443,7 +443,7 @@ class NestedSampler(object):
     def __setstate__(self, state):
         self.__dict__ = state
 
-@ray.remote(num_cpus=1)
+@ray.remote
 class LivePoints:
     def __init__(self, l, n_replace = 1, verbose = 2):
         self.n_replace            = n_replace
