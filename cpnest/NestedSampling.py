@@ -215,10 +215,11 @@ class NestedSampler(object):
 
         with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=0) as pbar:
             for i in range(self.nlive):
-
-                l.append(self.model.new_point())
-                l[-1].logP = self.model.log_prior(l[-1])
-                l[-1].logL = self.model.log_likelihood(l[-1])
+                
+                p = self.model.new_point()
+                p.logP = self.model.log_prior(p)
+                p.logL = self.model.log_likelihood(p)
+                l.append(p)
                 pbar.update()
 
         self.live_points = LivePoints.remote(l, self.nthreads)
@@ -290,6 +291,10 @@ class NestedSampler(object):
 
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
+        # set up  the ensemble statistics
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
+
         idx = np.arange(self.nthreads)
 #        # Shuffle as to mix the chains
         np.random.shuffle(idx)
@@ -353,9 +358,7 @@ class NestedSampler(object):
                     pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
 
         self.live_points.update_mean_covariance.remote()
-        # set up  the ensemble statistics
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
-            pass
+
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -526,10 +529,7 @@ class LivePoints:
         self.logLmin = np.float128(self._list[n-1].logL)
         self.logLmax = np.float128(self._list[-1].logL)
         self.worst = self._list[:n]
-
-        for p in self.worst:
-            self.nested_samples.append(p)
-
+        self.nested_samples.extend(self.worst)
         self.state.increment(self.worst[n-1].logL, nreplace=self.n_replace)
         return self.worst
 
