@@ -142,7 +142,7 @@ class Sampler(object):
 
         self.counter += 1
         if self.counter%10 == 0:
-            self.estimate_nmcmc()
+            self.estimate_nmcmc_on_the_fly()
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
 
     def set_ensemble(self, ensemble):

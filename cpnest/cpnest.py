@@ -127,7 +127,7 @@ class CPNest(object):
             self.logger.warn("This might result in excessive overhead")
         
         self.pool = None
-        ray.init(num_cpus=self.nthreads)
+        ray.init(num_cpus=self.nthreads, ignore_reinit_error=True)
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
@@ -141,6 +141,9 @@ class CPNest(object):
                                 verbose=verbose)
         with self.log_file:
             self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
+            self.logger.critical('Ensemble samplers: {0}'.format(nensemble))
+            self.logger.critical('Slice samplers: {0}'.format(nslice))
+            self.logger.critical('Hamiltonian samplers: {0}'.format(nhamiltonian))
 
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
