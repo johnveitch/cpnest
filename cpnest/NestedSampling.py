@@ -435,9 +435,7 @@ class NestedSampler(object):
         if not self.initialised:
             self.reset()
         if self.prior_sampling:
-            for i in range(self.Nlive):
-                #self.nested_samples.append(self.params[i])
-                self.nested_samples = self.params.live_points
+            self.nested_samples = self.params
             self.write_chain_to_file()
             self.write_evidence_to_file()
             self.logLmin.value = np.inf
