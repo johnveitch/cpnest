@@ -88,7 +88,7 @@ class _NSintegralState(object):
         self.logLs = [-inf]  # Likelihoods sampled
         self.log_vols = [0.0]  # Volumes enclosed by contours
 
-    def increment(self, logL, nlive=None):
+    def increment(self, logL, nlive=None, nreplace=1):
         """
         Increment the state of the evidence integrator
         Simply uses rectangle rule for initial estimate
@@ -98,7 +98,7 @@ class _NSintegralState(object):
         if nlive is None:
             nlive = self.nlive
         oldZ = self.logZ
-        logt=-1.0/nlive
+        logt=-nreplace/nlive
         Wt = self.logw + logL + logsubexp(0,logt)
         self.logZ = logaddexp(self.logZ,Wt)
         # Update information estimate
@@ -301,23 +301,20 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        n = len(self.manager.consumer_pipes)
-        self.logLmin.value = np.float128(self.params[n-1].logL)
-        logLtmp = []
-        worst = list(range(n))
-        for k in worst:
-            self.state.increment(self.params[k].logL)
-            self.nested_samples.append(self.params[k])
-            logLtmp.append(self.params[k].logL)
+        nreplace = len(self.manager.consumer_pipes)
+        logLmin = self.get_worst_n_live_points(nreplace)
+        self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
+        self.nested_samples.extend(self.params[:nreplace])
+        logLtmp=[p.logL for p in self.params[:nreplace]]
 
         # Make sure we are mixing the chains
-        for i in np.random.permutation(range(n)): self.manager.consumer_pipes[worst[i]].send(self.params[worst[i]])
+        for i in np.random.permutation(range(nreplace)): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
 
         # Replace the points we just consumed with the next acceptable ones
         # Reversed since the for the first point the current number of
-        # live points is N - n_worst - 1
-        for k in reversed(worst):
+        # live points is N - n_worst  -1 (minus 1 because of couting from zero)
+        for k in reversed(self.worst):
             self.iteration += 1
             loops           = 0
             while(True):
@@ -330,7 +327,7 @@ class NestedSampler(object):
                     index = self.params.insert_live_point(proposed)
                     # the index is then coverted to a value between [0, 1]
                     # accounting for the variable number of live points
-                    self.insertion_indices.append((index - n) / (self.Nlive - k))
+                    self.insertion_indices.append((index - nreplace) / (self.Nlive - k - 1))
                     self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
                     self.accepted += 1
                     break
@@ -346,7 +343,16 @@ class NestedSampler(object):
 
         # points not removed earlier because they are used to resend to
         # samplers if rejected
-        self.params.remove_n_worst_points(n)
+        self.params.remove_n_worst_points(nreplace)
+
+    def get_worst_n_live_points(self, n):
+        """
+        selects the lowest likelihood N live points
+        for evolution
+        """
+        self.worst = np.arange(n)
+        self.logLmin.value = np.float128(self.params[n-1].logL)
+        return np.float128(self.logLmin.value)
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
