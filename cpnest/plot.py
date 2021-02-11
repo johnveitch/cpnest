@@ -72,7 +72,7 @@ def plot_hist(x, name=None, prior_samples=None, mcmc_samples=None, filename=None
     plt.close()
 
 
-def plot_indices(indices, filename=None):
+def plot_indices(indices, filename=None, max_bins=30):
     """
     Histogram indices for insertion indices tests.
 
@@ -83,15 +83,16 @@ def plot_indices(indices, filename=None):
     filename : str, optional
         Filename used to saved resulting figure. If not specified figure
         is not saved.
+    max_bins : int, optional
+        Maximum number of bins in the histogram.
     """
     fig = plt.figure()
     ax  = fig.add_subplot(111)
 
-    ax.hist(indices, density = True, color='tab:blue', linewidth = 1.25,
-                histtype='step', bins=min(len(indices)//100, 30))
+    ax.hist(indices, density=True, color='tab:blue', linewidth=1.25,
+                histtype='step', bins=min(len(indices) // 100, max_bins))
     # Theoretical distribution
-    ax.axhline(1, color='black', linewidth=1.25, linestyle=':',
-            label='pdf')
+    ax.axhline(1, color='black', linewidth=1.25, linestyle=':', label='pdf')
 
     ax.legend()
     ax.set_xlabel('Insertion indices [0, 1]')
