@@ -380,6 +380,8 @@ class NestedSampler(object):
         the nested sampling run (rolling=True) or for the whole run
         (rolling=False).
         """
+        if not self.insertion_indices:
+            return
         if rolling:
             indices = self.insertion_indices[-self.Nlive:]
         else:
