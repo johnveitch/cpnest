@@ -22,7 +22,17 @@ logger = logging.getLogger('cpnest.NestedSampling')
 
 
 class KeyOrderedList(list):
+    """
+    List object that is ordered according to a key
 
+    Parameters
+    ----------
+    iterable : array_like
+        Initial input used to intialise the list
+    key : function, optional
+        Key to use to sort the list, by defaul it is sorted by its
+        values.
+    """
     def __init__(self, iterable, key=lambda x: x):
         iterable = sorted(iterable, key=key)
         super(KeyOrderedList, self).__init__(iterable)
@@ -38,7 +48,7 @@ class KeyOrderedList(list):
 
     def add(self, item):
         """
-        Update the ordered list with a single item
+        Update the ordered list with a single item and return the index
         """
         index = self.search(item)
         self.insert(index, item)
@@ -47,13 +57,23 @@ class KeyOrderedList(list):
 
 
 class OrderedLivePoints(KeyOrderedList):
+    """
+    Object tha contains live points ordered by increasing log-likelihood. Requires
+    the log-likelihood to be pre-computed.
 
+    Assumes the log-likelihood is accesible as an attribute of each live point.
+
+    Parameters
+    ----------
+    live_points : array_like
+        Initial live points
+    """
     def __init__(self, live_points):
         super(OrderedLivePoints, self).__init__(live_points, key=lambda x: x.logL)
 
     def insert_live_point(self, live_point):
         """
-        Insert a live point
+        Insert a live point and return the index of the new point
         """
         return self.add(live_point)
 
@@ -313,7 +333,7 @@ class NestedSampler(object):
 
         # Replace the points we just consumed with the next acceptable ones
         # Reversed since the for the first point the current number of
-        # live points is N - n_worst  -1 (minus 1 because of couting from zero)
+        # live points is N - n_worst  -1 (minus 1 because of counting from zero)
         for k in reversed(self.worst):
             self.iteration += 1
             loops           = 0
@@ -323,7 +343,7 @@ class NestedSampler(object):
                 if proposed.logL > self.logLmin.value:
                     # Insert the new live point into the ordered list and
                     # return the index at which is was inserted, this will
-                    # include the n worst points, so this subtracted
+                    # include the n worst points, so this subtracted next
                     index = self.params.insert_live_point(proposed)
                     # the index is then coverted to a value between [0, 1]
                     # accounting for the variable number of live points
