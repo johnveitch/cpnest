@@ -288,6 +288,8 @@ class CPNest(object):
                 sys.exit(130)
 
             if self.verbose >= 2:
+                self.NS.check_insertion_indices(rolling=False,
+                                                filename='insertion_indices.dat')
                 self.logger.critical(
                     "Saving nested samples in {0}".format(self.output)
                 )
@@ -297,10 +299,13 @@ class CPNest(object):
                 )
                 self.posterior_samples = self.get_posterior_samples()
             else:
+                self.NS.check_insertion_indices(rolling=False,
+                                                filename=None)
                 self.nested_samples = self.get_nested_samples(filename=None)
                 self.posterior_samples = self.get_posterior_samples(
                     filename=None
                 )
+
             if self.verbose>=3 or self.NS.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
             if self.verbose>=3 and not self.NS.prior_sampling:
@@ -523,6 +528,7 @@ class CPNest(object):
                                  ms=plotting_mcmc,
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
+            plot.plot_indices(self.NS.insertion_indices, filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
