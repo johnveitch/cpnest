@@ -295,12 +295,9 @@ class NestedSampler(object):
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
 
-        idx = np.arange(self.nthreads)
-#        # Shuffle as to mix the chains
-        np.random.shuffle(idx)
-        # Replace the points we just consumed with the next acceptable ones
-        for i in idx:
-            pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst[i])
+        starting_points = ray.get(self.live_points.sample.remote(4))
+        for v in starting_points:
+            pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
 
         i = 0
         while pool.has_next():
@@ -309,20 +306,20 @@ class NestedSampler(object):
 
             if proposed.logL > self.logLmin:
                 # replace worst point with new one
-                self.live_points.set.remote(idx[i%self.nthreads],proposed.copy())
+                self.live_points.set.remote(i%self.nthreads,proposed.copy())
                 self.accepted  += 1
                 self.iteration += 1
 
                 if self.verbose:
                     self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                         .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
-                        logLtmp[idx[i%self.nthreads]], proposed.logL, self.condition, logZ, self.logLmax))
+                        logLtmp[i%self.nthreads], proposed.logL, self.condition, logZ, self.logLmax))
             
                 i += 1
 
             else:
                 self.rejected += 1
-                p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), self.worst[idx[i%self.nthreads]])
+                p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), starting_points[i%self.nthreads])
 
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
 
