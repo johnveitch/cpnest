@@ -4,9 +4,11 @@ import os
 import pickle
 import time
 import logging
+import bisect
 import numpy as np
 from numpy import logaddexp
 from numpy import inf
+from scipy.stats import kstest
 from math import isnan
 from . import nest2pos
 from .nest2pos import logsubexp
@@ -23,6 +25,65 @@ except:
 
 logger = logging.getLogger('cpnest.NestedSampling')
 
+class KeyOrderedList(list):
+    """
+    List object that is ordered according to a key
+    Parameters
+    ----------
+    iterable : array_like
+        Initial input used to intialise the list
+    key : function, optional
+        Key to use to sort the list, by defaul it is sorted by its
+        values.
+    """
+    def __init__(self, iterable, key=lambda x: x):
+        iterable = sorted(iterable, key=key)
+        super(KeyOrderedList, self).__init__(iterable)
+
+        self._key = key
+        self._keys = [self._key(v) for v in iterable]
+
+    def search(self, item):
+        """
+        Find the location of a new entry
+        """
+        return bisect.bisect(self._keys, self._key(item))
+
+    def add(self, item):
+        """
+        Update the ordered list with a single item and return the index
+        """
+        index = self.search(item)
+        self.insert(index, item)
+        self._keys.insert(index, self._key(item))
+        return index
+
+
+class OrderedLivePoints(KeyOrderedList):
+    """
+    Object tha contains live points ordered by increasing log-likelihood. Requires
+    the log-likelihood to be pre-computed.
+    Assumes the log-likelihood is accesible as an attribute of each live point.
+    Parameters
+    ----------
+    live_points : array_like
+        Initial live points
+    """
+    def __init__(self, live_points):
+        super(OrderedLivePoints, self).__init__(live_points, key=lambda x: x.logL)
+
+    def insert_live_point(self, live_point):
+        """
+        Insert a live point and return the index of the new point
+        """
+        return self.add(live_point)
+
+    def remove_n_worst_points(self, n):
+        """
+        Remvoe the n worst live points
+        """
+        del self[:n]
+        del self._keys[:n]
 
 class _NSintegralState(object):
     """
@@ -198,6 +259,7 @@ class NestedSampler(object):
         self.logLmax        = -np.inf
         self.iteration      = 0
         self.nested_samples = []
+        self.rolling_p      = []
         self.logZ           = None
         sys.stdout.flush()
         self.output_folder  = output
@@ -295,7 +357,7 @@ class NestedSampler(object):
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
 
-        starting_points = ray.get(self.live_points.sample.remote(4))
+        starting_points = ray.get(self.live_points.sample.remote(self.nthreads))
         for v in starting_points:
             pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
 
@@ -306,7 +368,7 @@ class NestedSampler(object):
 
             if proposed.logL > self.logLmin:
                 # replace worst point with new one
-                self.live_points.set.remote(i%self.nthreads,proposed.copy())
+                self.live_points.insert.remote(i%self.nthreads,proposed.copy())
                 self.accepted  += 1
                 self.iteration += 1
 
@@ -322,7 +384,8 @@ class NestedSampler(object):
                 p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), starting_points[i%self.nthreads])
 
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-
+        
+        self.live_points.remove_n_worst_points.remote(self.nthreads)
         self.live_points.update_mean_covariance.remote()
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
@@ -355,7 +418,8 @@ class NestedSampler(object):
                     pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
 
         self.live_points.update_mean_covariance.remote()
-
+        self.live_points.set_ordered_list.remote()
+        
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -383,6 +447,10 @@ class NestedSampler(object):
                 if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
                     self.checkpoint()
                     self.last_checkpoint_time = time.time()
+                    
+                if (self.iteration % self.nlive) < self.nthreads:
+                    self.check_insertion_indices()
+                
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
@@ -408,6 +476,32 @@ class NestedSampler(object):
         self.logger.critical('Checkpointing nested sampling')
         with open(self.resume_file,"wb") as f:
             pickle.dump(self, f)
+
+    def check_insertion_indices(self, rolling=True, filename=None):
+        """
+        Checking the distibution of the insertion indices either during
+        the nested sampling run (rolling=True) or for the whole run
+        (rolling=False).
+        """
+        if not ray.get(self.live_points.get_insertion_indices.remote()):
+            return
+        if rolling:
+            indices = ray.get(self.live_points.get_insertion_indices.remote())[-self.nlive:]
+        else:
+            indices = ray.get(self.live_points.get_insertion_indices.remote())
+
+        D, p = kstest(indices, 'uniform', args=(0, 1))
+        if rolling:
+            self.logger.warning('Rolling KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
+            self.rolling_p.append(p)
+        else:
+            self.logger.warning('Final KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
+
+        if filename is not None:
+            np.savetxt(os.path.join(
+                self.output_folder, filename),
+                ray.get(self.live_points.get_insertion_indices.remote()),
+                newline='\n',delimiter=' ')
 
     @classmethod
     def resume(cls, filename, usermodel, pool):
@@ -458,8 +552,12 @@ class LivePoints:
         self.state                = _NSintegralState(self.n)
         self.logger               = logging.getLogger('CPNest')
         self.nested_samples       = []
+        self.insertion_indices    = []
         self.update_mean_covariance()
-
+    
+    def set_ordered_list(self):
+        self._list = OrderedLivePoints(self._list)
+    
     def get(self, i):
         return self._list[i]
 
@@ -481,8 +579,12 @@ class LivePoints:
     def get_dimension(self):
         return self.dim
 
-    def set(self, i, val):
+    def set(self,i, val):
         self._list[i] = val
+        
+    def insert(self, i, val):
+        index = self._list.insert_live_point(val)
+        self.insertion_indices.append((index - self.n_replace) / (self.n - i - 1))
 
     def to_list(self):
         return self._list
@@ -522,7 +624,7 @@ class LivePoints:
         selects the lowest likelihood N live points
         for evolution
         """
-        self._list.sort(key=attrgetter('logL'))
+#        self._list.sort(key=attrgetter('logL'))
         self.logLmin = np.float128(self._list[n-1].logL)
         self.logLmax = np.float128(self._list[-1].logL)
         self.worst = self._list[:n]
@@ -530,6 +632,12 @@ class LivePoints:
         self.state.increment(self.worst[n-1].logL, nreplace=self.n_replace)
         return self.worst
 
+    def remove_n_worst_points(self,n):
+        self._list.remove_n_worst_points(n)
+    
+    def get_insertion_indices(self):
+        return self.insertion_indices
+    
     def get_info(self):
         return self.state.info
 
