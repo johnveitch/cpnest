@@ -32,7 +32,7 @@ class AckleyTestCase(unittest.TestCase):
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(AckleyModel(),verbose=1,nthreads=8,nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(AckleyModel(),verbose=1,nensemble=8,nlive=1000,maxmcmc=1000)
 
     def test_run(self):
         self.work.run()
