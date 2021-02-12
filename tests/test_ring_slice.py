@@ -28,7 +28,7 @@ class RingTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=RingModel()
-        self.work=cpnest.CPNest(self.model,verbose=1,nthreads=4,nslice=4,nlive=1000,maxmcmc=1000)
+        self.work=cpnest.CPNest(self.model,verbose=1,nensemble=0,nslice=4,nlive=1000,maxmcmc=1000)
         self.work.run()
 
 
@@ -44,5 +44,5 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-        unittest.main(verbosity=0)
+    unittest.main(verbosity=0)
 

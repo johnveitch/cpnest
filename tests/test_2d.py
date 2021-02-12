@@ -28,7 +28,7 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         gaussmodel = GaussianModel()
-        self.work=cpnest.CPNest(gaussmodel,verbose=2,nensemble=2,nlive=1000,maxmcmc=500,nslice=1,nhamiltonian=0)
+        self.work=cpnest.CPNest(gaussmodel,verbose=2,nensemble=2,nlive=1000,maxmcmc=500,nslice=0,nhamiltonian=0)
         print('Sampling 2D gaussian with analytic evidence {0}'.format(gaussmodel.analytic_log_Z))
 
     def test_run(self):
