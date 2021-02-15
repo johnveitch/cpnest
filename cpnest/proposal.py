@@ -331,10 +331,11 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [1,
+        weights = [10,
                    1,
-                   2,
-                   4]
+                   5,
+                   1]
+                   
         super(DefaultProposalCycle,self).__init__(proposals, weights)
 
 class HamiltonianProposalCycle(ProposalCycle):

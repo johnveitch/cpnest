@@ -214,7 +214,7 @@ class CPNest(object):
             self.resume_file = os.path.join(output, "nested_sampler_resume.pkl")
             if not os.path.exists(self.resume_file) or resume == False:
                 self.NS = NestedSampler(self.user,
-                            nthreads       = self.nthreads,
+                            nthreads       = self.nsamplers,
                             nlive          = nlive,
                             output         = output,
                             verbose        = verbose,

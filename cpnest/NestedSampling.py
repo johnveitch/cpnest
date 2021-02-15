@@ -606,6 +606,15 @@ class LivePoints:
             self.mean       = np.mean(cov_array,axis=1)
         self.eigen_values, self.eigen_vectors = np.linalg.eigh(self.covariance)
 
+    def get_as_array(self):
+        n = self.n+len(self.nested_samples)
+        as_array = np.zeros((self.dim,n))
+        for i,name in enumerate(self._list[0].names):
+            for j in range(self.n): as_array[i,j] = self._list[j][name]
+            for j in range(len(self.nested_samples)): as_array[i,j+self.n] = self.nested_samples[j][name]
+
+        return as_array.T # as an array (N,D)
+    
     def sample(self, n):
         if self.worst == None:
             return random.sample(self._list, n)

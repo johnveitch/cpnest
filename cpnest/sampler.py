@@ -110,7 +110,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self, safety=20):
+    def estimate_nmcmc(self, safety=1):
         """
         Estimate autocorrelation length of the chain
         """
