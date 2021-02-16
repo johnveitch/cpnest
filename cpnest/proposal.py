@@ -331,10 +331,10 @@ class DefaultProposalCycle(ProposalCycle):
                      EnsembleStretch(),
                      DifferentialEvolution(),
                      EnsembleEigenVector()]
-        weights = [10,
+        weights = [5,
                    1,
                    5,
-                   1]
+                   10]
                    
         super(DefaultProposalCycle,self).__init__(proposals, weights)
 
