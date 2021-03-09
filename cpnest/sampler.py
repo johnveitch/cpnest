@@ -40,31 +40,21 @@ class Sampler(object):
         Default: 0
 
     nlive:
-        :int: number of live points
-
-    seed:
-        :int: random seed to initialise the pseudo-random chain
-        Default: None
+        :int: number of live points. Used only for the nmcmc estimation on the fly
 
     proposal:
         :obj:`cpnest.proposals.Proposal` to use
         Defaults: :obj:`cpnest.proposals.DefaultProposalCycle`)
-
-    resume_file:
-        File for checkpointing
-        Default: None
     """
 
     def __init__(self,
                  model,
                  maxmcmc,
-                 seed         = None,
                  verbose      = False,
                  nlive        = 1000,
                  proposal     = None):
 
         self.counter        = 0
-        self.seed           = seed
         self.model          = model
         self.initial_mcmc   = maxmcmc//10
         self.maxmcmc        = maxmcmc

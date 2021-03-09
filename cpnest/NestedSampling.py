@@ -186,11 +186,13 @@ class NestedSampler(object):
 
     model: :obj:`cpnest.Model` user defined model
 
-    manager: `multiprocessing` manager instance which controls
-        the shared objects.
-        Default: None
-
-    Nlive: int
+    periodic_checkpoint_interval: float
+        time interval in seconds between periodic checkpoints
+    
+    nthreads: int
+        number of parallel sampling threads
+        
+    nlive: int
         number of live points to be used for the integration
         Default: 1024
 
@@ -541,6 +543,22 @@ class NestedSampler(object):
 
 @ray.remote
 class LivePoints:
+    """
+    ray remote actor class holding the live points pool
+    
+    parameters
+    ==========
+    
+    l: list
+        list of live points generated from the `cpnest.model` new_point method
+    
+    n_replace: int
+        number of live points to be replaced at each step. must coincide with the number of
+        sampling threads
+    
+    verbose: int
+        level of verbosity
+    """
     def __init__(self, l, n_replace = 1, verbose = 2):
         self.n_replace            = n_replace
         self._list                = l
@@ -561,37 +579,70 @@ class LivePoints:
         self.update_mean_covariance()
     
     def set_ordered_list(self):
+        """
+        initialise the list of live points as a ordered list
+        """
         self._list = OrderedLivePoints(self._list)
     
     def get(self, i):
+        """
+        return the i-th element
+        """
         return self._list[i]
 
     def get_mean_covariance(self):
+        """
+        return the live points sample mean and covariance
+        """
         return self.get_mean(), self.get_covariance()
 
     def get_covariance(self):
+        """
+        return the live points sample covariance
+        """
         return self.covariance
 
     def get_mean(self):
+        """
+        return the live points sample mean
+        """
         return self.mean
 
     def get_eigen_quantities(self):
+        """
+        return the live points sample covariance eigen values and eigen vectors
+        """
         return self.eigen_values, self.eigen_vectors
 
     def get_length(self):
+        """
+        return the number of live points
+        """
         return self.n
 
     def get_dimension(self):
+        """
+        return the dimension of each live point
+        """
         return self.dim
 
     def set(self,i, val):
+        """
+        set the i-th live point to val
+        """
         self._list[i] = val
         
     def insert(self, i, val):
+        """
+        insert val in the ordered list
+        """
         index = self._list.insert_live_point(val)
         self.insertion_indices.append((index - self.n_replace) / (self.n - i - 1))
 
     def to_list(self):
+        """
+        return the list of live points
+        """
         return self._list
 
     def update_mean_covariance(self):
@@ -612,6 +663,9 @@ class LivePoints:
         self.eigen_values, self.eigen_vectors = np.linalg.eigh(self.covariance)
 
     def get_as_array(self):
+        """
+        return the live poitns as a stacked (n,d) numpy array
+        """
         n = self.n+len(self.nested_samples)
         as_array = np.zeros((self.dim,n))
         for i,name in enumerate(self._list[0].names):
@@ -621,6 +675,9 @@ class LivePoints:
         return as_array.T # as an array (N,D)
     
     def sample(self, n):
+        """
+        randomly sample n live points
+        """
         if self.worst == None:
             return random.sample(self._list, n)
         else:
@@ -628,9 +685,15 @@ class LivePoints:
             return random.sample(self._list[k:], n)
 
     def get_logLmax(self):
+        """
+        return the maximum likelihood value
+        """
         return self.logLmax
 
     def get_logLmin(self):
+        """
+        return the minimum likelihood value
+        """
         return self.logLmin
 
     def get_worst(self, n):
@@ -647,15 +710,27 @@ class LivePoints:
         return self.worst
 
     def remove_n_worst_points(self,n):
+        """
+        remove the set of worst n live points
+        """
         self._list.remove_n_worst_points(n)
     
     def get_insertion_indices(self):
+        """
+        return the insertion indeces
+        """
         return self.insertion_indices
     
     def get_info(self):
+        """
+        return the information
+        """
         return self.state.info
 
     def get_logZ(self):
+        """
+        return the log evidence
+        """
         return self.state.logZ
 
     def finalise(self):
