@@ -264,8 +264,7 @@ class CPNest(object):
                 self.mcmc_samples = self.get_mcmc_samples(filename=None)
             if self.verbose>=2:
                 self.plot(corner = False)
-            ray.shutdown()
-            assert ray.is_initialized() == False
+            
             #TODO: Clean up the resume pickles
             try:
                 os.remove(self.resume_file)
