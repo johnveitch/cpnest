@@ -28,6 +28,7 @@ logger = logging.getLogger('cpnest.NestedSampling')
 class KeyOrderedList(list):
     """
     List object that is ordered according to a key
+
     Parameters
     ----------
     iterable : array_like
@@ -63,7 +64,9 @@ class OrderedLivePoints(KeyOrderedList):
     """
     Object tha contains live points ordered by increasing log-likelihood. Requires
     the log-likelihood to be pre-computed.
+
     Assumes the log-likelihood is accesible as an attribute of each live point.
+
     Parameters
     ----------
     live_points : array_like
@@ -84,6 +87,7 @@ class OrderedLivePoints(KeyOrderedList):
         """
         del self[:n]
         del self._keys[:n]
+
 
 class _NSintegralState(object):
     """
@@ -404,6 +408,7 @@ class NestedSampler(object):
             pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
 
         i = 0
+
         with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: sampling prior', position=self.nthreads) as pbar:
             while pool.has_next():
                 acceptance,sub_acceptance,self.jumps,x = pool.get_next()
@@ -450,7 +455,7 @@ class NestedSampler(object):
                     
                 if (self.iteration % self.nlive) < self.nthreads:
                     self.check_insertion_indices()
-                
+        
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)

@@ -248,7 +248,9 @@ class CPNest(object):
             if self.verbose >= 2:
                 self.NS.check_insertion_indices(rolling=False,
                                                 filename='insertion_indices.dat')
-                self.logger.critical("Saving nested samples in {0}".format(self.output))
+                self.logger.critical(
+                    "Saving nested samples in {0}".format(self.output)
+                )
                 self.nested_samples = self.get_nested_samples()
                 self.logger.critical("Saving posterior samples in {0}".format(self.output))
                 self.posterior_samples = self.get_posterior_samples()
@@ -256,7 +258,9 @@ class CPNest(object):
                 self.NS.check_insertion_indices(rolling=False,
                                                 filename=None)
                 self.nested_samples = self.get_nested_samples(filename=None)
-                self.posterior_samples = self.get_posterior_samples(filename=None)
+                self.posterior_samples = self.get_posterior_samples(
+                    filename=None
+                )
 
             if self.verbose>=3 or self.NS.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
@@ -484,6 +488,7 @@ class CPNest(object):
                                  ms=plotting_mcmc,
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
+            plot.plot_indices(ray.get(self.NS.live_points.get_insertion_indices.remote()), filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def checkpoint(self):
         self.NS.checkpoint()

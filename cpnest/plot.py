@@ -71,6 +71,37 @@ def plot_hist(x, name=None, prior_samples=None, mcmc_samples=None, filename=None
         plt.savefig(filename, bbox_inches='tight')
     plt.close()
 
+
+def plot_indices(indices, filename=None, max_bins=30):
+    """
+    Histogram indices for insertion indices tests.
+
+    Parameters
+    ----------
+    indices : list
+        List of insertion indices
+    filename : str, optional
+        Filename used to saved resulting figure. If not specified figure
+        is not saved.
+    max_bins : int, optional
+        Maximum number of bins in the histogram.
+    """
+    fig = plt.figure()
+    ax  = fig.add_subplot(111)
+
+    ax.hist(indices, density=True, color='tab:blue', linewidth=1.25,
+                histtype='step', bins=min(len(indices) // 100, max_bins))
+    # Theoretical distribution
+    ax.axhline(1, color='black', linewidth=1.25, linestyle=':', label='pdf')
+
+    ax.legend()
+    ax.set_xlabel('Insertion indices [0, 1]')
+
+    if filename is not None:
+        plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+
+
 def plot_corner(xs, ps=None, ms=None, filename=None, **kwargs):
     """
     Produce a corner plot
