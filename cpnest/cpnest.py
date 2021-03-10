@@ -184,7 +184,6 @@ class CPNest(object):
                                       maxmcmc,
                                       verbose     = verbose,
                                       nlive       = nlive,
-                                      seed        = self.seed+i,
                                       proposal    = proposals['mhs']()
                                       )
                 self.samplers.append(s)
@@ -194,7 +193,6 @@ class CPNest(object):
                                       maxmcmc,
                                       verbose     = verbose,
                                       nlive       = nlive,
-                                      seed        = self.seed+nensemble+i,
                                       proposal    = proposals['hmc'](model=self.user)
                                       )
                 self.samplers.append(s)
@@ -204,7 +202,6 @@ class CPNest(object):
                                       maxmcmc,
                                       verbose     = verbose,
                                       nlive       = nlive,
-                                      seed        = self.seed+nensemble+nhamiltonian+i,
                                       proposal    = proposals['sli']()
                                       )
                 self.samplers.append(s)
