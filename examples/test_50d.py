@@ -50,5 +50,6 @@ def test_all():
 if __name__=='__main__':
 #    unittest.main(verbosity=2)
     model=GaussianModel(dim = 50)
-    work=cpnest.CPNest(model, verbose=2, nensemble=0, nlive=1000, maxmcmc=5000, nslice=6, nhamiltonian=0, resume=0)
+    work=cpnest.CPNest(model, verbose=2, nensemble=0, nlive=1000, maxmcmc=5000, nslice=0, nhamiltonian=4, resume=0)
     work.run()
+    print("analytic logZ = {0}".format(model.analytic_log_Z))

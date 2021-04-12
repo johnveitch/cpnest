@@ -664,7 +664,7 @@ class LivePoints:
 
     def get_as_array(self):
         """
-        return the live poitns as a stacked (n,d) numpy array
+        return the live points as a stacked (n,d) numpy array
         """
         n = self.n+len(self.nested_samples)
         as_array = np.zeros((self.dim,n))

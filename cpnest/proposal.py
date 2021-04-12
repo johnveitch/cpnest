@@ -10,12 +10,6 @@ from scipy.special import logsumexp
 from .nest2pos import acl
 from .parameter import LivePoint
 import ray
-
-try:
-    from smt.surrogate_models import RBF
-    no_smt = False
-except:
-    no_smt = True
     
 class Proposal(object):
     """
@@ -386,10 +380,6 @@ class HamiltonianProposal(EnsembleProposal):
         
         self.set_mass_parameters()
         self.set_momenta_distribution()
-        
-        if no_smt == True:
-            print("ERROR! Current likelihood gradient approximation requires smt")
-            exit()
     
     def set_mass_parameters(self):
         self.mass_matrix         = self.covariance
@@ -434,7 +424,7 @@ class HamiltonianProposal(EnsembleProposal):
     def approximate_unit_normal(self, q):
         """
         Returns the unit normal to the iso-Likelihood surface
-        at x, obtained from the gradient of a RBF interpolation of the
+        at x, obtained from the gradient of an interpolation of the
         likelihood
         Parameters
         ----------

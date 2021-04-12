@@ -3,8 +3,7 @@ import numpy as np
 from numpy import logaddexp, vstack
 from numpy.random import uniform
 from functools import reduce
-from scipy.stats import pearsonr
-
+from scipy.signal import correlate
 # if not logging.Logger.manager.loggerDict:
 #     LOGGER = logging.getLogger('cpnest.nest2pos')
 # else:
@@ -172,28 +171,43 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
 
     return output
 
-def autocorrelation(x):
-    """
-    Compute the autocorrelation of the chain
-    using an FFT
-    """
-    m=x.mean()
-    v=np.var(x)
-    xp=x-m
+def next_pow_two(n):
+    i = 1
+    while i < n:
+        i = i << 1
+    return i
 
-    cf=np.fft.fft(xp)
-    sf=cf.conjugate()*cf
-    corr=np.fft.ifft(sf).real/v/len(x)
-    return corr
 
-def acl(x, tolerance=0.01):
+def autocorrelation(x, norm=True):
+    x = np.atleast_1d(x)
+    if len(x.shape) != 1:
+        raise ValueError("invalid dimensions for 1D autocorrelation function")
+    n = next_pow_two(len(x))
+
+    # Compute the FFT and then (from that) the auto-correlation function
+    f = np.fft.fft(x - np.mean(x), n=2 * n)
+    acf = np.fft.ifft(f * np.conjugate(f))[: len(x)].real
+    acf /= 4 * n
+
+    # Optionally normalize
+    if norm:
+        acf /= acf[0]
+
+    return acf
+
+# Automated windowing procedure following Sokal (1989)
+def auto_window(taus, c):
+    m = np.arange(len(taus)) < c * taus
+    if np.any(m):
+        return np.argmin(m)
+    return len(taus) - 1
+
+
+def acl(x, c=5.0):
     """
     Compute autocorrelation time for x
     """
-    T=1
-    i=0
+    N = x.shape[0]
     acf = autocorrelation(x)
-    while acf[i]>tolerance and i<len(acf):
-        T+=2*acf[i]
-        i+=1
-    return T
+    T = 2.0*np.cumsum(acf)-1.0
+    return T[auto_window(T, c)]

@@ -58,6 +58,7 @@ class Sampler(object):
         self.model          = model
         self.initial_mcmc   = maxmcmc//10
         self.maxmcmc        = maxmcmc
+        self.tau            = None
         self.logger         = logging.getLogger('CPNest')
 
         if proposal is None:
@@ -88,7 +89,7 @@ class Sampler(object):
 
         Taken from http://github.com/farr/Ensemble.jl
         """
-        if tau is None: tau = self.nlive/safety
+        if tau is None: tau = self.maxmcmc/safety
 
         if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
@@ -100,7 +101,7 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_nmcmc(self, safety=1):
+    def estimate_acl(self, safety=1):
         """
         Estimate autocorrelation length of the chain
         """
@@ -116,10 +117,10 @@ class Sampler(object):
             for i in range(len(self.model.names)):
                 self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
 
-        self.Nmcmc = int(np.max(ACL))
-        if self.Nmcmc < safety:
-            self.Nmcmc = safety
-        return self.Nmcmc
+        self.tau = int(np.max(ACL))
+#        if self.Nmcmc < safety:
+#            self.Nmcmc = safety
+        return self.tau
 
     def produce_sample(self, old, logLmin):
         """
@@ -132,7 +133,9 @@ class Sampler(object):
 
         self.counter += 1
         if self.counter%10 == 0:
-            self.estimate_nmcmc()
+            self.estimate_acl()
+
+        self.estimate_nmcmc_on_the_fly(tau=self.tau)
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
 
     def set_ensemble(self, ensemble):
@@ -211,14 +214,14 @@ class HamiltonianMonteCarloSampler(Sampler):
                         oldparam        = newparam.copy()
                         sub_accepted   += 1
 
+                # append the sample to the array of samples
+                self.samples.append(oldparam)
+            
                 if sub_counter >= self.Nmcmc and sub_accepted > 0:
                     break
 
                 if sub_counter >= self.maxmcmc:
                     break
-
-            # append the sample to the array of samples
-            self.samples.append(oldparam)
 
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
@@ -228,7 +231,6 @@ class HamiltonianMonteCarloSampler(Sampler):
 #            for p in self.proposal.proposals:
 #                p.update_time_step(self.acceptance)
 #                p.update_trajectory_length(safety=10)
-
             yield (sub_counter, oldparam)
 
 @ray.remote
@@ -238,9 +240,9 @@ class SliceSampler(Sampler):
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 1000 # maximum stepping out steps allowed
+    max_steps_out  = 100 # maximum stepping out steps allowed
     max_slices     = 100 # maximum number of slices allowed
-
+    
     def adapt_length_scale(self):
         """
         adapts the length scale of the expansion/contraction
@@ -361,7 +363,7 @@ class SliceSampler(Sampler):
                 if sub_counter >= self.maxmcmc:
                     break
 
-            self.samples.append(oldparam)
+                self.samples.append(oldparam)
             self.sub_acceptance = float(sub_accepted)/float(sub_counter)
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
