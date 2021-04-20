@@ -12,7 +12,7 @@ from .proposal import DefaultProposalCycle, EnsembleProposal
 from . import proposal
 import numpy.lib.recfunctions as rfn
 import array
-from .nest2pos import acl
+from .nest2pos import acl, autocorrelation
 import ray
 
 import pickle
@@ -87,10 +87,13 @@ class Sampler(object):
         Uses moving average with decay time tau iterations
         (default: :int:`self.nlive`)
 
-        Taken from http://github.com/farr/Ensemble.jl
+        Taken from http://github.com/farr/EnsembleNest.jl
         """
-        if tau is None: tau = self.maxmcmc/safety
+        # if no auto correlation time is provided, make the safest assumption
+        # that maxmcmc is safety times the auto correlation time
+        if tau is None: tau  = self.maxmcmc
 
+        # if we accepted no points, increase the number of steps
         if self.sub_acceptance == 0.0:
             self.Nmcmc_exact = (1.0 + 1.0/tau)*self.Nmcmc_exact
         else:
@@ -101,26 +104,29 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_acl(self, safety=1):
+    def estimate_acl(self, safety=2):
         """
         Estimate autocorrelation length of the chain
+        
+        safety determines the unmber of ACL the chains are going to be run for
         """
         # first of all, build a numpy array out of
         # the stored samples
         ACL = []
         s   = list(self.samples)
         samples = np.array([x.values for x in s[-self.max_storage:]])
-        # compute the ACL on 5 times the maxmcmc set of samples
-        ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
-
+        # compute the ACL on the max_storage set of samples, choosing a window length of 5*tau
+        ACL = [acl(samples[:,i], c=5) for i in range(samples.shape[1])]
+        
         if self.verbose >= 3:
             for i in range(len(self.model.names)):
                 self.logger.info("Sampler {0} -- ACL({1})  = {2}".format(os.getpid(),self.model.names[i],ACL[i]))
-
-        self.tau = int(np.max(ACL))
-#        if self.Nmcmc < safety:
-#            self.Nmcmc = safety
-        return self.tau
+        
+        # take the longest ACL as the auto correlation time of the chain
+        self.tau = np.max(ACL)
+        # set the number of steps to be safety times the ACL
+        self.Nmcmc = int(safety*self.tau)
+        return self.Nmcmc
 
     def produce_sample(self, old, logLmin):
         """
@@ -135,7 +141,6 @@ class Sampler(object):
         if self.counter%10 == 0:
             self.estimate_acl()
 
-        self.estimate_nmcmc_on_the_fly(tau=self.tau)
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
 
     def set_ensemble(self, ensemble):

@@ -177,7 +177,6 @@ def next_pow_two(n):
         i = i << 1
     return i
 
-
 def autocorrelation(x, norm=True):
     x = np.atleast_1d(x)
     if len(x.shape) != 1:
