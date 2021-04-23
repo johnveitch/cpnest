@@ -104,11 +104,11 @@ class Sampler(object):
 
         return self.Nmcmc
 
-    def estimate_acl(self, safety=2):
+    def estimate_acl(self, safety=1):
         """
         Estimate autocorrelation length of the chain
         
-        safety determines the unmber of ACL the chains are going to be run for
+        safety determines the number of ACL the chains are going to be run for
         """
         # first of all, build a numpy array out of
         # the stored samples
