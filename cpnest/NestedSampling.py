@@ -290,7 +290,7 @@ class NestedSampler(object):
                 l.append(p)
                 pbar.update()
 
-        self.live_points = LivePoints.remote(l, self.nthreads)
+        self.live_points = LivePoints.options(max_concurrency=self.nthreads).remote(l, self.nthreads)
         self.live_points.update_mean_covariance.remote()
 
     def setup_output(self,output):
@@ -359,7 +359,7 @@ class NestedSampler(object):
 
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
-        # set up  the ensemble statistics
+        # set up the ensemble statistics
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
 
@@ -374,27 +374,25 @@ class NestedSampler(object):
 
             if proposed.logL > self.logLmin:
                 # replace worst point with new one
-                self.live_points.insert.remote(i%self.nthreads,proposed.copy())
+                self.live_points.insert.remote(i,proposed.copy())
                 self.accepted  += 1
                 self.iteration += 1
 
                 if self.verbose:
                     self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                         .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
-                        logLtmp[i%self.nthreads], proposed.logL, self.condition, logZ, self.logLmax))
+                        logLtmp[i], proposed.logL, self.condition, logZ, self.logLmax))
             
                 i += 1
 
             else:
                 self.rejected += 1
-                p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), starting_points[i%self.nthreads])
+                p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), starting_points[i])
 
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
         
         self.live_points.remove_n_worst_points.remote(self.nthreads)
         self.live_points.update_mean_covariance.remote()
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
-            pass
 
     def reset(self, pool):
         """
@@ -520,7 +518,7 @@ class NestedSampler(object):
             obj = pickle.load(f)
         obj.model = usermodel
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
-        obj.live_points = LivePoints.remote(obj.live)
+        obj.live_points = LivePoints.options(max_concurrency=self.nthreads).remote(obj.live)
         ray.get(obj.live_points._set_internal_state.remote(obj.integral_state))
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
