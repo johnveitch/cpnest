@@ -30,7 +30,7 @@ class GaussianTestCase(unittest.TestCase):
         self.model = GaussianModel()
         self.runs=[]
         for v in range(4):
-            self.runs.append(cpnest.CPNest(self.model,verbose=v,nthreads=8,nlive=100,maxmcmc=100))
+            self.runs.append(cpnest.CPNest(self.model,verbose=v,nensemble=8,nlive=100,maxmcmc=100))
 
     def test_run(self):
         for r in self.runs:

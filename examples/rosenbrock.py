@@ -33,7 +33,7 @@ class RosenbrockTestCase(unittest.TestCase):
     def setUp(self):
         ndims = 2
         model = RosenbrockModel(ndims)
-        self.work=cpnest.CPNest(model, verbose=2, nthreads=4, nlive=1000, maxmcmc=1000, poolsize=1000)
+        self.work=cpnest.CPNest(model, verbose=2, nensemble=4, nlive=1000, maxmcmc=1000)
 
     def test_run(self):
         self.work.run()

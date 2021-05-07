@@ -28,13 +28,13 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         gaussmodel = GaussianModel()
-        self.work=cpnest.CPNest(gaussmodel,verbose=2,nthreads=1,nlive=1000,maxmcmc=5000,poolsize=1000)
+        self.work=cpnest.CPNest(gaussmodel,verbose=2,nensemble=2,nlive=1000,maxmcmc=500,nslice=0,nhamiltonian=0)
         print('Sampling 2D gaussian with analytic evidence {0}'.format(gaussmodel.analytic_log_Z))
 
     def test_run(self):
         self.work.run()
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        tolerance = 2.0*np.sqrt(self.work.NS.info/self.work.NS.nlive)
         self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0} +/- {2} instead of {1}'.format(self.work.NS.logZ ,GaussianModel.analytic_log_Z, tolerance))
 
 def test_all():

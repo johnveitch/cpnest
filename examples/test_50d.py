@@ -25,8 +25,10 @@ class GaussianModel(cpnest.model.Model):
     
     def force(self, p):
         f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
-#        for n in p.names: f[n] = p[n]
         return f
+    
+    def analytical_gradient(self, p):
+        return p.values
 
 class GaussianTestCase(unittest.TestCase):
     """
@@ -34,17 +36,20 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel(dim = 50)
-        self.work=cpnest.CPNest(self.model, verbose=2, nthreads=6, nlive=1000, maxmcmc=100, poolsize=1000, nslice=6)
+        self.work=cpnest.CPNest(self.model, verbose=2, nensemble=0, nlive=1000, maxmcmc=5000, nslice=6, nhamiltonian=0, resume=0)
 
     def test_run(self):
         self.work.run()
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        tolerance = 2.0*np.sqrt(self.work.NS.info/self.work.NS.nlive)
         self.assertTrue(np.abs(self.work.NS.logZ - self.model.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0} instead of {1}'.format(self.work.NS.logZ ,self.model.analytic_log_Z))
-
+        print("analytic logZ = {0}".format(self.model.analytic_log_Z))
 def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    unittest.main(verbosity=2)
- 
+#    unittest.main(verbosity=2)
+    model=GaussianModel(dim = 50)
+    work=cpnest.CPNest(model, verbose=2, nensemble=0, nlive=1000, maxmcmc=5000, nslice=4, nhamiltonian=0, resume=0)
+    work.run()
+    print("analytic logZ = {0}".format(model.analytic_log_Z))

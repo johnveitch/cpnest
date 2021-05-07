@@ -6,8 +6,8 @@ class EggboxModel(cpnest.model.Model):
     """
     Eggbox problem from https://arxiv.org/pdf/0809.3437v1.pdf
     """
-    names=['1','2']
-    bounds=[[0,10.0*np.pi],[0,10.0*np.pi]]#,[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi]]
+    names=['1','2','3','4','5']
+    bounds=[[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi],[0,10.0*np.pi]]
     data = None
     
     def log_likelihood(self,x):
@@ -22,21 +22,8 @@ def log_eggbox(p):
         tmp *= np.cos(p[n]/2.)
     return (tmp+2.0)**5.0
 
-class EggboxTestCase(unittest.TestCase):
-    """
-    Test the eggox model
-    """
-    def setUp(self):
-        self.work=cpnest.CPNest(EggboxModel(),verbose=1,nthreads=1,nlive=1000,maxmcmc=1000,nslice=1)
-
-    def test_run(self):
-        self.work.run()
-
-def test_all():
-    unittest.main(verbosity=2)
-
 if __name__=='__main__':
     M = EggboxModel()
-    work=cpnest.CPNest(M,verbose=3,nthreads=4,nlive=1000,maxmcmc=1000,poolsize=1000)
+    work=cpnest.CPNest(M,verbose=2,nensemble=4,nlive=1000,maxmcmc=1000,nslice=4)
     work.run()
 
