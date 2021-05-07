@@ -1,0 +1,85 @@
+cpnest package
+==============
+
+Submodules
+----------
+
+cpnest.NestedSampling module
+----------------------------
+
+.. automodule:: cpnest.NestedSampling
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.cpnest module
+--------------------
+
+.. automodule:: cpnest.cpnest
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.model module
+-------------------
+
+.. automodule:: cpnest.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.nest2pos module
+----------------------
+
+.. automodule:: cpnest.nest2pos
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.parameter module
+-----------------------
+
+.. automodule:: cpnest.parameter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.plot module
+------------------
+
+.. automodule:: cpnest.plot
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.proposal module
+----------------------
+
+.. automodule:: cpnest.proposal
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.sampler module
+---------------------
+
+.. automodule:: cpnest.sampler
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cpnest.utils module
+-------------------
+
+.. automodule:: cpnest.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cpnest
+   :members:
+   :undoc-members:
+   :show-inheritance:

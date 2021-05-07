@@ -1,0 +1,7 @@
+cpnest
+======
+
+.. toctree::
+   :maxdepth: 4
+
+   cpnest

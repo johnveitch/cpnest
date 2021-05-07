@@ -1,0 +1,241 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>cpnest.model &#8212; CPNest 0.11.3 documentation</title>
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/classic.css" type="text/css" />
+    
+    <script id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">CPNest 0.11.3 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">cpnest.model</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cpnest.model</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABCMeta</span><span class="p">,</span><span class="n">abstractmethod</span><span class="p">,</span><span class="n">abstractproperty</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="n">inf</span>
+<span class="kn">from</span> <span class="nn">array</span> <span class="kn">import</span> <span class="n">array</span>
+<span class="kn">from</span> <span class="nn">.parameter</span> <span class="kn">import</span> <span class="n">LivePoint</span>
+<span class="kn">from</span> <span class="nn">numpy.random</span> <span class="kn">import</span> <span class="n">uniform</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;cpnest.model&#39;</span><span class="p">)</span>  <span class="c1"># &lt;--- for module-level logging</span>
+
+
+<div class="viewcode-block" id="Model"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model">[docs]</a><span class="k">class</span> <span class="nc">Model</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Base class for user&#39;s model. User should subclass this</span>
+<span class="sd">    and implement log_likelihood, names and bounds</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">__metaclass__</span> <span class="o">=</span> <span class="n">ABCMeta</span>
+    <span class="n">names</span><span class="o">=</span><span class="p">[]</span> <span class="c1"># Names of parameters, e.g. [&#39;p1&#39;,&#39;p2&#39;]</span>
+    <span class="n">bounds</span><span class="o">=</span><span class="p">[]</span> <span class="c1"># Bounds of prior as list of tuples, e.g. [(min1,max1), (min2,max2), ...]</span>
+
+<div class="viewcode-block" id="Model.in_bounds"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.in_bounds">[docs]</a>    <span class="k">def</span> <span class="nf">in_bounds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">param</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks whether param lies within the bounds</span>
+
+<span class="sd">        -----------</span>
+<span class="sd">        Parameters:</span>
+<span class="sd">            param: :obj:`cpnest.parameter.LivePoint`</span>
+
+<span class="sd">        -----------</span>
+<span class="sd">        Return:</span>
+<span class="sd">            True: if all dimensions are within the bounds</span>
+<span class="sd">            False: otherwise</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">param</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Model.new_point"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.new_point">[docs]</a>    <span class="k">def</span> <span class="nf">new_point</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a new LivePoint, drawn from within bounds</span>
+
+<span class="sd">        -----------</span>
+<span class="sd">        Return:</span>
+<span class="sd">            p: :obj:`cpnest.parameter.LivePoint`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logP</span><span class="o">=-</span><span class="n">inf</span>
+        <span class="k">while</span><span class="p">(</span><span class="n">logP</span><span class="o">==-</span><span class="n">inf</span><span class="p">):</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="n">LivePoint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">,</span>
+                          <span class="n">d</span><span class="o">=</span><span class="n">array</span><span class="p">(</span><span class="s1">&#39;d&#39;</span><span class="p">,</span>
+                                      <span class="p">[</span><span class="n">uniform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span>
+                                               <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+                                       <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">)</span> <span class="p">]</span>
+                                 <span class="p">)</span>
+                         <span class="p">)</span>
+            <span class="n">logP</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prior</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">p</span></div>
+
+<div class="viewcode-block" id="Model.log_likelihood"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.log_likelihood">[docs]</a>    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">log_likelihood</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">param</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        returns log likelihood of given parameter</span>
+
+<span class="sd">        ------------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">            param: :obj:`cpnest.parameter.LivePoint`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+
+<div class="viewcode-block" id="Model.log_prior"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.log_prior">[docs]</a>    <span class="k">def</span> <span class="nf">log_prior</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">param</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns log of prior.</span>
+<span class="sd">        Default is flat prior within bounds</span>
+
+<span class="sd">        ----------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">            param: :obj:`cpnest.parameter.LivePoint`</span>
+
+<span class="sd">        ----------</span>
+<span class="sd">        Return:</span>
+<span class="sd">            0 if param is in bounds</span>
+<span class="sd">            -np.inf otherwise</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_bounds</span><span class="p">(</span><span class="n">param</span><span class="p">):</span>
+            <span class="k">return</span> <span class="mf">0.0</span>
+        <span class="k">else</span><span class="p">:</span> <span class="k">return</span> <span class="o">-</span><span class="n">inf</span></div>
+
+<div class="viewcode-block" id="Model.potential"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.potential">[docs]</a>    <span class="k">def</span> <span class="nf">potential</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">param</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        returns the potential energy as minus the log prior</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">        param: :obj:`cpnest.parameter.LivePoint`</span>
+
+<span class="sd">        ----------</span>
+<span class="sd">        Return:</span>
+<span class="sd">            :obj: -`cpnest.model.log_prior`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prior</span><span class="p">(</span><span class="n">param</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Model.force"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.force">[docs]</a>    <span class="k">def</span> <span class="nf">force</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">param</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        returns the force (-grad potential)</span>
+<span class="sd">        Required for Hamiltonian sampling</span>
+
+<span class="sd">        ----------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">        param: :obj:`cpnest.parameter.LivePoint`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+
+<div class="viewcode-block" id="Model.strsample"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.strsample">[docs]</a>    <span class="k">def</span> <span class="nf">strsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">sample</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a string representation for the sample to be written</span>
+<span class="sd">        to the output file. User may overload for additional output</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">            param: :obj:`cpnest.parameter.LivePoint`</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Return:</span>
+<span class="sd">            line: :string:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">line</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0:.20e}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="n">n</span><span class="p">])</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">sample</span><span class="o">.</span><span class="n">names</span><span class="p">)</span>
+        <span class="n">line</span><span class="o">+=</span><span class="s1">&#39;</span><span class="si">{0:20e}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">logL</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">line</span></div>
+
+<div class="viewcode-block" id="Model.header"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.header">[docs]</a>    <span class="k">def</span> <span class="nf">header</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a string with the output file header</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\t</span><span class="s1">logL&#39;</span></div>
+
+<div class="viewcode-block" id="Model.from_normalised"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.from_normalised">[docs]</a>    <span class="k">def</span> <span class="nf">from_normalised</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalised_value</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Maps from [0,1]^Ndim to the full range of the parameters</span>
+<span class="sd">        Inverse of to_normalised()</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">            normalised_vaue: array-like values in range (0,1)</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            point: :obj:`cpnest.parameter.LivePoint`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">d</span><span class="o">=</span><span class="n">array</span><span class="p">(</span><span class="s1">&#39;d&#39;</span><span class="p">,</span>
+                <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                 <span class="o">+</span> <span class="n">normalised_value</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+                 <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">)]</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">LivePoint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">,</span> <span class="n">d</span><span class="o">=</span><span class="n">d</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Model.to_normalised"><a class="viewcode-back" href="../../cpnest.html#cpnest.model.Model.to_normalised">[docs]</a>    <span class="k">def</span> <span class="nf">to_normalised</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Maps the bounds of the parameters onto [-1,1]</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Parameter:</span>
+<span class="sd">            point: :obj:`cpnest.parameter.LivePoint`</span>
+<span class="sd">        ----------</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            normalised_value: :obj:`array.array`</span>
+<span class="sd">                The values of the parameter mapped into the Ndim-cube</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">array</span><span class="p">(</span><span class="s1">&#39;d&#39;</span><span class="p">,</span> <span class="p">[(</span><span class="n">v</span><span class="o">-</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">/</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">b</span>
+                           <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">)])</span></div></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">CPNest 0.11.3 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">cpnest.model</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017-2021, W. Del Pozzo, J. Veitch.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 3.5.4.
+    </div>
+  </body>
+</html>
