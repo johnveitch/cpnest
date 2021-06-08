@@ -164,7 +164,7 @@ class MetropolisHastingsSampler(Sampler):
 
             sub_counter = 0
             sub_accepted = 0
-            logp_old = oldparam.logP
+            logp_old = self.model.log_prior(oldparam)
 
             while True:
 
