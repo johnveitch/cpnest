@@ -16,14 +16,14 @@ class GaussianMixtureModel(cpnest.model.Model):
                 data.append(np.random.normal(0.5,0.5))
             else:
                 data.append(np.random.normal(-1.5,0.03))
-        
+
         self.data = np.array(data)
-    
+
     def log_likelihood(self,x):
         w = x['weight']
-        logL1 = np.sum(np.log(w)-np.log(x['sigma1'])-0.5*((self.data-x['mean1'])/x['sigma1'])**2)
-        logL2 = np.sum(np.log(1.0-w)-np.log(x['sigma2'])-0.5*((self.data-x['mean2'])/x['sigma2'])**2)
-        logL = np.logaddexp(logL1,logL2)
+        logL1 = np.log(w)-np.log(x['sigma1'])-0.5*((self.data-x['mean1'])/x['sigma1'])**2
+        logL2 = np.log(1.0-w)-np.log(x['sigma2'])-0.5*((self.data-x['mean2'])/x['sigma2'])**2
+        logL = np.logaddexp(logL1, logL2).sum()
         return logL
 
     def log_prior(self,p):
