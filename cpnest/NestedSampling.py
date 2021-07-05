@@ -413,8 +413,8 @@ class NestedSampler(object):
             while pool.has_next():
                 acceptance,sub_acceptance,self.jumps,x = pool.get_next()
                 if np.isnan(x.logL):
-                    self.logger.warn("Likelihood function returned NaN for params "+str(x))
-                    self.logger.warn("You may want to check your likelihood function")
+                    self.logger.warning("Likelihood function returned NaN for params "+str(x))
+                    self.logger.warning("You may want to check your likelihood function")
                 if np.isfinite(x.logP) and np.isfinite(x.logL):
                     self.live_points.set.remote(i,x)
                     i += 1

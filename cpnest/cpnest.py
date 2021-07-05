@@ -123,8 +123,8 @@ class CPNest(object):
         
         self.nthreads = self.nsamplers+1
         if self.nthreads > self.max_threads:
-            self.logger.warn("More cpu than available are being requested!")
-            self.logger.warn("This might result in excessive overhead")
+            self.logger.warning("More cpu than available are being requested!")
+            self.logger.warning("This might result in excessive overhead")
         
         self.pool = None
         ray.init(num_cpus=self.nthreads, ignore_reinit_error=True)
