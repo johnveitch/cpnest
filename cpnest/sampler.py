@@ -134,7 +134,7 @@ class Sampler(object):
         evolves it. Proposed sample is then sent back
         to :obj:`cpnest.NestedSampler`.
         """
-        (Nmcmc, outParam) = next(self.yield_sample(old, logLmin))
+        (Nmcmc, outParam) = self.return_sample(old, logLmin)
         # Send the sample to the Nested Sampler
 
         self.counter += 1
@@ -158,42 +158,40 @@ class MetropolisHastingsSampler(Sampler):
     metropolis-hastings acceptance rule
     for :obj:`cpnest.proposal.EnembleProposal`
     """
-    def yield_sample(self, oldparam, logLmin):
+    def return_sample(self, oldparam, logLmin):
+
+        sub_counter = 0
+        sub_accepted = 0
+        logp_old = self.model.log_prior(oldparam)
 
         while True:
 
-            sub_counter = 0
-            sub_accepted = 0
-            logp_old = self.model.log_prior(oldparam)
+            sub_counter += 1
+            newparam = self.proposal.get_sample(oldparam.copy())
+            newparam.logP = self.model.log_prior(newparam)
 
-            while True:
+            if newparam.logP-logp_old + self.proposal.log_J > log(random()):
 
-                sub_counter += 1
-                newparam = self.proposal.get_sample(oldparam.copy())
-                newparam.logP = self.model.log_prior(newparam)
+                newparam.logL = self.model.log_likelihood(newparam)
 
-                if newparam.logP-logp_old + self.proposal.log_J > log(random()):
+                if newparam.logL > logLmin:
 
-                    newparam.logL = self.model.log_likelihood(newparam)
+                    oldparam = newparam.copy()
+                    logp_old = newparam.logP
+                    sub_accepted+=1
 
-                    if newparam.logL > logLmin:
+            # append the sample to the array of samples
+            self.samples.append(oldparam)
 
-                        oldparam = newparam.copy()
-                        logp_old = newparam.logP
-                        sub_accepted+=1
+            if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
+                break
 
-                # append the sample to the array of samples
-                self.samples.append(oldparam)
-
-                if (sub_counter >= self.Nmcmc and sub_accepted > 0 ) or sub_counter >= self.maxmcmc:
-                    break
-
-            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.mcmc_accepted += sub_accepted
-            self.mcmc_counter += sub_counter
-            self.acceptance    = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            # Yield the new sample
-            yield (sub_counter, oldparam)
+        self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+        self.mcmc_accepted += sub_accepted
+        self.mcmc_counter += sub_counter
+        self.acceptance    = float(self.mcmc_accepted)/float(self.mcmc_counter)
+        # return the new sample
+        return (sub_counter, oldparam)
 
 @ray.remote
 class HamiltonianMonteCarloSampler(Sampler):
@@ -201,42 +199,40 @@ class HamiltonianMonteCarloSampler(Sampler):
     HamiltonianMonteCarlo acceptance rule
     for :obj:`cpnest.proposal.HamiltonianProposal`
     """
-    def yield_sample(self, oldparam, logLmin):
+    def return_sample(self, oldparam, logLmin):
+
+        sub_accepted    = 0
+        sub_counter     = 0
 
         while True:
 
-            sub_accepted    = 0
-            sub_counter     = 0
+            sub_counter += 1
+            newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
 
-            while True:
+            if self.proposal.log_J > np.log(random()):
 
-                sub_counter += 1
-                newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
+                if newparam.logL > logLmin:
+                    oldparam        = newparam.copy()
+                    sub_accepted   += 1
 
-                if self.proposal.log_J > np.log(random()):
+            # append the sample to the array of samples
+            self.samples.append(oldparam)
+        
+            if sub_counter >= self.Nmcmc and sub_accepted > 0:
+                break
 
-                    if newparam.logL > logLmin:
-                        oldparam        = newparam.copy()
-                        sub_accepted   += 1
+            if sub_counter >= self.maxmcmc:
+                break
 
-                # append the sample to the array of samples
-                self.samples.append(oldparam)
-            
-                if sub_counter >= self.Nmcmc and sub_accepted > 0:
-                    break
-
-                if sub_counter >= self.maxmcmc:
-                    break
-
-            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.mcmc_accepted += sub_accepted
-            self.mcmc_counter  += sub_counter
-            self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+        self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+        self.mcmc_accepted += sub_accepted
+        self.mcmc_counter  += sub_counter
+        self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
 
 #            for p in self.proposal.proposals:
 #                p.update_time_step(self.acceptance)
 #                p.update_trajectory_length(safety=10)
-            yield (sub_counter, oldparam)
+        return (sub_counter, oldparam)
 
 @ray.remote
 class SliceSampler(Sampler):
@@ -284,100 +280,98 @@ class SliceSampler(Sampler):
         self.R  = self.R + 1.0
         self.Ne = self.Ne + 1
 
-    def yield_sample(self, oldparam, logLmin):
+    def return_sample(self, oldparam, logLmin):
+
+        sub_accepted    = 0
+        sub_counter     = 0
 
         while True:
+            # Set Initial Interval Boundaries
+            self.reset_boundaries()
+            sub_counter += 1
 
-            sub_accepted    = 0
-            sub_counter     = 0
+            direction_vector = self.proposal.get_direction(mu = self.mu)
+            if not(isinstance(direction_vector,parameter.LivePoint)):
+                direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
 
-            while True:
-                # Set Initial Interval Boundaries
-                self.reset_boundaries()
-                sub_counter += 1
+            Y = logLmin
+            Yp = oldparam.logP-np.random.exponential()
+            J = np.floor(self.max_steps_out*np.random.uniform(0,1))
+            K = (self.max_steps_out-1)-J
+            # keep on expanding until we get outside the logL boundary from the left
+            # or the prior bound, whichever comes first
+            while J > 0:
 
-                direction_vector = self.proposal.get_direction(mu = self.mu)
-                if not(isinstance(direction_vector,parameter.LivePoint)):
-                    direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
+                parameter_left = direction_vector * self.L + oldparam
 
-                Y = logLmin
-                Yp = oldparam.logP-np.random.exponential()
-                J = np.floor(self.max_steps_out*np.random.uniform(0,1))
-                K = (self.max_steps_out-1)-J
-                # keep on expanding until we get outside the logL boundary from the left
-                # or the prior bound, whichever comes first
-                while J > 0:
-
-                    parameter_left = direction_vector * self.L + oldparam
-
-                    if self.model.in_bounds(parameter_left):
-                        if Yp > self.model.log_prior(parameter_left):
-                            break
-                        else:
-                            self.increase_left_boundary()
-                            J -= 1
-                    # if we get out of bounds, break out
-                    else:
+                if self.model.in_bounds(parameter_left):
+                    if Yp > self.model.log_prior(parameter_left):
                         break
-
-                # keep on expanding until we get outside the logL boundary from the right
-                # or the prior bound, whichever comes first
-                while K > 0:
-
-                    parameter_right = direction_vector * self.R + oldparam
-
-                    if self.model.in_bounds(parameter_right):
-
-                        if Yp > self.model.log_prior(parameter_right):
-                            break
-                        else:
-                            self.increase_right_boundary()
-                            K -= 1
-                    # if we get out of bounds, break out
                     else:
-                        break
-
-                # slice sample the likelihood-bound prior
-                slice = 0
-                while slice < self.max_slices:
-                    # generate a new point between the boundaries we identified
-                    Xprime        = np.random.uniform(self.L,self.R)
-                    newparam      = direction_vector * Xprime + oldparam
-                    newparam.logP = self.model.log_prior(newparam)
-
-                    if newparam.logP > Yp:
-                        # compute the new value of logL
-                        newparam.logL = self.model.log_likelihood(newparam)
-                        if newparam.logL > Y:
-                            oldparam     = newparam.copy()
-                            sub_accepted += 1
-                            break
-                    # adapt the intervals shrinking them
-                    if Xprime < 0.0:
-                        self.L = Xprime
-                        self.Nc = self.Nc + 1
-                    elif Xprime > 0.0:
-                        self.R = Xprime
-                        self.Nc = self.Nc + 1
-
-                    slice += 1
-
-                if sub_counter >= self.Nmcmc and sub_accepted > 0:
+                        self.increase_left_boundary()
+                        J -= 1
+                # if we get out of bounds, break out
+                else:
                     break
 
-                if sub_counter >= self.maxmcmc:
+            # keep on expanding until we get outside the logL boundary from the right
+            # or the prior bound, whichever comes first
+            while K > 0:
+
+                parameter_right = direction_vector * self.R + oldparam
+
+                if self.model.in_bounds(parameter_right):
+
+                    if Yp > self.model.log_prior(parameter_right):
+                        break
+                    else:
+                        self.increase_right_boundary()
+                        K -= 1
+                # if we get out of bounds, break out
+                else:
                     break
 
-                self.samples.append(oldparam)
-            self.sub_acceptance = float(sub_accepted)/float(sub_counter)
-            self.mcmc_accepted += sub_accepted
-            self.mcmc_counter  += sub_counter
-            self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+            # slice sample the likelihood-bound prior
+            slice = 0
+            while slice < self.max_slices:
+                # generate a new point between the boundaries we identified
+                Xprime        = np.random.uniform(self.L,self.R)
+                newparam      = direction_vector * Xprime + oldparam
+                newparam.logP = self.model.log_prior(newparam)
 
-            if logLmin == -np.inf:
-                self.adapt_length_scale()
+                if newparam.logP > Yp:
+                    # compute the new value of logL
+                    newparam.logL = self.model.log_likelihood(newparam)
+                    if newparam.logL > Y:
+                        oldparam     = newparam.copy()
+                        sub_accepted += 1
+                        break
+                # adapt the intervals shrinking them
+                if Xprime < 0.0:
+                    self.L = Xprime
+                    self.Nc = self.Nc + 1
+                elif Xprime > 0.0:
+                    self.R = Xprime
+                    self.Nc = self.Nc + 1
 
-            yield (sub_counter, oldparam)
+                slice += 1
+
+            if sub_counter >= self.Nmcmc and sub_accepted > 0:
+                break
+
+            if sub_counter >= self.maxmcmc:
+                break
+
+            self.samples.append(oldparam)
+        self.sub_acceptance = float(sub_accepted)/float(sub_counter)
+        self.mcmc_accepted += sub_accepted
+        self.mcmc_counter  += sub_counter
+        self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
+
+        if logLmin == -np.inf:
+            self.adapt_length_scale()
+
+        return (sub_counter, oldparam)
 
 @ray.remote
 class SamplersCycle(Sampler):

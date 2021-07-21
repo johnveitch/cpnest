@@ -242,7 +242,7 @@ class NestedSampler(object):
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        loggername = 'cpnest.NestedSampling.NestedSampler'
+        loggername          = 'cpnest.NestedSampling.NestedSampler'
         self.logger         = logging.getLogger(loggername)
         self.logger.addHandler(logging.StreamHandler())
         self.periodic_checkpoint_interval = periodic_checkpoint_interval
@@ -346,24 +346,25 @@ class NestedSampler(object):
 
     def consume_sample(self, pool):
         """
-        consumes a sample from the consumer_pipes
+        requests the workers to update the live points
         and updates the evidence logZ
         """
-        # Increment the state of the evidence integration
-        self.worst   = ray.get(self.live_points.get_worst.remote(self.nthreads))
-        self.logLmax = ray.get(self.live_points.get_logLmax.remote())
-        self.logLmin = ray.get(self.live_points.get_logLmin.remote())
-        logLtmp = [p.logL for p in self.worst]
-        logZ = ray.get(self.live_points.get_logZ.remote())
-        info = ray.get(self.live_points.get_info.remote())
+        # Get the worst live points
+        self.worst   = self.live_points.get_worst.remote(self.nthreads)
+        # get the necessary statistics from the LivePoint actor
+        self.logLmin, self.logLmax, logZ, info = ray.get(self.live_points.get_logLs_logZ_info.remote())
+        
+        if self.verbose:
+            logLtmp = ray.get(self.live_points.get_worst_logLs.remote())
 
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
-        # set up  the ensemble statistics
+        # set up the ensemble statistics
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
 
-        starting_points = ray.get(self.live_points.sample.remote(self.nthreads))
+        starting_points = self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)
+
         for v in starting_points:
             pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
 
@@ -472,7 +473,7 @@ class NestedSampler(object):
         self.logger.critical('Information: {0:.2f}'.format(self.info))
 
         # Some diagnostics
-        if self.verbose>1 :
+        if self.verbose > 1 :
             ray.get(self.live_points.plot.remote(os.path.join(self.output_folder,'logXlogL.png')))
         return self.logZ, self.nested_samples
 
@@ -699,9 +700,8 @@ class LivePoints:
     def get_worst(self, n):
         """
         selects the lowest likelihood N live points
-        for evolution
+        and updates the integral state
         """
-#        self._list.sort(key=attrgetter('logL'))
         self.logLmin = np.float128(self._list[n-1].logL)
         self.logLmax = np.float128(self._list[-1].logL)
         self.worst = self._list[:n]
@@ -732,6 +732,12 @@ class LivePoints:
         return the log evidence
         """
         return self.state.logZ
+
+    def get_logLs_logZ_info(self):
+        return self.get_logLmin(), self.get_logLmax(), self.get_logZ(), self.get_info()
+
+    def get_worst_logLs(self):
+        return np.array([w.logL for w in self.worst])
 
     def finalise(self):
         # final adjustments
