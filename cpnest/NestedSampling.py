@@ -363,7 +363,10 @@ class NestedSampler(object):
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
             pass
 
-        starting_points = self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)
+        if self.nthreads == 1:
+            starting_points = [self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)]
+        else:
+            starting_points = self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)
 
         for v in starting_points:
             pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
