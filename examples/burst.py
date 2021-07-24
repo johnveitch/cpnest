@@ -3,7 +3,7 @@ import cpnest.model
 
 def sine_gaussian(x,t):
     e = (t-x['t0'])/x['tau']
-    return x['A']*np.exp(-e**2)*np.cos(2*np.pi*x['f']+x['phi'])
+    return x['A']*np.exp(-e**2)*np.cos(2*np.pi*x['f']*t + x['phi'])
 
 class BurstModel(cpnest.model.Model):
     """
