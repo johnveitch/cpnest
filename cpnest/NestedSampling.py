@@ -290,8 +290,7 @@ class NestedSampler(object):
                 l.append(p)
                 pbar.update()
 
-        self.live_points = LivePoints.remote(l, self.nthreads)
-        self.live_points.update_mean_covariance.remote()
+        self.live_points = LivePoints(l, self.nthreads)
 
     def setup_output(self,output):
         """
@@ -333,9 +332,9 @@ class NestedSampler(object):
         with open(self.evidence_file,"w") as f:
 
             f.write('#logZ\tlogLmax\tH\n')
-            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(ray.get(self.live_points.get_logZ.remote()),
-                                                       ray.get(self.live_points.get_logLmax.remote()),
-                                                       ray.get(self.live_points.get_info.remote())))
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.live_points.get_logZ(),
+                                                       self.live_points.get_logLmax(),
+                                                       self.live_points.get_info()))
 
     def setup_random_seed(self,seed):
         """
@@ -350,23 +349,24 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Get the worst live points
-        self.worst   = self.live_points.get_worst.remote(self.nthreads)
+        self.worst   = self.live_points.get_worst(self.nthreads)
         # get the necessary statistics from the LivePoint actor
-        self.logLmin, self.logLmax, logZ, info = ray.get(self.live_points.get_logLs_logZ_info.remote())
+        self.logLmin, self.logLmax, logZ, info = self.live_points.get_logLs_logZ_info()
         
         if self.verbose:
-            logLtmp = ray.get(self.live_points.get_worst_logLs.remote())
+            logLtmp = self.live_points.get_worst_logLs()
 
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
         # set up the ensemble statistics
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
-            pass
+        if (self.iteration % self.nlive) < self.nthreads:
+            for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+                pass
 
         if self.nthreads == 1:
-            starting_points = [self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)]
+            starting_points = [self.live_points.sample(self.nthreads)]
         else:
-            starting_points = self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)
+            starting_points = self.live_points.sample(self.nthreads)
 
         for v in starting_points:
             pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
@@ -374,17 +374,17 @@ class NestedSampler(object):
         i = 0
         while pool.has_next():
 
-            acceptance, sub_acceptance, self.jumps, proposed = pool.get_next()
+            acceptance, sub_acceptance, self.jumps, proposed = pool.get_next_unordered()
 
             if proposed.logL > self.logLmin:
                 # replace worst point with new one
-                self.live_points.insert.remote(i%self.nthreads,proposed.copy())
+                self.live_points.insert(i%self.nthreads,proposed.copy())
                 self.accepted  += 1
                 self.iteration += 1
 
                 if self.verbose:
                     self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                        .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
+                        .format(self.iteration, self.jumps, self.acceptance, i%self.nthreads, acceptance, sub_acceptance, info,\
                         logLtmp[i%self.nthreads], proposed.logL, self.condition, logZ, self.logLmax))
             
                 i += 1
@@ -395,10 +395,10 @@ class NestedSampler(object):
 
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
         
-        self.live_points.remove_n_worst_points.remote(self.nthreads)
-        self.live_points.update_mean_covariance.remote()
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
-            pass
+        self.live_points.remove_n_worst_points(self.nthreads)
+        self.live_points.update_mean_covariance()
+#        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+#            pass
 
     def reset(self, pool):
         """
@@ -411,7 +411,7 @@ class NestedSampler(object):
 
         # send all live points to the samplers for start
         for i in range(self.nlive):
-            pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
+            pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get(i))
 
         i = 0
 
@@ -422,14 +422,14 @@ class NestedSampler(object):
                     self.logger.warning("Likelihood function returned NaN for params "+str(x))
                     self.logger.warning("You may want to check your likelihood function")
                 if np.isfinite(x.logP) and np.isfinite(x.logL):
-                    self.live_points.set.remote(i,x)
+                    self.live_points.set(i,x)
                     i += 1
                     pbar.update()
                 else:
-                    pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
+                    pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get(i))
 
-        self.live_points.update_mean_covariance.remote()
-        self.live_points.set_ordered_list.remote()
+        self.live_points.update_mean_covariance()
+        self.live_points.set_ordered_list()
         
         if self.verbose:
             sys.stderr.write("\n")
@@ -467,8 +467,8 @@ class NestedSampler(object):
             sys.exit(130)
 
         # Refine evidence estimate
-        self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
-        self.info = ray.get(self.live_points.get_info.remote())
+        self.logZ, self.nested_samples = self.live_points.finalise()
+        self.info = self.live_points.get_info()
         # output the chain and evidence
         self.write_chain_to_file()
         self.write_evidence_to_file()
@@ -477,7 +477,7 @@ class NestedSampler(object):
 
         # Some diagnostics
         if self.verbose > 1 :
-            ray.get(self.live_points.plot.remote(os.path.join(self.output_folder,'logXlogL.png')))
+            self.live_points.plot(os.path.join(self.output_folder,'logXlogL.png'))
         return self.logZ, self.nested_samples
 
     def checkpoint(self):
@@ -494,12 +494,12 @@ class NestedSampler(object):
         the nested sampling run (rolling=True) or for the whole run
         (rolling=False).
         """
-        if not ray.get(self.live_points.get_insertion_indices.remote()):
+        if not self.live_points.get_insertion_indices():
             return
         if rolling:
-            indices = ray.get(self.live_points.get_insertion_indices.remote())[-self.nlive:]
+            indices = self.live_points.get_insertion_indices()[-self.nlive:]
         else:
-            indices = ray.get(self.live_points.get_insertion_indices.remote())
+            indices = self.live_points.get_insertion_indices()
 
         D, p = kstest(indices, 'uniform', args=(0, 1))
         if rolling:
@@ -511,7 +511,7 @@ class NestedSampler(object):
         if filename is not None:
             np.savetxt(os.path.join(
                 self.output_folder, filename),
-                ray.get(self.live_points.get_insertion_indices.remote()),
+                self.live_points.get_insertion_indices(),
                 newline='\n',delimiter=' ')
 
     @classmethod
@@ -525,7 +525,7 @@ class NestedSampler(object):
         obj.model = usermodel
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         obj.live_points = LivePoints.remote(obj.live)
-        ray.get(obj.live_points._set_internal_state.remote(obj.integral_state))
+        obj.live_points._set_internal_state(obj.integral_state)
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(obj.live_points), range(obj.nthreads)):
@@ -545,7 +545,6 @@ class NestedSampler(object):
     def __setstate__(self, state):
         self.__dict__ = state
 
-@ray.remote
 class LivePoints:
     """
     ray remote actor class holding the live points pool

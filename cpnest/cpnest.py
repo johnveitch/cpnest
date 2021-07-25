@@ -485,7 +485,7 @@ class CPNest(object):
                                  ms=plotting_mcmc,
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
-            plot.plot_indices(ray.get(self.NS.live_points.get_insertion_indices.remote()), filename=os.path.join(self.output, 'insertion_indices.pdf'))
+            plot.plot_indices(self.NS.live_points.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def checkpoint(self):
         self.NS.checkpoint()

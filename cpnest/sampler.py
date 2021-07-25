@@ -147,6 +147,8 @@ class Sampler(object):
         if self.verbose > 3:
             self.logger.info("Sampler {0} -- setting ensemble".format(os.getpid()))
 
+        self.ensemble = ensemble
+
         for p in self.proposal.proposals:
             if isinstance(p, EnsembleProposal):
                 p.set_ensemble(ensemble)

@@ -126,7 +126,7 @@ class EnsembleSlice(EnsembleProposal):
         mean and covariance matrix are recomputed when it is updated
         """
         super(EnsembleSlice,self).set_ensemble(ensemble)
-        self.mean, self.covariance = ray.get(ensemble.get_mean_covariance.remote())
+        self.mean, self.covariance = ensemble.get_mean_covariance()
         
 class EnsembleSliceDifferential(EnsembleSlice):
     """
@@ -138,7 +138,7 @@ class EnsembleSliceDifferential(EnsembleSlice):
         """
         Draws two random points and returns their direction
         """
-        subset = ray.get(self.ensemble.sample.remote(2))
+        subset = self.ensemble.sample(2)
         direction = reduce(LivePoint.__sub__,subset)
         return direction * mu
 
@@ -209,7 +209,7 @@ class EnsembleWalk(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        subset = ray.get(self.ensemble.sample.remote(self.Npoints))
+        subset = self.ensemble.sample(self.Npoints)
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
         for x in subset:
@@ -233,7 +233,7 @@ class EnsembleStretch(EnsembleProposal):
         """
         scale = 2.0 # Will stretch factor in (1/scale,scale)
         # Pick a random point to move toward
-        a = ray.get(self.ensemble.sample.remote(1))[0]
+        a = self.ensemble.sample(1)[0]
         # Pick the scale factor
         x = uniform(-1,1)*log(scale)
         Z = exp(x)
@@ -263,7 +263,7 @@ class DifferentialEvolution(EnsembleProposal):
         ----------
         out: :obj:`cpnest.parameter.LivePoint`
         """
-        a, b = ray.get(self.ensemble.sample.remote(2))
+        a, b = self.ensemble.sample(2)
         sigma = 1e-4 # scatter around difference vector by this factor
         out = old + (b-a)*gauss(1.0,sigma)
         return out
@@ -291,7 +291,7 @@ class EnsembleEigenVector(EnsembleProposal):
         Recompute the eigenvectors and eigevalues
         of the covariance matrix of the ensemble
         """
-        self.eigen_values, self.eigen_vectors = ray.get(self.ensemble.get_eigen_quantities.remote())
+        self.eigen_values, self.eigen_vectors = self.ensemble.get_eigen_quantities()
 
     def get_sample(self,old):
         """
@@ -396,7 +396,7 @@ class HamiltonianProposal(EnsembleProposal):
         """
         self.ensemble = ensemble
         self.set_integration_parameters()
-        self.covariance = ray.get(self.ensemble.get_covariance.remote())
+        self.covariance = self.ensemble.get_covariance()
         self.set_mass_parameters()
         self.set_momenta_distribution()
         
@@ -415,7 +415,7 @@ class HamiltonianProposal(EnsembleProposal):
         This is an approximation which
         improves as the algorithm proceeds
         """
-        self.likelihood_gradient = ray.get(self.ensemble.get_likelihood_gradient.remote())
+        self.likelihood_gradient = self.ensemble.get_likelihood_gradient()
 
     def exact_unit_normal(self, q):
         v = self.likelihood_gradient(q)
@@ -470,7 +470,7 @@ class HamiltonianProposal(EnsembleProposal):
         longest and shortest principal axes
         (see http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.2.2).
         """
-        w, _                = ray.get(self.ensemble.get_eigen_quantities.remote())
+        w, _                = self.ensemble.get_eigen_quantities()
         self.dt             = w[0]
 
     def update_time_step(self, acceptance):
