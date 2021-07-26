@@ -363,10 +363,7 @@ class NestedSampler(object):
             for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
                 pass
 
-        if self.nthreads == 1:
-            starting_points = [self.live_points.sample(self.nthreads)]
-        else:
-            starting_points = self.live_points.sample(self.nthreads)
+        starting_points = self.live_points.sample(self.nthreads)
 
         for v in starting_points:
             pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
@@ -444,7 +441,7 @@ class NestedSampler(object):
             self.reset(pool)
 
         if self.prior_sampling:
-            self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
+            self.logZ, self.nested_samples = self.live_points.finalise()
             self.write_chain_to_file()
             self.write_evidence_to_file()
             self.logLmin = np.inf
