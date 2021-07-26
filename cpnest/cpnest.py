@@ -167,6 +167,7 @@ class CPNest(object):
             self.nlive    = nlive
             self.verbose  = verbose
             self.output   = output
+            self.nested_samples = None
             self.posterior_samples = None
             self.prior_sampling = prior_sampling
             self.user     = usermodel
@@ -210,7 +211,7 @@ class CPNest(object):
 
             self.resume_file = os.path.join(output, "nested_sampler_resume.pkl")
             if not os.path.exists(self.resume_file) or resume == False:
-                self.NS = NestedSampler(self.user,
+                self.NS = ray.remote(NestedSampler).remote(self.user,
                             nthreads       = self.nsamplers,
                             nlive          = nlive,
                             output         = output,
@@ -219,9 +220,8 @@ class CPNest(object):
                             prior_sampling = self.prior_sampling,
                             periodic_checkpoint_interval = periodic_checkpoint_interval)
             else:
-                self.NS = NestedSampler.resume(self.resume_file, self.user, self.pool)
-
-
+                self.NS = ray.remote(NestedSampler).resume(self.resume_file, self.user, self.pool)
+            
     def run(self):
         """
         Run the sampler
@@ -237,13 +237,13 @@ class CPNest(object):
                 signal.signal(signal.SIGUSR2, sighandler)
 
             try:
-                self.NS.nested_sampling_loop(self.pool)
+                self.NS.nested_sampling_loop.remote(self.pool)
             except CheckPoint:
                 self.checkpoint()
                 sys.exit(130)
 
             if self.verbose >= 2:
-                self.NS.check_insertion_indices(rolling=False,
+                self.NS.check_insertion_indices.remote(rolling=False,
                                                 filename='insertion_indices.dat')
                 self.logger.critical(
                     "Saving nested samples in {0}".format(self.output)
@@ -252,16 +252,16 @@ class CPNest(object):
                 self.logger.critical("Saving posterior samples in {0}".format(self.output))
                 self.posterior_samples = self.get_posterior_samples()
             else:
-                self.NS.check_insertion_indices(rolling=False,
+                self.NS.check_insertion_indices.remote(rolling=False,
                                                 filename=None)
                 self.nested_samples = self.get_nested_samples(filename=None)
                 self.posterior_samples = self.get_posterior_samples(
                     filename=None
                 )
 
-            if self.verbose>=3 or self.NS.prior_sampling:
+            if self.verbose>=3 or self.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
-            if self.verbose>=3 and not self.NS.prior_sampling:
+            if self.verbose>=3 and not self.prior_sampling:
                 self.mcmc_samples = self.get_mcmc_samples(filename=None)
             if self.verbose>=2:
                 self.plot(corner = False)
@@ -284,14 +284,16 @@ class CPNest(object):
         -------
         pos : :obj:`numpy.ndarray`
         """
+        self.output_folder = ray.get(self.NS.get_output_folder.remote())
         import numpy.lib.recfunctions as rfn
-        self.nested_samples = rfn.stack_arrays(
-                [s.asnparray()
-                    for s in self.NS.nested_samples]
-                ,usemask=False)
+        if self.nested_samples is None:
+            self.nested_samples = rfn.stack_arrays(
+                    [s.asnparray()
+                        for s in ray.get(self.NS.get_nested_samples.remote())]
+                    ,usemask=False)
         if filename:
             np.savetxt(os.path.join(
-                self.NS.output_folder, filename),
+                self.output_folder, filename),
                 self.nested_samples.ravel(),
                 header=' '.join(self.nested_samples.dtype.names),
                 newline='\n',delimiter=' ')
@@ -326,20 +328,20 @@ class CPNest(object):
 
             prior_samples = []
             mcmc_samples  = []
-            for file in os.listdir(self.NS.output_folder):
+            for file in os.listdir(self.output_folder):
                 if 'prior_samples' in file:
-                    prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
-                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+                    prior_samples.append(np.genfromtxt(os.path.join(self.output_folder,file), names = True))
+                    os.system('rm {0}'.format(os.path.join(self.output_folder,file)))
                 elif 'mcmc_chain' in file:
-                    mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
-                    os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+                    mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.output_folder,file), names = True)))
+                    os.system('rm {0}'.format(os.path.join(self.output_folder,file)))
 
             # first deal with the prior samples
             if len(prior_samples)>0:
                 self.prior_samples = stack_arrays([p for p in prior_samples])
                 if filename:
                     np.savetxt(os.path.join(
-                           self.NS.output_folder,'prior.dat'),
+                           self.output_folder,'prior.dat'),
                            self.prior_samples.ravel(),
                            header=' '.join(self.prior_samples.dtype.names),
                            newline='\n',delimiter=' ')
@@ -348,7 +350,7 @@ class CPNest(object):
                 self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
                 if filename:
                     np.savetxt(os.path.join(
-                           self.NS.output_folder,'mcmc.dat'),
+                           self.output_folder,'mcmc.dat'),
                            self.mcmc_samples.ravel(),
                            header=' '.join(self.mcmc_samples.dtype.names),
                            newline='\n',delimiter=' ')
@@ -356,7 +358,7 @@ class CPNest(object):
         # TODO: Replace with something to output samples in whatever format
         if filename:
             np.savetxt(os.path.join(
-                self.NS.output_folder, filename),
+                self.output_folder, filename),
                 posterior_samples.ravel(),
                 header=' '.join(posterior_samples.dtype.names),
                 newline='\n',delimiter=' ')
@@ -382,13 +384,13 @@ class CPNest(object):
 
         # read in the samples from the prior coming from each sampler
         prior_samples = []
-        for file in os.listdir(self.NS.output_folder):
+        for file in os.listdir(self.output_folder):
             if 'prior_samples' in file:
-                prior_samples.append(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True))
-                os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+                prior_samples.append(np.genfromtxt(os.path.join(self.output_folder,file), names = True))
+                os.system('rm {0}'.format(os.path.join(self.output_folder,file)))
 
         # if we sampled the prior, the nested samples are samples from the prior
-        if self.NS.prior_sampling:
+        if self.prior_sampling:
             prior_samples.append(self.get_nested_samples())
 
         if not prior_samples:
@@ -398,7 +400,7 @@ class CPNest(object):
         prior_samples = stack_arrays([p for p in prior_samples])
         if filename:
             np.savetxt(os.path.join(
-                       self.NS.output_folder, filename),
+                       self.output_folder, filename),
                        self.prior_samples.ravel(),
                        header=' '.join(self.prior_samples.dtype.names),
                        newline='\n',delimiter=' ')
@@ -424,10 +426,10 @@ class CPNest(object):
         from numpy.lib.recfunctions import stack_arrays
 
         mcmc_samples  = []
-        for file in os.listdir(self.NS.output_folder):
+        for file in os.listdir(self.output_folder):
             if 'mcmc_chain' in file:
-                mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.NS.output_folder,file), names = True)))
-                os.system('rm {0}'.format(os.path.join(self.NS.output_folder,file)))
+                mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.output_folder,file), names = True)))
+                os.system('rm {0}'.format(os.path.join(self.output_folder,file)))
 
         if not mcmc_samples:
             self.logger.critical('ERROR, no MCMC samples found!')
@@ -437,7 +439,7 @@ class CPNest(object):
         mcmc_samples = stack_arrays([p for p in mcmc_samples])
         if filename:
             np.savetxt(os.path.join(
-                       self.NS.output_folder, filename),
+                       self.output_folder, filename),
                        self.mcmc_samples.ravel(),
                        header=' '.join(self.mcmc_samples.dtype.names),
                        newline='\n',delimiter=' ')
@@ -448,17 +450,17 @@ class CPNest(object):
         Make diagnostic plots of the posterior and nested samples
         """
         pos = self.posterior_samples
-        if self.verbose>=3 and self.NS.prior_sampling is False:
+        if self.verbose>=3 and self.prior_sampling is False:
             pri = self.prior_samples
             mc  = self.mcmc_samples
-        elif self.verbose>=3 or self.NS.prior_sampling is True:
+        elif self.verbose>=3 or self.prior_sampling is True:
             pri = self.prior_samples
             mc  = None
         else:
             pri = None
             mc  = None
         from . import plot
-        if self.NS.prior_sampling is False:
+        if self.prior_sampling is False:
             for n in pos.dtype.names:
                 plot.plot_hist(pos[n].ravel(), name = n,
                                prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
@@ -466,7 +468,7 @@ class CPNest(object):
                                filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
         for n in self.nested_samples.dtype.names:
             plot.plot_chain(self.nested_samples[n],name=n,filename=os.path.join(self.output,'nschain_{0}.pdf'.format(n)))
-        if self.NS.prior_sampling is False:
+        if self.prior_sampling is False:
             import numpy as np
             plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
             if pri is not None:
@@ -485,7 +487,7 @@ class CPNest(object):
                                  ms=plotting_mcmc,
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
-            plot.plot_indices(self.NS.live_points.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices.pdf'))
+            plot.plot_indices(ray.get(self.NS.get_live_points.remote()).get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def checkpoint(self):
         self.NS.checkpoint()
