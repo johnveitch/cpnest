@@ -178,7 +178,6 @@ class _NSintegralState(object):
             state['logger'] = logging.getLogger(loggername)
         self.__dict__ = state
 
-
 class NestedSampler(object):
     """
     Nested Sampler class.
@@ -276,7 +275,7 @@ class NestedSampler(object):
         header.close()
         self.initialise_live_points()
         self.initialised    = False
-
+    
     def initialise_live_points(self):
 
         l = []
@@ -394,8 +393,6 @@ class NestedSampler(object):
         
         self.live_points.remove_n_worst_points(self.nthreads)
         self.live_points.update_mean_covariance()
-#        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
-#            pass
 
     def reset(self, pool):
         """
@@ -510,7 +507,16 @@ class NestedSampler(object):
                 self.output_folder, filename),
                 self.live_points.get_insertion_indices(),
                 newline='\n',delimiter=' ')
-
+    
+    def get_output_folder(self):
+        return self.output_folder
+    
+    def get_nested_samples(self):
+        return self.nested_samples
+    
+    def get_live_points(self):
+        return self.live_points
+    
     @classmethod
     def resume(cls, filename, usermodel, pool):
         """
