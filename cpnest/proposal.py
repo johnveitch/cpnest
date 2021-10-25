@@ -9,6 +9,7 @@ from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
 from .nest2pos import acl
 from .parameter import LivePoint
+from .NestedSampling import LivePoints
 import ray
     
 class Proposal(object):
@@ -389,16 +390,9 @@ class HamiltonianProposal(EnsembleProposal):
             
     def set_ensemble(self, ensemble):
         """
-        override the set ensemble method
-        to update masses, momenta distribution
-        and to heuristically estimate the normal vector to the
-        hard boundary defined by logLmin.
+        FIXME:
         """
         self.ensemble = ensemble
-        self.set_integration_parameters()
-        self.covariance = self.ensemble.get_covariance()
-        self.set_mass_parameters()
-        self.set_momenta_distribution()
         
         if self.analytical_gradient == None:
             self.update_normal_vector()
@@ -406,7 +400,23 @@ class HamiltonianProposal(EnsembleProposal):
         else:
             self.likelihood_gradient = self.analytical_gradient
             self.unit_normal = self.exact_unit_normal
-
+#        self.mean       = self.ensemble.get_mean()
+#        self.covariance = self.ensemble.get_covariance()
+#        self.set_mass_parameters()
+#        self.set_momenta_distribution()
+#        self.set_integration_parameters()
+#        try:
+#            self.update_trajectory_length(safety=10)
+#        except:
+#            pass
+    def set_lte(self, q):
+        self.local_points = LivePoints(self.ensemble.sample_around(q, 2*self.dimension+1))
+        self.mean       = self.local_points.get_mean()
+        self.covariance = self.local_points.get_covariance()
+        self.set_mass_parameters()
+        self.set_momenta_distribution()
+        self.set_integration_parameters()
+        
     def update_normal_vector(self):
         """
         update the constraint by approximating the
@@ -415,7 +425,7 @@ class HamiltonianProposal(EnsembleProposal):
         This is an approximation which
         improves as the algorithm proceeds
         """
-        self.likelihood_gradient = self.ensemble.get_likelihood_gradient()
+        self.likelihood_gradient = self.get_likelihood_gradient()
 
     def exact_unit_normal(self, q):
         v = self.likelihood_gradient(q)
@@ -436,10 +446,7 @@ class HamiltonianProposal(EnsembleProposal):
         n: :obj:`numpy.ndarray` unit normal to the logLmin contour evaluated at q
         """
         x = np.atleast_2d(np.array([q[n] for n in q.names]))
-        v = np.squeeze(np.array([self.likelihood_gradient.predict_derivatives(x,i) for i in range(len(q.names))]))
-        v[~np.isfinite(v)] = -1.0
-        n = v/np.linalg.norm(v)
-        return n
+        return -self.inverse_mass_matrix*(x - self.mean)
 
     def gradient(self, q):
         """
@@ -464,15 +471,15 @@ class HamiltonianProposal(EnsembleProposal):
         self.momenta_distribution = multivariate_normal(cov=self.mass_matrix)
 
     def set_integration_parameters(self):
-        """
-        Set the initial integration length and maximum adimissible value of
-        the time step according to the N-dimensional ellipsoid
-        longest and shortest principal axes
-        (see http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.2.2).
-        """
-        w, _                = self.ensemble.get_eigen_quantities()
-        self.dt             = w[0]
-
+        self.dt = self.get_temperature()
+    
+    def get_temperature(self):
+        self.temperature = 0
+        for i in range(self.ensemble.get_length()):
+            self.temperature += self.hamiltonian(np.atleast_1d(self.momenta_distribution.rvs()),self.ensemble.get(i))
+        
+        return np.exp(self.temperature/i)
+        
     def update_time_step(self, acceptance):
         """
         Update the time step according to the
@@ -506,7 +513,7 @@ class HamiltonianProposal(EnsembleProposal):
         
         if self.leaps > self.maxleaps:
             self.leaps = self.maxleaps
-
+        print(self.leaps,self.dt)
         self.trajectories = []
         
     def kinetic_energy(self,p):
@@ -567,6 +574,8 @@ class LeapFrog(HamiltonianProposal):
         q: :obj:`cpnest.parameter.LivePoint`
             position
         """
+        # compute local equilibrium distribution
+#        self.set_lte(q0)
         # generate a canonical momentum
         p0 = np.atleast_1d(self.momenta_distribution.rvs())
         initial_energy = self.hamiltonian(p0,q0)

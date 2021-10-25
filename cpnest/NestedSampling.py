@@ -517,6 +517,15 @@ class NestedSampler(object):
     def get_live_points(self):
         return self.live_points
     
+    def get_logZ(self):
+        return self.logZ
+    
+    def get_nlive(self):
+        return self.nlive
+    
+    def get_logLs_logZ_info(self):
+        return self.live_points.get_logLs_logZ_info()
+    
     @classmethod
     def resume(cls, filename, usermodel, pool):
         """
@@ -689,6 +698,15 @@ class LivePoints:
         else:
             k = len(self.worst)
             return random.sample(self._list[k:], n)
+
+    def sample_around(self, q, n):
+        """
+        sample n live points closest to q
+        """
+        distance = lambda list_value : np.sum(list_value.values - q.values)
+        closest_value = min(self._list, key=distance)
+        idx = self._list.index(closest_value)
+        return [self.get(i) for i in range(n//2-idx,n//2+idx)]
 
     def get_logLmax(self):
         """

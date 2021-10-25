@@ -148,7 +148,7 @@ class Sampler(object):
             self.logger.info("Sampler {0} -- setting ensemble".format(os.getpid()))
 
         self.ensemble = ensemble
-
+        
         for p in self.proposal.proposals:
             if isinstance(p, EnsembleProposal):
                 p.set_ensemble(ensemble)
@@ -231,9 +231,9 @@ class HamiltonianMonteCarloSampler(Sampler):
         self.mcmc_counter  += sub_counter
         self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
 
-#            for p in self.proposal.proposals:
-#                p.update_time_step(self.acceptance)
-#                p.update_trajectory_length(safety=10)
+#        for p in self.proposal.proposals:
+##            p.update_time_step(self.acceptance)
+#            p.update_trajectory_length(safety=10)
         return (sub_counter, oldparam)
 
 @ray.remote

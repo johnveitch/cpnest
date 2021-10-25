@@ -6,6 +6,7 @@ import cpnest.model
 import matplotlib as mpl
 mpl.use('Agg')
 from matplotlib import pyplot as plt
+import ray
 
 class GaussianModel(cpnest.model.Model):
     """
@@ -36,10 +37,11 @@ class GaussianTestCase(unittest.TestCase):
 
     def test_evidence(self):
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.nlive)
+        logLmin, logLmax, logZ, H = ray.get(self.work.NS.get_logLs_logZ_info.remote())
+        tolerance = 2.0*np.sqrt(H/ray.get(self.work.NS.get_nlive.remote()))
         print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
         print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
-        print('Estimated logZ {0}'.format(self.work.NS.logZ))
+        print('Estimated logZ {0}'.format(logZ))
         pos=self.work.posterior_samples['x']
         #t,pval=stats.kstest(pos,self.model.distr.cdf)
         stat,pval = stats.normaltest(pos.T)
@@ -54,7 +56,7 @@ class GaussianTestCase(unittest.TestCase):
         plt.plot(pos.ravel(),',')
         plt.title('chain')
         plt.savefig('chain.png')
-        self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(self.work.NS.logZ,GaussianModel.analytic_log_Z ))
+        self.assertTrue(np.abs(logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0:.3f} instead of {1:.3f}'.format(logZ,GaussianModel.analytic_log_Z ))
         self.assertTrue(pval>0.01,'Normaltest test failed: KS stat = {0}'.format(pval))
 
 
