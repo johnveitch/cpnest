@@ -127,7 +127,9 @@ class CPNest(object):
             self.logger.warning("This might result in excessive overhead")
         
         self.pool = None
-        ray.init(num_cpus=self.nthreads, ignore_reinit_error=True)
+        ray.init(num_cpus=self.nthreads,
+                 ignore_reinit_error=True,
+                 object_store_memory=10**9)
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
