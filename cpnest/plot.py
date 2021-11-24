@@ -1,5 +1,7 @@
+import os
 import matplotlib as mpl
 from matplotlib import pyplot as plt
+import numpy as np
 
 def init_plotting():
     plt.rcParams['figure.figsize'] = (3.4, 3.4)
@@ -30,9 +32,25 @@ def init_plotting():
 
 init_plotting()
 
+def trace_plot(nested_samples, folder):
+    rows  = len(nested_samples)
+    names = nested_samples[0].dtype.names
+    
+    for n in names:
+        fig, axs = plt.subplots(rows, 1, squeeze=False)
+
+        for i,s in enumerate(nested_samples):
+            S = axs[i,0].scatter(1+np.arange(len(s[n])),s[n],c=s['logL'])
+            CB = plt.colorbar(S, ax=axs[i,0])
+            CB.set_label('logL')
+            axs[i,0].set_xlabel('iteration number')
+            axs[i,0].set_ylabel(n)
+        plt.savefig(os.path.join(folder,n+"_trace.pdf"), bbox_inches='tight')
+        
 def plot_chain(x, name=None, filename=None):
     """
-    Produce a trace plot
+    Produce a trace plot from a list of
+    chains
     """
     fig = plt.figure()
     ax  = fig.add_subplot(111)

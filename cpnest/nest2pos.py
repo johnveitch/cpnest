@@ -107,7 +107,7 @@ def draw_posterior_many(datas, Nlives, verbose=False):
       bigpos.append(post[mask])
     result = np.concatenate([bigpos[i] for i in range(len(bigpos))], axis=None)
     LOGGER.critical('Samples produced: {0:d}'.format(result.shape[0]))
-    return result
+    return result, log_total_evidence-np.log(len(datas))
 
 def draw_N_posterior(data,log_wts, N, verbose=False):
     """

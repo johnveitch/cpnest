@@ -40,5 +40,5 @@ if __name__ == "__main__":
     signal = sine_gaussian(truth,time)
     data = noise+signal
     model=BurstModel(time, data, sigma=sigma)
-    work=cpnest.CPNest(model, verbose=2, nensemble=2, nlive=1000, maxmcmc=5000, nslice=0, nhamiltonian=0, resume=0)
+    work=cpnest.CPNest(model, verbose=2, nnest=3, nensemble=3, nlive=1000, maxmcmc=5000, nslice=0, nhamiltonian=0, resume=0)
     work.run()

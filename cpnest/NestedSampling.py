@@ -237,12 +237,14 @@ class NestedSampler(object):
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = None
+                 n_periodic_checkpoint = None,
+                 position       = 0
                  ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
         """
+        self.position       = position
         loggername          = 'cpnest.NestedSampling.NestedSampler'
         self.logger         = logging.getLogger(loggername)
         self.logger.addHandler(logging.StreamHandler())
@@ -282,7 +284,7 @@ class NestedSampler(object):
 
         l = []
 
-        with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=0) as pbar:
+        with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=self.position) as pbar:
             for i in range(self.nlive):
                 
                 p = self.model.new_point()
@@ -308,10 +310,10 @@ class NestedSampler(object):
                 evidence_file: file where the evidence will be written
                 resume_file:   file used for checkpointing the algorithm
         """
-        chain_filename = "chain_"+str(self.nlive)+"_"+str(self.seed)+".txt"
+        chain_filename = "chain_"+str(self.nlive)+"_"+str(self.position)+".txt"
         output_file   = os.path.join(output,chain_filename)
-        evidence_file = os.path.join(output,chain_filename+"_evidence.txt")
-        resume_file  = os.path.join(output,"nested_sampler_resume.pkl")
+        evidence_file = os.path.join(output,chain_filename+"_evidence_"+str(self.position)+".txt")
+        resume_file  = os.path.join(output,"nested_sampler_resume_"+str(self.position)+".pkl")
 
         return output_file, evidence_file, resume_file
 
@@ -411,7 +413,7 @@ class NestedSampler(object):
 
         i = 0
 
-        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: sampling prior', position=self.nthreads) as pbar:
+        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: sampling prior', position=self.position) as pbar:
             while pool.has_next():
                 acceptance,sub_acceptance,self.jumps,x = pool.get_next()
                 if np.isnan(x.logL):
