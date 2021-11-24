@@ -110,5 +110,4 @@ def auto_garbage_collect(pct=80.0):
     """
     if psutil.virtual_memory().percent >= pct:
         gc.collect()
-        print("collecting garbage")
     return

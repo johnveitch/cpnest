@@ -123,7 +123,7 @@ class CPNest(object):
         
         self.nthreads = self.nsamplers+1
         if self.nthreads > self.max_threads:
-            self.logger.warning("More cpu than available are being requested!")
+            self.logger.warning("More cpus than available are being requested!")
             self.logger.warning("This might result in excessive overhead")
         
         self.pool = None
