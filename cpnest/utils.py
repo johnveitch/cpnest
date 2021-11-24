@@ -1,5 +1,7 @@
 import os
+import gc
 import logging
+import psutil
 
 # Default formats and level names
 FORMATTER = logging.Formatter(
@@ -98,3 +100,15 @@ class LogFile:
 
     def __exit__(self, type, value, traceback):
         self.close()
+
+def auto_garbage_collect(pct=80.0):
+    """
+    auto_garbage_collection - Call the garbage collection if memory used is greater than 80% of total available memory.
+                              This is called to deal with an issue in Ray not freeing up used memory.
+
+        pct - Default value of 80%.  Amount of memory in use that triggers the garbage collection call.
+    """
+    if psutil.virtual_memory().percent >= pct:
+        gc.collect()
+        print("collecting garbage")
+    return

@@ -9,7 +9,7 @@ import logging
 
 import cProfile
 
-from .utils import LEVELS, LogFile
+from .utils import LEVELS, LogFile, auto_garbage_collect
 
 # module logger takes name according to its path
 LOGGER = logging.getLogger('cpnest.cpnest')

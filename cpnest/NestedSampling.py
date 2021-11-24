@@ -14,6 +14,8 @@ from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint
+from .utils import auto_garbage_collect
+
 import ray
 import random
 from tqdm import tqdm
@@ -455,7 +457,8 @@ class NestedSampler(object):
                     
                 if (self.iteration % self.nlive) < self.nthreads:
                     self.check_insertion_indices()
-        
+                auto_garbage_collect()
+                
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
