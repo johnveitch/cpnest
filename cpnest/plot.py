@@ -32,7 +32,8 @@ def init_plotting():
 
 init_plotting()
 
-def trace_plot(nested_samples, folder):
+def trace_plot(nested_samples, nlives, folder):
+    from matplotlib import cm
     rows  = len(nested_samples)
     names = nested_samples[0].dtype.names
     
@@ -40,9 +41,9 @@ def trace_plot(nested_samples, folder):
         fig, axs = plt.subplots(rows, 1, squeeze=False)
 
         for i,s in enumerate(nested_samples):
-            S = axs[i,0].scatter(1+np.arange(len(s[n])),s[n],c=s['logL'])
+            S = axs[i,0].scatter(1+np.arange(len(s[n])),s[n],c=s['logPrior'],cmap=cm.inferno)
             CB = plt.colorbar(S, ax=axs[i,0])
-            CB.set_label('logL')
+            CB.set_label('logPrior')
             axs[i,0].set_xlabel('iteration number')
             axs[i,0].set_ylabel(n)
         plt.savefig(os.path.join(folder,n+"_trace.pdf"), bbox_inches='tight')

@@ -511,7 +511,7 @@ class CPNest(object):
                                mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
                                filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
         
-        plot.trace_plot(self.nested_samples,self.output)
+        plot.trace_plot(self.nested_samples,[self.nlive]*self.nnest,self.output)
         
         if self.prior_sampling is False:
             import numpy as np
