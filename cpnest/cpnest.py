@@ -113,7 +113,7 @@ class CPNest(object):
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False,
-                 pool         = None
+                 object_store_memory=2*10**9
                  ):
         
         self.logger    = logging.getLogger('cpnest.cpnest.CPNest')
@@ -124,7 +124,7 @@ class CPNest(object):
         self.max_threads = psutil.cpu_count()
         
         if self.nsamplers%self.nnest != 0:
-            self.logger.warning("Error! Number of sampler not balanced")
+            self.logger.warning("Error! Number of samplers not balanced")
             self.logger.warning("to the number of nested samplers! Exiting.")
             exit(-1)
         
@@ -139,7 +139,7 @@ class CPNest(object):
         
         ray.init(num_cpus=self.nthreads,
                  ignore_reinit_error=True,
-                 object_store_memory=10**9)
+                 object_store_memory=object_store_memory)
         
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
@@ -159,7 +159,8 @@ class CPNest(object):
             self.logger.critical('Ensemble samplers: {0}'.format(nensemble))
             self.logger.critical('Slice samplers: {0}'.format(nslice))
             self.logger.critical('Hamiltonian samplers: {0}'.format(nhamiltonian))
-
+            self.logger.critical('ray object store size: {0} GB'.format(object_store_memory/1e9))
+            
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
                     "The n_periodic_checkpoint kwarg is deprecated, "

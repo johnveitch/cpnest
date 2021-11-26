@@ -24,6 +24,6 @@ def log_eggbox(p):
 
 if __name__=='__main__':
     M = EggboxModel()
-    work=cpnest.CPNest(M,verbose=2,nensemble=4,nlive=1000,maxmcmc=1000,nslice=4)
+    work=cpnest.CPNest(M,verbose=2,nnest=4,nensemble=4,nlive=1000,maxmcmc=1000,nslice=4)
     work.run()
 

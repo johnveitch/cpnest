@@ -33,6 +33,7 @@ class BurstModel(cpnest.model.Model):
         return p.values
 
 if __name__ == "__main__":
+    np.random.seed(12)
     time  = np.linspace(0.0,1.0,1000)
     sigma = 0.1
     noise = np.random.normal(0,sigma,size = time.shape[0])
@@ -40,5 +41,5 @@ if __name__ == "__main__":
     signal = sine_gaussian(truth,time)
     data = noise+signal
     model=BurstModel(time, data, sigma=sigma)
-    work=cpnest.CPNest(model, verbose=2, nnest=3, nensemble=3, nlive=1000, maxmcmc=5000, nslice=0, nhamiltonian=0, resume=0)
+    work=cpnest.CPNest(model, verbose=2, nnest=4, nensemble=8, nlive=1024, maxmcmc=5000, nslice=0, nhamiltonian=0, resume=0)
     work.run()
