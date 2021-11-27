@@ -63,7 +63,7 @@ class CPNest(object):
 
     nthreads: `int` or `None`
         number of parallel samplers. Default (None) uses psutil.cpu_count() to autodetermine
-        
+
     nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
 
@@ -113,34 +113,40 @@ class CPNest(object):
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False,
-                 object_store_memory=2*10**9
+                 object_store_memory=2*10**9,
+                 poolsize=None,
+                 nthreads=None
                  ):
-        
+
+
         self.logger    = logging.getLogger('cpnest.cpnest.CPNest')
         self.nsamplers = nensemble+nhamiltonian+nslice
         self.nnest     = nnest
+        if nthreads is not None and self.nsamplers == 0:
+            nensemble = nthreads
+            self.nsamplers = nensemble
         assert self.nsamplers > 0, "no sampler processes requested!"
         import psutil
         self.max_threads = psutil.cpu_count()
-        
+
         if self.nsamplers%self.nnest != 0:
             self.logger.warning("Error! Number of samplers not balanced")
             self.logger.warning("to the number of nested samplers! Exiting.")
             exit(-1)
-        
+
         self.nthreads = self.nsamplers+self.nnest
-        
+
         if self.nthreads > self.max_threads:
             self.logger.warning("More cpus than available are being requested!")
             self.logger.warning("This might result in excessive overhead")
-        
+
         self.ns_pool = []
         self.pool    = []
-        
+
         ray.init(num_cpus=self.nthreads,
                  ignore_reinit_error=True,
                  object_store_memory=object_store_memory)
-        
+
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
@@ -154,13 +160,19 @@ class CPNest(object):
         self.log_file = LogFile(os.path.join(output, 'cpnest.log'),
                                 verbose=verbose)
         with self.log_file:
+            if poolsize is not None:
+                self.logger.warning('poolsize is a deprecated option and will \
+                                    be removed in a future version.')
+            if nthreads is not None:
+                self.logger.warning('nthreads is a deprecated option and will\
+                                    be removed in a future verison.')
             self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
             self.logger.critical('Nested samplers: {0}'.format(nnest))
             self.logger.critical('Ensemble samplers: {0}'.format(nensemble))
             self.logger.critical('Slice samplers: {0}'.format(nslice))
             self.logger.critical('Hamiltonian samplers: {0}'.format(nhamiltonian))
             self.logger.critical('ray object store size: {0} GB'.format(object_store_memory/1e9))
-            
+
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
                     "The n_periodic_checkpoint kwarg is deprecated, "
@@ -192,12 +204,12 @@ class CPNest(object):
             if seed is None: self.seed=1234
             else:
                 self.seed=seed
-            
+
             for j in range(self.nnest):
-            
+
                 pg = placement_group([{"CPU": 1+self.nsamplers//self.nnest}],strategy="STRICT_PACK")
                 ray.get(pg.ready())
-                
+
                 samplers = []
 
                 # instantiate the sampler class
@@ -243,9 +255,9 @@ class CPNest(object):
                                 position = j))
                 else:
                     self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file, self.user, self.pool[i]))
-            
+
             self.NS = ActorPool(self.ns_pool)
-            
+
     def run(self):
         """
         Run the sampler
@@ -294,13 +306,13 @@ class CPNest(object):
                 self.mcmc_samples = self.get_mcmc_samples(filename=None)
             if self.verbose>=2:
                 self.plot(corner = False)
-            
+
             #TODO: Clean up the resume pickles
             try:
                 os.remove(self.resume_file)
             except OSError:
                 pass
-                        
+
             ray.shutdown()
             assert ray.is_initialized() == False
 
@@ -321,9 +333,9 @@ class CPNest(object):
         import numpy.lib.recfunctions as rfn
         if self.nested_samples is None:
             ns = list(self.NS.map_unordered(lambda a, v: a.get_nested_samples.remote(), range(self.nnest)))
-            
+
             self.nested_samples = []
-            
+
             for l in ns:
                 self.nested_samples.append(rfn.stack_arrays([s.asnparray()
                                    for s in l] ,usemask=False))
@@ -404,8 +416,8 @@ class CPNest(object):
                 newline='\n',delimiter=' ')
             np.savetxt(os.path.join(
                 self.output, filename+"_evidence"),np.atleast_1d(self.logZ))
-            
-        
+
+
         return posterior_samples
 
     def get_prior_samples(self, filename='prior.dat'):
@@ -510,9 +522,9 @@ class CPNest(object):
                                prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
                                mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
                                filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
-        
+
         plot.trace_plot(self.nested_samples,[self.nlive]*self.nnest,self.output)
-        
+
         if self.prior_sampling is False:
             import numpy as np
             plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
