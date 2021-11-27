@@ -26,6 +26,9 @@ jobs:
         include:
           - os: ubuntu-20.04
             cibw_archs : "aarch64"
+          - os: macos-*
+            env:
+              CIBW_SKIP: pp*
 
     steps:
       - name: Set up QEMU
