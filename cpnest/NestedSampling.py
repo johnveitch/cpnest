@@ -311,12 +311,10 @@ class NestedSampler(object):
                 evidence_file: file where the evidence will be written
                 resume_file:   file used for checkpointing the algorithm
         """
-        model_name     = type(self.model).__name__
-        os.makedirs(os.path.join(output,model_name),exist_ok = True)
-        chain_filename = model_name+"/chain_"+str(self.nlive)+"_"+str(self.position)+".txt"
+        chain_filename = "chain_"+str(self.nlive)+"_"+str(self.position)+".txt"
         output_file   = os.path.join(output,chain_filename)
         evidence_file = os.path.join(output,chain_filename+"_evidence_"+str(self.position)+".txt")
-        resume_file  = os.path.join(output,model_name+"/nested_sampler_resume_"+str(self.position)+".pkl")
+        resume_file  = os.path.join(output,"nested_sampler_resume_"+str(self.position)+".pkl")
 
         return output_file, evidence_file, resume_file
 
@@ -544,11 +542,10 @@ class NestedSampler(object):
         checkpoint pickle file.
         """
 
-        obj.model = usermodel
-        model_name     = type(usermodel).__name__
-        with open(model_name+"/"+filename,"rb") as f:
+        with open(filename,"rb") as f:
             obj = pickle.load(f)
-                
+            
+        obj.model = usermodel
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         obj.live_points = LivePoints.remote(obj.live)
         obj.live_points._set_internal_state(obj.integral_state)

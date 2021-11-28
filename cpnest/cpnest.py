@@ -267,6 +267,11 @@ class CPNest(object):
             
             except CheckPoint:
                 self.checkpoint()
+                for p in self.NS+self.samplers:
+                    p.shutdown()
+                ray.shutdown()
+                assert ray.is_initialized() == False
+                self.logger.critical("ray correctly shut down. exiting")
                 sys.exit(130)
 
             self.postprocess(filename='cpnest.h5')
