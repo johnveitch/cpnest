@@ -183,8 +183,7 @@ class CPNest(object):
             self.nlive    = nlive
             self.verbose  = verbose
             self.output   = output
-            self.nested_samples = None
-            self.posterior_samples = None
+            self.results  = {}
             self.prior_sampling = prior_sampling
             self.user     = usermodel
             self.resume = resume
@@ -199,7 +198,7 @@ class CPNest(object):
                 ray.get(pg.ready())
                 
                 samplers = []
-
+                
                 # instantiate the sampler class
                 for i in range(nensemble//self.nnest):
                     s = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
@@ -227,7 +226,7 @@ class CPNest(object):
                                           proposal    = proposals['sli']()
                                           )
                     samplers.append(s)
-
+                
                 self.pool.append(ActorPool(samplers))
 
                 self.resume_file = os.path.join(output, "nested_sampler_resume_{}.pkl".format(j))
@@ -243,14 +242,16 @@ class CPNest(object):
                                 position = j))
                 else:
                     self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file, self.user, self.pool[i]))
+                
+                self.results['run_{}'.format(j)] = {}
             
+            self.results['combined'] = {}
             self.NS = ActorPool(self.ns_pool)
             
     def run(self):
         """
         Run the sampler
         """
-
         with self.log_file:
             if self.resume:
                 signal.signal(signal.SIGTERM, sighandler)
@@ -263,37 +264,22 @@ class CPNest(object):
             try:
                 for s in self.NS.map_unordered(lambda a, v: a.nested_sampling_loop.remote(self.pool[v]), range(self.nnest)):
                     pass
-
+            
             except CheckPoint:
                 self.checkpoint()
                 sys.exit(130)
 
+            self.postprocess(filename='cpnest.h5')
+            
             if self.verbose >= 2:
+                self.logger.critical("Checking insertion indeces")
                 for s in self.NS.map_unordered(lambda a, v: a.check_insertion_indices.remote(rolling=False,
                                                      filename='insertion_indices_{}.dat'.format(v)), range(self.nnest)):
                     pass
 
-                self.logger.critical(
-                    "Saving nested samples in {0}".format(self.output)
-                )
-                self.nested_samples = self.get_nested_samples()
-                self.logger.critical("Saving posterior samples in {0}".format(self.output))
-                self.posterior_samples = self.get_posterior_samples()
-            else:
-                for s in self.NS.map_unordered(lambda a, v: a.check_insertion_indices.remote(rolling=False,
-                                                     filename=None), range(self.nnest)):
-                    pass
-                self.nested_samples = self.get_nested_samples(filename=None)
-                self.posterior_samples = self.get_posterior_samples(
-                    filename=None
-                )
-
-            if self.verbose>=3 or self.prior_sampling:
-                self.prior_samples = self.get_prior_samples(filename=None)
-            if self.verbose>=3 and not self.prior_sampling:
-                self.mcmc_samples = self.get_mcmc_samples(filename=None)
-            if self.verbose>=2:
+                self.logger.critical("Saving plots in {0}".format(self.output))
                 self.plot(corner = False)
+                
             
             #TODO: Clean up the resume pickles
             try:
@@ -303,238 +289,134 @@ class CPNest(object):
                         
             ray.shutdown()
             assert ray.is_initialized() == False
-
-    def get_nested_samples(self, filename='nested_samples.dat'):
-        """
-        returns nested sampling chain
-        Parameters
-        ----------
-        filename : string
-                   If given, file to save nested samples to
-
-        Returns
-        -------
-        pos : :obj:`numpy.ndarray`
-        """
-
-        self.nested_samples = None
+            self.logger.critical("ray correctly shut down. exiting")
+            
+    def postprocess(self, filename='cpnest.h5'):
+    
         import numpy.lib.recfunctions as rfn
-        if self.nested_samples is None:
-            ns = list(self.NS.map_unordered(lambda a, v: a.get_nested_samples.remote(), range(self.nnest)))
-            
-            self.nested_samples = []
-            
-            for l in ns:
-                self.nested_samples.append(rfn.stack_arrays([s.asnparray()
-                                   for s in l] ,usemask=False))
-
-
-        if filename:
-            ns_samps = rfn.stack_arrays(self.nested_samples,usemask=False)
-            ns_samps.sort(order='logL')
-            np.savetxt(os.path.join(
-                self.output, filename),
-                ns_samps.ravel(),
-                header=' '.join(ns_samps.dtype.names),
-                newline='\n',delimiter=' ')
-        return self.nested_samples
-
-    def get_posterior_samples(self, filename='posterior.dat'):
-        """
-        Returns posterior samples
-
-        Parameters
-        ----------
-        filename : string
-                   If given, file to save posterior samples to
-
-        Returns
-        -------
-        pos : :obj:`numpy.ndarray`
-        """
-        import numpy as np
-        import os
         from .nest2pos import draw_posterior_many
-        nested_samples     = self.get_nested_samples()
-        posterior_samples, self.logZ  = draw_posterior_many(nested_samples,[self.nlive]*self.nnest,verbose=self.verbose)
-        posterior_samples  = np.array(posterior_samples)
-        self.prior_samples = {n:None for n in self.user.names}
-        self.mcmc_samples  = {n:None for n in self.user.names}
-        # if we run with full verbose, read in and output
-        # the mcmc thinned posterior samples
-        if self.verbose >= 3:
-            from .nest2pos import resample_mcmc_chain
-            from numpy.lib.recfunctions import stack_arrays
-
-            prior_samples = []
-            mcmc_samples  = []
-            for file in os.listdir(self.output):
-                if 'prior_samples' in file:
-                    prior_samples.append(np.genfromtxt(os.path.join(self.output,file), names = True))
-                    os.system('rm {0}'.format(os.path.join(self.output,file)))
-                elif 'mcmc_chain' in file:
-                    mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.output,file), names = True)))
-                    os.system('rm {0}'.format(os.path.join(self.output,file)))
-
-            # first deal with the prior samples
-            if len(prior_samples)>0:
-                self.prior_samples = stack_arrays([p for p in prior_samples])
-                if filename:
-                    np.savetxt(os.path.join(
-                           self.output,'prior.dat'),
-                           self.prior_samples.ravel(),
-                           header=' '.join(self.prior_samples.dtype.names),
-                           newline='\n',delimiter=' ')
-            # now stack all the mcmc chains
-            if len(mcmc_samples)>0:
-                self.mcmc_samples = stack_arrays([p for p in mcmc_samples])
-                if filename:
-                    np.savetxt(os.path.join(
-                           self.output,'mcmc.dat'),
-                           self.mcmc_samples.ravel(),
-                           header=' '.join(self.mcmc_samples.dtype.names),
-                           newline='\n',delimiter=' ')
-
-        # TODO: Replace with something to output samples in whatever format
-        if filename:
-            np.savetxt(os.path.join(
-                self.output, filename),
-                posterior_samples.ravel(),
-                header=' '.join(posterior_samples.dtype.names),
-                newline='\n',delimiter=' ')
-            np.savetxt(os.path.join(
-                self.output, filename+"_evidence"),np.atleast_1d(self.logZ))
-            
         
-        return posterior_samples
+        ns = list(self.NS.map_unordered(lambda a, v: a.get_nested_samples.remote(), range(self.nnest)))
+        ps = list(self.NS.map_unordered(lambda a, v: a.get_prior_samples.remote(), range(self.nnest)))
+        info = list(self.NS.map_unordered(lambda a, v: a.get_information.remote(), range(self.nnest)))
 
-    def get_prior_samples(self, filename='prior.dat'):
-        """
-        Returns prior samples
+        for i,l in enumerate(ps):
+            
+            self.results['run_{}'.format(i)]['prior_samples'] = rfn.stack_arrays([s.asnparray()
+                               for s in l] ,usemask=False)
+                               
+        for i,l in enumerate(ns):
+            self.results['run_{}'.format(i)]['nested_samples'] = rfn.stack_arrays([s.asnparray()
+                               for s in l] ,usemask=False)
+        
+        for i in range(self.nnest):
+            p, logZ  = draw_posterior_many([self.results['run_{}'.format(i)]['nested_samples']],
+                                           [self.nlive],verbose=self.verbose)
+                                           
+            self.results['run_{}'.format(i)]['posterior_samples'] = p
+            self.results['run_{}'.format(i)]['logZ'] = logZ
+            self.results['run_{}'.format(i)]['information'] = info[i]
+            self.results['run_{}'.format(i)]['logZ_error'] = np.sqrt(info[i]/self.nlive)
+            
+        p, logZ  = draw_posterior_many([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],[self.nlive]*self.nnest,verbose=self.verbose)
+        
+        self.results['combined']['prior_samples'] = rfn.stack_arrays([self.results['run_{}'.format(i)]['prior_samples'] for i in range(self.nnest)],usemask=False)
+        self.results['combined']['nested_samples'] = rfn.stack_arrays([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],usemask=False)
+        
+        self.results['combined']['nested_samples'].sort(order='logL')
+        self.results['combined']['posterior_samples'] = p
+        self.results['combined']['logZ'] = logZ
+        self.results['combined']['information'] = np.average(info)
+        
+        evds = [self.results['run_{}'.format(i)]['logZ'] for i in range(self.nnest)]
+        e2   = (np.average(info)/self.nlive+np.var(evds))/self.nnest
+        self.results['combined']['logZ_error'] = np.sqrt(e2)
+        
+        if filename != None:
+            import os
+            import h5py
+            self.logger.critical("Saving output in {0}".format(self.output))
+            h = h5py.File(os.path.join(self.output,filename),'w')
+            for k in self.results.keys():
+                grp = h.create_group(k)
+                for d in self.results[k].keys():
+                    grp.create_dataset(d, data = self.results[k][d], dtype=self.results[k][d].dtype)
+            h.close()
+    
+    @property
+    def nested_samples(self):
+        return self.results['combined']['nested_samples']
+    
+    @nested_samples.setter
+    def nested_samples(self, filename=None):
+        self.postprocess(self, filename=filename)
 
-        Parameters
-        ----------
-        filename : string
-                   If given, file to save posterior samples to
+    @property
+    def posterior_samples(self):
+        return self.results['combined']['posterior_samples']
+    
+    @posterior_samples.setter
+    def posterior_samples(self, filename=None):
+        self.postprocess(self, filename=filename)
 
-        Returns
-        -------
-        pos : :obj:`numpy.ndarray`
-        """
-        import numpy as np
-        import os
+    @property
+    def prior_samples(self):
+        return self.results['combined']['prior_samples']
+    
+    @prior_samples.setter
+    def prior_samples(self, filename=None):
+        self.postprocess(self, filename=filename)
+    
+    @property
+    def logZ(self):
+        return self.results['combined']['logZ']
+    
+    @logZ.setter
+    def logZ(self, filename=None):
+        self.postprocess(self, filename=filename)
 
-        from numpy.lib.recfunctions import stack_arrays
-
-        # read in the samples from the prior coming from each sampler
-        prior_samples = []
-        for file in os.listdir(self.output):
-            if 'prior_samples' in file:
-                prior_samples.append(np.genfromtxt(os.path.join(self.output,file), names = True))
-                os.system('rm {0}'.format(os.path.join(self.output,file)))
-
-        # if we sampled the prior, the nested samples are samples from the prior
-        if self.prior_sampling:
-            prior_samples.append(self.get_nested_samples())
-
-        if not prior_samples:
-            self.logger.critical('ERROR, no prior samples found!')
-            return None
-
-        prior_samples = stack_arrays([p for p in prior_samples])
-        if filename:
-            np.savetxt(os.path.join(
-                       self.output, filename),
-                       self.prior_samples.ravel(),
-                       header=' '.join(self.prior_samples.dtype.names),
-                       newline='\n',delimiter=' ')
-
-        return prior_samples
-
-    def get_mcmc_samples(self, filename='mcmc.dat'):
-        """
-        Returns resampled mcmc samples
-
-        Parameters
-        ----------
-        filename : string
-                   If given, file to save posterior samples to
-
-        Returns
-        -------
-        pos : :obj:`numpy.ndarray`
-        """
-        import numpy as np
-        import os
-        from .nest2pos import resample_mcmc_chain
-        from numpy.lib.recfunctions import stack_arrays
-
-        mcmc_samples  = []
-        for file in os.listdir(self.output):
-            if 'mcmc_chain' in file:
-                mcmc_samples.append(resample_mcmc_chain(np.genfromtxt(os.path.join(self.output,file), names = True)))
-                os.system('rm {0}'.format(os.path.join(self.output,file)))
-
-        if not mcmc_samples:
-            self.logger.critical('ERROR, no MCMC samples found!')
-            return None
-
-        # now stack all the mcmc chains
-        mcmc_samples = stack_arrays([p for p in mcmc_samples])
-        if filename:
-            np.savetxt(os.path.join(
-                       self.output, filename),
-                       self.mcmc_samples.ravel(),
-                       header=' '.join(self.mcmc_samples.dtype.names),
-                       newline='\n',delimiter=' ')
-        return mcmc_samples
+    @property
+    def logZ_error(self):
+        return self.results['combined']['logZ_error']
+    
+    @logZ_error.setter
+    def logZ_error(self, filename=None):
+        self.postprocess(self, filename=filename)
+        
+    @property
+    def information(self):
+        return self.results['combined']['information']
+    
+    @information.setter
+    def information(self, filename=None):
+        self.postprocess(self, filename=filename)
 
     def plot(self, corner = True):
         """
         Make diagnostic plots of the posterior and nested samples
         """
-        pos = self.posterior_samples
-        if self.verbose>=3 and self.prior_sampling is False:
-            pri = self.prior_samples
-            mc  = self.mcmc_samples
-        elif self.verbose>=3 or self.prior_sampling is True:
-            pri = self.prior_samples
-            mc  = None
-        else:
-            pri = None
-            mc  = None
         from . import plot
-        if self.prior_sampling is False:
-            for n in pos.dtype.names:
-                plot.plot_hist(pos[n].ravel(), name = n,
-                               prior_samples = self.prior_samples[n].ravel() if pri is not None else None,
-                               mcmc_samples = self.mcmc_samples[n].ravel() if mc is not None else None,
-                               filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
+        for n in self.posterior_samples.dtype.names:
+            plot.plot_hist(self.posterior_samples[n].ravel(), name = n,
+                           prior_samples = self.prior_samples[n].ravel(),
+                           filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
         
-        plot.trace_plot(self.nested_samples,[self.nlive]*self.nnest,self.output)
-        
-        if self.prior_sampling is False:
+        plot.trace_plot([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],
+                        [self.nlive]*self.nnest, self.output)
+            
+        if corner:
             import numpy as np
-            plotting_posteriors = np.squeeze(pos.view((pos.dtype[0], len(pos.dtype.names))))
-            if pri is not None:
-                plotting_priors = np.squeeze(pri.view((pri.dtype[0], len(pri.dtype.names))))
-            else:
-                plotting_priors = None
+            plotting_posteriors = np.squeeze(self.posterior_samples.view((self.posterior_samples.dtype[0], len(self.posterior_samples.dtype.names))))
 
-            if mc is not None:
-                plotting_mcmc   = np.squeeze(mc.view((mc.dtype[0], len(mc.dtype.names))))
-            else:
-                plotting_mcmc   = None
+            plot.plot_corner(plotting_posteriors,
 
-            if corner:
-                plot.plot_corner(plotting_posteriors,
-                                 ps=plotting_priors,
-                                 ms=plotting_mcmc,
-                                 labels=pos.dtype.names,
-                                 filename=os.path.join(self.output,'corner.pdf'))
-            lps = list(self.NS.map(lambda a, v: a.get_live_points.remote(), range(self.nnest)))
-            for i,lp in enumerate(lps):
-                plot.plot_indices(lp.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices_{}.pdf'.format(i)))
+                             labels=self.prior_samples.dtype.names,
+                             filename=os.path.join(self.output,'corner.pdf'))
+        
+        lps = list(self.NS.map(lambda a, v: a.get_live_points.remote(), range(self.nnest)))
+        for i,lp in enumerate(lps):
+            plot.plot_indices(lp.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices_{}.pdf'.format(i)))
 
     def checkpoint(self):
-        self.NS.checkpoint()
+        for s in self.NS.map_unordered(lambda a, v: a.checkpoint.remote(), range(self.nnest)):
+            pass

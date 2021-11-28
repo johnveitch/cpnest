@@ -267,6 +267,7 @@ class NestedSampler(object):
         self.logLmin        = -np.inf
         self.logLmax        = -np.inf
         self.iteration      = 0
+        self.prior_samples  = []
         self.nested_samples = []
         self.rolling_p      = []
         self.logZ           = None
@@ -295,7 +296,7 @@ class NestedSampler(object):
 
         self.live_points = LivePoints(l, self.nthreads)
 
-    def setup_output(self,output):
+    def setup_output(self, output):
         """
         Set up the output folder
 
@@ -310,10 +311,12 @@ class NestedSampler(object):
                 evidence_file: file where the evidence will be written
                 resume_file:   file used for checkpointing the algorithm
         """
-        chain_filename = "chain_"+str(self.nlive)+"_"+str(self.position)+".txt"
+        model_name     = type(self.model).__name__
+        os.makedirs(os.path.join(output,model_name),exist_ok = True)
+        chain_filename = model_name+"/chain_"+str(self.nlive)+"_"+str(self.position)+".txt"
         output_file   = os.path.join(output,chain_filename)
         evidence_file = os.path.join(output,chain_filename+"_evidence_"+str(self.position)+".txt")
-        resume_file  = os.path.join(output,"nested_sampler_resume_"+str(self.position)+".pkl")
+        resume_file  = os.path.join(output,model_name+"/nested_sampler_resume_"+str(self.position)+".pkl")
 
         return output_file, evidence_file, resume_file
 
@@ -421,6 +424,7 @@ class NestedSampler(object):
                     self.logger.warning("You may want to check your likelihood function")
                 if np.isfinite(x.logP) and np.isfinite(x.logL):
                     self.live_points.set(i,x)
+                    self.prior_samples.append(x)
                     i += 1
                     pbar.update()
                 else:
@@ -477,7 +481,6 @@ class NestedSampler(object):
         # Some diagnostics
         if self.verbose > 1 :
             self.live_points.plot(os.path.join(self.output_folder,'logXlogL.png'))
-        return self.logZ, self.nested_samples
 
     def checkpoint(self):
         """
@@ -518,7 +521,10 @@ class NestedSampler(object):
     
     def get_nested_samples(self):
         return self.nested_samples
-    
+
+    def get_prior_samples(self):
+        return self.prior_samples
+
     def get_live_points(self):
         return self.live_points
     
@@ -528,8 +534,8 @@ class NestedSampler(object):
     def get_nlive(self):
         return self.nlive
     
-    def get_logLs_logZ_info(self):
-        return self.live_points.get_logLs_logZ_info()
+    def get_information(self):
+        return self.info
     
     @classmethod
     def resume(cls, filename, usermodel, pool):
@@ -537,9 +543,12 @@ class NestedSampler(object):
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
-        with open(filename,"rb") as f:
-            obj = pickle.load(f)
+
         obj.model = usermodel
+        model_name     = type(usermodel).__name__
+        with open(model_name+"/"+filename,"rb") as f:
+            obj = pickle.load(f)
+                
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         obj.live_points = LivePoints.remote(obj.live)
         obj.live_points._set_internal_state(obj.integral_state)

@@ -1,7 +1,6 @@
 import unittest
 import numpy as np
 import cpnest.model
-import ray
 
 class RingModel(cpnest.model.Model):
     """
@@ -35,8 +34,9 @@ class RingTestCase(unittest.TestCase):
 
     def test_evidence(self):
         # 2 sigma tolerance
-        logLmin, logLmax, logZ, H = ray.get(self.work.NS.get_logLs_logZ_info.remote())
-        tolerance = 2.0*np.sqrt(H/ray.get(self.work.NS.get_nlive.remote()))
+        logZ = self.work.logZ
+        H    = self.work.information
+        tolerance = 2.0*self.work.logZ_error
         print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
         print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
         print('Estimated logZ {0}'.format(logZ))

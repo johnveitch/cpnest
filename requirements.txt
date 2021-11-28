@@ -4,5 +4,6 @@ corner
 tqdm
 cython
 matplotlib
-ray[default]
+ray
+h5py
 

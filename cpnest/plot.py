@@ -42,8 +42,11 @@ def trace_plot(nested_samples, nlives, folder):
 
         for i,s in enumerate(nested_samples):
             S = axs[i,0].scatter(1+np.arange(len(s[n])),s[n],c=s['logPrior'],cmap=cm.inferno)
-            CB = plt.colorbar(S, ax=axs[i,0])
-            CB.set_label('logPrior')
+            try:
+                CB = plt.colorbar(S, ax=axs[i,0])
+                CB.set_label('logPrior')
+            except:
+                pass
             axs[i,0].set_xlabel('iteration number')
             axs[i,0].set_ylabel(n)
         plt.savefig(os.path.join(folder,n+"_trace.pdf"), bbox_inches='tight')
@@ -121,19 +124,15 @@ def plot_indices(indices, filename=None, max_bins=30):
     plt.close()
 
 
-def plot_corner(xs, ps=None, ms=None, filename=None, **kwargs):
+def plot_corner(xs, filename=None, **kwargs):
     """
     Produce a corner plot
     """
     import corner
     mask = [i for i in range(xs.shape[-1]) if not all(xs[:,i]==xs[0,i]) ]
-    fig  = corner.corner(xs[:,mask], color='k', hist_kwargs={'density':True}, **kwargs)
-    if ps is not None:
-        mask = [i for i in range(ps.shape[-1]) if not all(ps[:,i]==ps[0,i]) ]
-        corner.corner(ps[:,mask], fig = fig, color='g', hist_kwargs={'density':True}, **kwargs)
-    if ms is not None:
-        mask = [i for i in range(ms.shape[-1]) if not all(ms[:,i]==ms[0,i]) ]
-        corner.corner(ms[:,mask], fig = fig, color='r', hist_kwargs={'density':True}, **kwargs)
+    fig = corner.corner(xs[:,mask], color='k', hist_kwargs={'density':True}, **kwargs)
+
+
     if filename is not None:
         plt.savefig(filename,bbox_inches='tight')
     plt.close()

@@ -7,7 +7,6 @@ import cpnest.model
 import matplotlib as mpl
 mpl.use('Agg')
 from matplotlib import pyplot as plt
-import ray
 
 class HalfGaussianModel(cpnest.model.Model):
     """
@@ -37,15 +36,14 @@ class HalfGaussianTestCase(unittest.TestCase):
 
     def test_evidence(self):
         # 2 sigma tolerance
-        logLmin, logLmax, logZ, H = ray.get(self.work.NS.get_logLs_logZ_info.remote())
-        tolerance = 2.0*np.sqrt(H/ray.get(self.work.NS.get_nlive.remote()))
+        logZ = self.work.logZ
+        H    = self.work.information
+        tolerance = 2.0*self.work.logZ_error
         print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
         print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
         print('Estimated logZ {0}'.format(logZ))
         pos=self.work.posterior_samples['x']
-        #t,pval=stats.kstest(pos,self.model.distr.cdf)
-        pos=self.work.posterior_samples['x']
-        #t,pval=stats.kstest(pos,self.model.distr.cdf)
+
         plt.figure()
         plt.hist(pos.ravel(),density=True)
         x=np.linspace(self.model.bounds[0][0],self.model.bounds[0][1],100)

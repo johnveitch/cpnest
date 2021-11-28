@@ -1,7 +1,6 @@
 import unittest
 import numpy as np
 import cpnest.model
-import ray
 
 class GaussianModel(cpnest.model.Model):
     """
@@ -32,8 +31,9 @@ class GaussianTestCase(unittest.TestCase):
 
     def test_run(self):
         self.work.run()
-        logLmin, logLmax, logZ, H = ray.get(self.work.NS.get_logLs_logZ_info.remote())
-        tolerance = 2.0*np.sqrt(H/ray.get(self.work.NS.get_nlive.remote()))
+        logZ = self.work.logZ
+        H    = self.work.information
+        tolerance = 2.0*self.work.logZ_error
         self.assertTrue(np.abs(logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0} +/- {2} instead of {1}'.format(logZ ,GaussianModel.analytic_log_Z, tolerance))
 
 def test_all():
