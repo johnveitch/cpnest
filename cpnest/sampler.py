@@ -39,9 +39,6 @@ class Sampler(object):
         :int: display debug information on screen
         Default: 0
 
-    nlive:
-        :int: number of live points. Used only for the nmcmc estimation on the fly
-
     proposal:
         :obj:`cpnest.proposals.Proposal` to use
         Defaults: :obj:`cpnest.proposals.DefaultProposalCycle`)
@@ -51,7 +48,6 @@ class Sampler(object):
                  model,
                  maxmcmc,
                  verbose      = False,
-                 nlive        = 1000,
                  proposal     = None):
 
         self.counter        = 0
@@ -69,7 +65,6 @@ class Sampler(object):
         self.Nmcmc              = self.initial_mcmc
         self.Nmcmc_exact        = float(self.initial_mcmc)
 
-        self.nlive              = nlive
         self.verbose            = verbose
         self.acceptance         = 0.0
         self.sub_acceptance     = 0.0
@@ -85,7 +80,7 @@ class Sampler(object):
         ACL = (2/acc) - 1
         multiplied by a safety margin of 5
         Uses moving average with decay time tau iterations
-        (default: :int:`self.nlive`)
+        (default: :int:`self.maxmcmc`)
 
         Taken from http://github.com/farr/EnsembleNest.jl
         """

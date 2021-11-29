@@ -53,17 +53,21 @@ class CPNest(object):
         random seed (default: 1234)
 
     maxmcmc: `int`
-        maximum MCMC points for MHS sampling chains (100)
+        maximum MCMC points for MHS sampling chains (5000)
 
     maxslice: `int`
         maximum number of slices points for Slice sampling chains (100)
 
     maxleaps: `int`
-        maximum number of leaps points for HMC sampling chains (100)
+        maximum number of leaps points for HMC sampling chains (1000)
 
-    nthreads: `int` or `None`
-        number of parallel samplers. Default (None) uses psutil.cpu_count() to autodetermine
-        
+    nnest: `int`
+        number of parallel nested samplers.
+        Default: 1
+
+    nensemble: `int`
+        number of sampler threads using an ensemble samplers. Default: 1
+    
     nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
 
@@ -95,6 +99,10 @@ class CPNest(object):
     prior_sampling: boolean
         produce nlive samples from the prior.
         Default: False
+    
+    object_store_memory: `int`
+        amount of memory reserved for ray object store
+        Default: 2GB
 
     """
     def __init__(self,
@@ -104,8 +112,10 @@ class CPNest(object):
                  verbose      = 0,
                  seed         = None,
                  maxmcmc      = 5000,
+                 maxslice     = 100,
+                 maxleaps     = 1000,
                  nnest        = 1,
-                 nensemble    = 0,
+                 nensemble    = 1,
                  nhamiltonian = 0,
                  nslice       = 0,
                  resume       = False,
@@ -148,6 +158,8 @@ class CPNest(object):
         # Import placement group APIs.
         from ray.util.placement_group import placement_group, placement_group_table, remove_placement_group
 
+        # set up the resume files
+        self.resume_file = []
         # The LogFile context manager ensures everything within is logged to
         # 'cpnest.log' but the file handler is safely closed once the run is
         # finished.
@@ -204,7 +216,6 @@ class CPNest(object):
                     s = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
                                           verbose     = verbose,
-                                          nlive       = nlive,
                                           proposal    = proposals['mhs']()
                                           )
                     samplers.append(s)
@@ -213,7 +224,6 @@ class CPNest(object):
                     s = HamiltonianMonteCarloSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
                                           verbose     = verbose,
-                                          nlive       = nlive,
                                           proposal    = proposals['hmc'](model=self.user)
                                           )
                     samplers.append(s)
@@ -222,15 +232,14 @@ class CPNest(object):
                     s = SliceSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
                                           verbose     = verbose,
-                                          nlive       = nlive,
                                           proposal    = proposals['sli']()
                                           )
                     samplers.append(s)
                 
                 self.pool.append(ActorPool(samplers))
 
-                self.resume_file = os.path.join(output, "nested_sampler_resume_{}.pkl".format(j))
-                if not os.path.exists(self.resume_file) or resume == False:
+                self.resume_file.append(os.path.join(output, "nested_sampler_resume_{}.pkl".format(j)))
+                if not os.path.exists(self.resume_file[j]) or resume == False:
                     self.ns_pool.append(ray.remote(NestedSampler).options(placement_group=pg).remote(self.user,
                                 nthreads       = self.nsamplers,
                                 nlive          = nlive,
@@ -241,7 +250,7 @@ class CPNest(object):
                                 periodic_checkpoint_interval = periodic_checkpoint_interval,
                                 position = j))
                 else:
-                    self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file, self.user, self.pool[i]))
+                    self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file[j], self.user, self.pool[i]))
                 
                 self.results['run_{}'.format(j)] = {}
             
@@ -288,7 +297,8 @@ class CPNest(object):
             
             #TODO: Clean up the resume pickles
             try:
-                os.remove(self.resume_file)
+                for f in self.resume_file:
+                    os.remove(f)
             except OSError:
                 pass
                         
@@ -297,7 +307,11 @@ class CPNest(object):
             self.logger.critical("ray correctly shut down. exiting")
             
     def postprocess(self, filename='cpnest.h5'):
-    
+        """
+        post-processes the results of parallel runs
+        if filenmae is not None, then outputs the results in an
+        hdf5 file
+        """
         import numpy.lib.recfunctions as rfn
         from .nest2pos import draw_posterior_many
         
@@ -423,5 +437,8 @@ class CPNest(object):
             plot.plot_indices(lp.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices_{}.pdf'.format(i)))
 
     def checkpoint(self):
+        """
+        send the checkpoint message to the nested samplers
+        """
         for s in self.NS.map_unordered(lambda a, v: a.checkpoint.remote(), range(self.nnest)):
             pass

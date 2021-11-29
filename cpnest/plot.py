@@ -4,6 +4,10 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 def init_plotting():
+    """
+    utility function to set up the
+    plotting environment
+    """
     plt.rcParams['figure.figsize'] = (3.4, 3.4)
     plt.rcParams['font.size'] = 11
     plt.rcParams['font.family'] = 'DejaVu Sans'
@@ -33,6 +37,10 @@ def init_plotting():
 init_plotting()
 
 def trace_plot(nested_samples, nlives, folder):
+    """
+    produce trace plots for each of the nested sampling
+    parallel runs
+    """
     from matplotlib import cm
     rows  = len(nested_samples)
     names = nested_samples[0].dtype.names
@@ -50,6 +58,7 @@ def trace_plot(nested_samples, nlives, folder):
             axs[i,0].set_xlabel('iteration number')
             axs[i,0].set_ylabel(n)
         plt.savefig(os.path.join(folder,n+"_trace.pdf"), bbox_inches='tight')
+        plt.close(fig)
         
 def plot_chain(x, name=None, filename=None):
     """

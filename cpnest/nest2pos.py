@@ -172,12 +172,18 @@ def resample_mcmc_chain(chain, verbose=False, burnin=False):
     return output
 
 def next_pow_two(n):
+    """
+    find the next power of 2 given n
+    """
     i = 1
     while i < n:
         i = i << 1
     return i
 
 def autocorrelation(x, norm=True):
+    """
+    compute the autocorrelation function of an array
+    """
     x = np.atleast_1d(x)
     if len(x.shape) != 1:
         raise ValueError("invalid dimensions for 1D autocorrelation function")
@@ -194,8 +200,10 @@ def autocorrelation(x, norm=True):
 
     return acf
 
-# Automated windowing procedure following Sokal (1989)
 def auto_window(taus, c):
+    """
+    Automated windowing procedure following Sokal (1989)
+    """
     m = np.arange(len(taus)) < c * taus
     if np.any(m):
         return np.argmin(m)
@@ -204,7 +212,7 @@ def auto_window(taus, c):
 
 def acl(x, c=5.0):
     """
-    Compute autocorrelation time for x
+    Compute autocorrelation length for x
     """
     N = x.shape[0]
     acf = autocorrelation(x)
