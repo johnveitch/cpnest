@@ -1,7 +1,6 @@
 name: Build and upload to PyPI
 
 env:
-    CIBW_SKIP: cp27-* pp27-*
     CIBW_BEFORE_BUILD: python -m pip install numpy setuptools_scm cython
 
 # Build on every branch push, tag push, and pull request change:
@@ -18,11 +17,26 @@ jobs:
   build_wheels:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    env:
+      CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
     strategy:
       matrix:
-        os: [ubuntu-18.04, windows-latest]
+        os: [ubuntu-20.04, windows-latest, macos-10.15]
+        cibw_archs: ["auto"]
+        include:
+          - os: ubuntu-20.04
+            cibw_archs : "aarch64"
+          - os: macos-10.15
+            env:
+              CIBW_SKIP: pp*
 
     steps:
+      - name: Set up QEMU
+        if: matrix.cibw_archs == 'aarch64'
+        uses: docker/setup-qemu-action@v1
+        with:
+          platforms: arm64
+
       - uses: actions/checkout@v2
 
       - uses: actions/setup-python@v2
@@ -32,7 +46,7 @@ jobs:
 
       - name: Install cibuildwheel
         run: |
-          python -m pip install cibuildwheel==1.6.3
+          python -m pip install cibuildwheel==2.3.0
       - name: Build wheels
         run: |
           python -m cibuildwheel --output-dir wheelhouse

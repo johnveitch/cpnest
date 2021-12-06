@@ -67,7 +67,10 @@ class CPNest(object):
 
     nensemble: `int`
         number of sampler threads using an ensemble samplers. Default: 1
-    
+
+    nthreads: `int` or `None`
+        number of parallel samplers. Default (None) uses psutil.cpu_count() to autodetermine
+
     nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
 
@@ -99,7 +102,7 @@ class CPNest(object):
     prior_sampling: boolean
         produce nlive samples from the prior.
         Default: False
-    
+
     object_store_memory: `int`
         amount of memory reserved for ray object store
         Default: 2GB
@@ -123,34 +126,40 @@ class CPNest(object):
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False,
-                 object_store_memory=2*10**9
+                 object_store_memory=2*10**9,
+                 poolsize=None,
+                 nthreads=None
                  ):
-        
+
+
         self.logger    = logging.getLogger('cpnest.cpnest.CPNest')
         self.nsamplers = nensemble+nhamiltonian+nslice
         self.nnest     = nnest
+        if nthreads is not None and self.nsamplers == 0:
+            nensemble = nthreads
+            self.nsamplers = nensemble
         assert self.nsamplers > 0, "no sampler processes requested!"
         import psutil
         self.max_threads = psutil.cpu_count()
-        
+
         if self.nsamplers%self.nnest != 0:
             self.logger.warning("Error! Number of samplers not balanced")
             self.logger.warning("to the number of nested samplers! Exiting.")
             exit(-1)
-        
+
         self.nthreads = self.nsamplers+self.nnest
-        
+
         if self.nthreads > self.max_threads:
             self.logger.warning("More cpus than available are being requested!")
             self.logger.warning("This might result in excessive overhead")
-        
+
         self.ns_pool = []
         self.pool    = []
-        
+
         ray.init(num_cpus=self.nthreads,
                  ignore_reinit_error=True,
                  object_store_memory=object_store_memory)
-        
+
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
         os.makedirs(output, exist_ok=True)
@@ -166,13 +175,19 @@ class CPNest(object):
         self.log_file = LogFile(os.path.join(output, 'cpnest.log'),
                                 verbose=verbose)
         with self.log_file:
+            if poolsize is not None:
+                self.logger.warning('poolsize is a deprecated option and will \
+                                    be removed in a future version.')
+            if nthreads is not None:
+                self.logger.warning('nthreads is a deprecated option and will\
+                                    be removed in a future verison.')
             self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
             self.logger.critical('Nested samplers: {0}'.format(nnest))
             self.logger.critical('Ensemble samplers: {0}'.format(nensemble))
             self.logger.critical('Slice samplers: {0}'.format(nslice))
             self.logger.critical('Hamiltonian samplers: {0}'.format(nhamiltonian))
             self.logger.critical('ray object store size: {0} GB'.format(object_store_memory/1e9))
-            
+
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
                     "The n_periodic_checkpoint kwarg is deprecated, "
@@ -203,14 +218,14 @@ class CPNest(object):
             if seed is None: self.seed=1234
             else:
                 self.seed=seed
-            
+
             for j in range(self.nnest):
-            
+
                 pg = placement_group([{"CPU": 1+self.nsamplers//self.nnest}],strategy="STRICT_PACK")
                 ray.get(pg.ready())
-                
+
                 samplers = []
-                
+
                 # instantiate the sampler class
                 for i in range(nensemble//self.nnest):
                     s = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
@@ -235,7 +250,7 @@ class CPNest(object):
                                           proposal    = proposals['sli']()
                                           )
                     samplers.append(s)
-                
+
                 self.pool.append(ActorPool(samplers))
 
                 self.resume_file.append(os.path.join(output, "nested_sampler_resume_{}.pkl".format(j)))
@@ -251,12 +266,14 @@ class CPNest(object):
                                 position = j))
                 else:
                     self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file[j], self.user, self.pool[i]))
-                
+
                 self.results['run_{}'.format(j)] = {}
-            
+
             self.results['combined'] = {}
+                    self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file, self.user, self.pool[i]))
+
             self.NS = ActorPool(self.ns_pool)
-            
+
     def run(self):
         """
         Run the sampler
@@ -273,7 +290,7 @@ class CPNest(object):
             try:
                 for s in self.NS.map_unordered(lambda a, v: a.nested_sampling_loop.remote(self.pool[v]), range(self.nnest)):
                     pass
-            
+
             except CheckPoint:
                 self.checkpoint()
                 for p in self.NS+self.samplers:
@@ -284,7 +301,7 @@ class CPNest(object):
                 sys.exit(130)
 
             self.postprocess(filename='cpnest.h5')
-            
+
             if self.verbose >= 2:
                 self.logger.critical("Checking insertion indeces")
                 for s in self.NS.map_unordered(lambda a, v: a.check_insertion_indices.remote(rolling=False,
@@ -293,19 +310,18 @@ class CPNest(object):
 
                 self.logger.critical("Saving plots in {0}".format(self.output))
                 self.plot(corner = False)
-                
-            
+
             #TODO: Clean up the resume pickles
             try:
                 for f in self.resume_file:
                     os.remove(f)
             except OSError:
                 pass
-                        
+
             ray.shutdown()
             assert ray.is_initialized() == False
             self.logger.critical("ray correctly shut down. exiting")
-            
+
     def postprocess(self, filename='cpnest.h5'):
         """
         post-processes the results of parallel runs
@@ -314,43 +330,43 @@ class CPNest(object):
         """
         import numpy.lib.recfunctions as rfn
         from .nest2pos import draw_posterior_many
-        
+
         ns = list(self.NS.map_unordered(lambda a, v: a.get_nested_samples.remote(), range(self.nnest)))
         ps = list(self.NS.map_unordered(lambda a, v: a.get_prior_samples.remote(), range(self.nnest)))
         info = list(self.NS.map_unordered(lambda a, v: a.get_information.remote(), range(self.nnest)))
 
         for i,l in enumerate(ps):
-            
+
             self.results['run_{}'.format(i)]['prior_samples'] = rfn.stack_arrays([s.asnparray()
                                for s in l] ,usemask=False)
-                               
+
         for i,l in enumerate(ns):
             self.results['run_{}'.format(i)]['nested_samples'] = rfn.stack_arrays([s.asnparray()
                                for s in l] ,usemask=False)
-        
+
         for i in range(self.nnest):
             p, logZ  = draw_posterior_many([self.results['run_{}'.format(i)]['nested_samples']],
                                            [self.nlive],verbose=self.verbose)
-                                           
+
             self.results['run_{}'.format(i)]['posterior_samples'] = p
             self.results['run_{}'.format(i)]['logZ'] = logZ
             self.results['run_{}'.format(i)]['information'] = info[i]
             self.results['run_{}'.format(i)]['logZ_error'] = np.sqrt(info[i]/self.nlive)
-            
+
         p, logZ  = draw_posterior_many([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],[self.nlive]*self.nnest,verbose=self.verbose)
-        
+
         self.results['combined']['prior_samples'] = rfn.stack_arrays([self.results['run_{}'.format(i)]['prior_samples'] for i in range(self.nnest)],usemask=False)
         self.results['combined']['nested_samples'] = rfn.stack_arrays([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],usemask=False)
-        
+
         self.results['combined']['nested_samples'].sort(order='logL')
         self.results['combined']['posterior_samples'] = p
         self.results['combined']['logZ'] = logZ
         self.results['combined']['information'] = np.average(info)
-        
+
         evds = [self.results['run_{}'.format(i)]['logZ'] for i in range(self.nnest)]
         e2   = (np.average(info)/self.nlive+np.var(evds))/self.nnest
         self.results['combined']['logZ_error'] = np.sqrt(e2)
-        
+
         if filename != None:
             import os
             import h5py
@@ -361,11 +377,11 @@ class CPNest(object):
                 for d in self.results[k].keys():
                     grp.create_dataset(d, data = self.results[k][d], dtype=self.results[k][d].dtype)
             h.close()
-    
+
     @property
     def nested_samples(self):
         return self.results['combined']['nested_samples']
-    
+
     @nested_samples.setter
     def nested_samples(self, filename=None):
         self.postprocess(self, filename=filename)
@@ -373,7 +389,7 @@ class CPNest(object):
     @property
     def posterior_samples(self):
         return self.results['combined']['posterior_samples']
-    
+
     @posterior_samples.setter
     def posterior_samples(self, filename=None):
         self.postprocess(self, filename=filename)
@@ -381,15 +397,15 @@ class CPNest(object):
     @property
     def prior_samples(self):
         return self.results['combined']['prior_samples']
-    
+
     @prior_samples.setter
     def prior_samples(self, filename=None):
         self.postprocess(self, filename=filename)
-    
+
     @property
     def logZ(self):
         return self.results['combined']['logZ']
-    
+
     @logZ.setter
     def logZ(self, filename=None):
         self.postprocess(self, filename=filename)
@@ -397,15 +413,15 @@ class CPNest(object):
     @property
     def logZ_error(self):
         return self.results['combined']['logZ_error']
-    
+
     @logZ_error.setter
     def logZ_error(self, filename=None):
         self.postprocess(self, filename=filename)
-        
+
     @property
     def information(self):
         return self.results['combined']['information']
-    
+
     @information.setter
     def information(self, filename=None):
         self.postprocess(self, filename=filename)
@@ -419,10 +435,10 @@ class CPNest(object):
             plot.plot_hist(self.posterior_samples[n].ravel(), name = n,
                            prior_samples = self.prior_samples[n].ravel(),
                            filename = os.path.join(self.output,'posterior_{0}.pdf'.format(n)))
-        
+
         plot.trace_plot([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],
                         [self.nlive]*self.nnest, self.output)
-            
+
         if corner:
             import numpy as np
             plotting_posteriors = np.squeeze(self.posterior_samples.view((self.posterior_samples.dtype[0], len(self.posterior_samples.dtype.names))))
@@ -431,7 +447,7 @@ class CPNest(object):
 
                              labels=self.prior_samples.dtype.names,
                              filename=os.path.join(self.output,'corner.pdf'))
-        
+
         lps = list(self.NS.map(lambda a, v: a.get_live_points.remote(), range(self.nnest)))
         for i,lp in enumerate(lps):
             plot.plot_indices(lp.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices_{}.pdf'.format(i)))
