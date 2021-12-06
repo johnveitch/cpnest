@@ -28,7 +28,7 @@ jobs:
             cibw_archs : "aarch64"
           - os: macos-10.15
             env:
-              CIBW_SKIP: pp*
+              CIBW_SKIP: pp-*
 
     steps:
       - name: Set up QEMU
