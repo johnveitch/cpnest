@@ -270,8 +270,6 @@ class CPNest(object):
                 self.results['run_{}'.format(j)] = {}
 
             self.results['combined'] = {}
-                    self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file, self.user, self.pool[i]))
-
             self.NS = ActorPool(self.ns_pool)
 
     def run(self):
