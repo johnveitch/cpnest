@@ -14,12 +14,16 @@ from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint
-
+import ray
+import random
 from tqdm import tqdm
-
+try:
+    from smt.surrogate_models import *
+    no_smt = False
+except:
+    no_smt = True
 
 logger = logging.getLogger('cpnest.NestedSampling')
-
 
 class KeyOrderedList(list):
     """
@@ -112,6 +116,8 @@ class _NSintegralState(object):
         """
         Increment the state of the evidence integrator
         Simply uses rectangle rule for initial estimate
+        see: https://www.cell.com/biophysj/pdf/S0006-3495(12)00055-0.pdf
+        for parallel implementation
         """
         if(logL<=self.logLs[-1]):
             self.logger.warning('NS integrator received non-monotonic logL. {0:.5f} -> {1:.5f}'.format(self.logLs[-1], logL))
@@ -180,11 +186,13 @@ class NestedSampler(object):
 
     model: :obj:`cpnest.Model` user defined model
 
-    manager: `multiprocessing` manager instance which controls
-        the shared objects.
-        Default: None
-
-    Nlive: int
+    periodic_checkpoint_interval: float
+        time interval in seconds between periodic checkpoints
+    
+    nthreads: int
+        number of parallel sampling threads
+        
+    nlive: int
         number of live points to be used for the integration
         Default: 1024
 
@@ -220,23 +228,26 @@ class NestedSampler(object):
 
     def __init__(self,
                  model,
-                 manager        = None,
+                 periodic_checkpoint_interval = np.inf,
+                 nthreads       = None,
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
                  seed           = 1,
                  prior_sampling = False,
                  stopping       = 0.1,
-                 n_periodic_checkpoint = None,
+                 n_periodic_checkpoint = None
                  ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        loggername = 'cpnest.NestedSampling.NestedSampler'
+        loggername          = 'cpnest.NestedSampling.NestedSampler'
         self.logger         = logging.getLogger(loggername)
+        self.logger.addHandler(logging.StreamHandler())
+        self.periodic_checkpoint_interval = periodic_checkpoint_interval
         self.model          = model
-        self.manager        = manager
+        self.nthreads       = nthreads
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose        = verbose
@@ -244,20 +255,18 @@ class NestedSampler(object):
         self.accepted       = 0
         self.rejected       = 1
         self.queue_counter  = 0
-        self.Nlive          = nlive
-        self.params         = [None] * self.Nlive
+        self.nlive          = nlive
+        self.live_points    = None
         self.last_checkpoint_time = time.time()
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
-        self.logLmin        = self.manager.logLmin
-        self.logLmax        = self.manager.logLmax
+        self.logLmin        = -np.inf
+        self.logLmax        = -np.inf
         self.iteration      = 0
         self.nested_samples = []
-        self.insertion_indices = []
         self.rolling_p      = []
         self.logZ           = None
-        self.state          = _NSintegralState(self.Nlive)
         sys.stdout.flush()
         self.output_folder  = output
         self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
@@ -265,7 +274,24 @@ class NestedSampler(object):
         header.write('\t'.join(self.model.names))
         header.write('\tlogL\n')
         header.close()
+        self.initialise_live_points()
         self.initialised    = False
+
+    def initialise_live_points(self):
+
+        l = []
+
+        with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=0) as pbar:
+            for i in range(self.nlive):
+                
+                p = self.model.new_point()
+                p.logP = self.model.log_prior(p)
+                p.logL = self.model.log_likelihood(p)
+                l.append(p)
+                pbar.update()
+
+        self.live_points = LivePoints.remote(l, self.nthreads)
+        self.live_points.update_mean_covariance.remote()
 
     def setup_output(self,output):
         """
@@ -282,7 +308,7 @@ class NestedSampler(object):
                 evidence_file: file where the evidence will be written
                 resume_file:   file used for checkpointing the algorithm
         """
-        chain_filename = "chain_"+str(self.Nlive)+"_"+str(self.seed)+".txt"
+        chain_filename = "chain_"+str(self.nlive)+"_"+str(self.seed)+".txt"
         output_file   = os.path.join(output,chain_filename)
         evidence_file = os.path.join(output,chain_filename+"_evidence.txt")
         resume_file  = os.path.join(output,"nested_sampler_resume.pkl")
@@ -305,8 +331,11 @@ class NestedSampler(object):
         Write the evidence logZ and maximum likelihood to the evidence_file
         """
         with open(self.evidence_file,"w") as f:
+
             f.write('#logZ\tlogLmax\tH\n')
-            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(self.state.logZ, self.logLmax.value, self.state.info))
+            f.write('{0:.5f} {1:.5f} {2:.2f}\n'.format(ray.get(self.live_points.get_logZ.remote()),
+                                                       ray.get(self.live_points.get_logLmax.remote()),
+                                                       ray.get(self.live_points.get_info.remote())))
 
     def setup_random_seed(self,seed):
         """
@@ -315,64 +344,149 @@ class NestedSampler(object):
         self.seed = seed
         np.random.seed(seed=self.seed)
 
-    def consume_sample(self):
+    def consume_sample(self, pool):
         """
-        consumes a sample from the consumer_pipes
+        requests the workers to update the live points
         and updates the evidence logZ
         """
-        # Increment the state of the evidence integration
-        nreplace = len(self.manager.consumer_pipes)
-        logLmin = self.get_worst_n_live_points(nreplace)
-        self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
-        self.nested_samples.extend(self.params[:nreplace])
-        logLtmp=[p.logL for p in self.params[:nreplace]]
+        # Get the worst live points
+        self.worst   = self.live_points.get_worst.remote(self.nthreads)
+        # get the necessary statistics from the LivePoint actor
+        self.logLmin, self.logLmax, logZ, info = ray.get(self.live_points.get_logLs_logZ_info.remote())
+        
+        if self.verbose:
+            logLtmp = ray.get(self.live_points.get_worst_logLs.remote())
 
-        # Make sure we are mixing the chains
-        for i in np.random.permutation(range(nreplace)): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
-        self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
+        self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
 
-        # Replace the points we just consumed with the next acceptable ones
-        # Reversed since the for the first point the current number of
-        # live points is N - n_worst  -1 (minus 1 because of counting from zero)
-        for k in reversed(self.worst):
-            self.iteration += 1
-            loops           = 0
-            while(True):
-                loops += 1
-                acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
-                if proposed.logL > self.logLmin.value:
-                    # Insert the new live point into the ordered list and
-                    # return the index at which is was inserted, this will
-                    # include the n worst points, so this subtracted next
-                    index = self.params.insert_live_point(proposed)
-                    # the index is then coverted to a value between [0, 1]
-                    # accounting for the variable number of live points
-                    self.insertion_indices.append((index - nreplace) / (self.Nlive - k - 1))
-                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
-                    self.accepted += 1
-                    break
-                else:
-                    # resend it to the producer
-                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
-                    self.rejected += 1
+        # set up the ensemble statistics
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
+
+        if self.nthreads == 1:
+            starting_points = [self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)]
+        else:
+            starting_points = self.live_points.sample.options(num_returns=self.nthreads).remote(self.nthreads)
+
+        for v in starting_points:
+            pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), v)
+
+        i = 0
+        while pool.has_next():
+
+            acceptance, sub_acceptance, self.jumps, proposed = pool.get_next()
+
+            if proposed.logL > self.logLmin:
+                # replace worst point with new one
+                self.live_points.insert.remote(i%self.nthreads,proposed.copy())
+                self.accepted  += 1
+                self.iteration += 1
+
+                if self.verbose:
+                    self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
+                        .format(self.iteration, self.jumps, self.acceptance, self.iteration%self.nthreads, acceptance, sub_acceptance, info,\
+                        logLtmp[i%self.nthreads], proposed.logL, self.condition, logZ, self.logLmax))
+            
+                i += 1
+
+            else:
+                self.rejected += 1
+                p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), starting_points[i%self.nthreads])
+
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-            if self.verbose:
-                self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[k], proposed.logL, self.condition, self.state.logZ, self.logLmax.value))
+        
+        self.live_points.remove_n_worst_points.remote(self.nthreads)
+        self.live_points.update_mean_covariance.remote()
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
 
-        # points not removed earlier because they are used to resend to
-        # samplers if rejected
-        self.params.remove_n_worst_points(nreplace)
+    def reset(self, pool):
+        """
+        Initialise the pool of `cpnest.parameter.LivePoint` by
+        sampling them from the `cpnest.model.log_prior` distribution
+        """
+        # set up  the ensemble statistics
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            pass
 
-    def get_worst_n_live_points(self, n):
+        # send all live points to the samplers for start
+        for i in range(self.nlive):
+            pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
+
+        i = 0
+
+        with tqdm(total=self.nlive, disable= not self.verbose, desc='CPNEST: sampling prior', position=self.nthreads) as pbar:
+            while pool.has_next():
+                acceptance,sub_acceptance,self.jumps,x = pool.get_next()
+                if np.isnan(x.logL):
+                    self.logger.warning("Likelihood function returned NaN for params "+str(x))
+                    self.logger.warning("You may want to check your likelihood function")
+                if np.isfinite(x.logP) and np.isfinite(x.logL):
+                    self.live_points.set.remote(i,x)
+                    i += 1
+                    pbar.update()
+                else:
+                    pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get.remote(i))
+
+        self.live_points.update_mean_covariance.remote()
+        self.live_points.set_ordered_list.remote()
+        
+        if self.verbose:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
+        self.initialised=True
+
+    def nested_sampling_loop(self, pool):
         """
-        selects the lowest likelihood N live points
-        for evolution
+        main nested sampling loop
         """
-        self.worst = np.arange(n)
-        self.logLmin.value = np.float128(self.params[n-1].logL)
-        return np.float128(self.logLmin.value)
+        if not self.initialised:
+            self.reset(pool)
+
+        if self.prior_sampling:
+            self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
+            self.write_chain_to_file()
+            self.write_evidence_to_file()
+            self.logLmin = np.inf
+            self.logLmax = np.inf
+            self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
+            return 0
+
+        try:
+            while self.condition > self.tolerance:
+                self.consume_sample(pool)
+                if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
+                    self.checkpoint()
+                    self.last_checkpoint_time = time.time()
+                    
+                if (self.iteration % self.nlive) < self.nthreads:
+                    self.check_insertion_indices()
+        
+        except CheckPoint:
+            self.checkpoint()
+            sys.exit(130)
+
+        # Refine evidence estimate
+        self.logZ, self.nested_samples = ray.get(self.live_points.finalise.remote())
+        self.info = ray.get(self.live_points.get_info.remote())
+        # output the chain and evidence
+        self.write_chain_to_file()
+        self.write_evidence_to_file()
+        self.logger.critical('Final evidence: {0:0.2f}'.format(self.logZ))
+        self.logger.critical('Information: {0:.2f}'.format(self.info))
+
+        # Some diagnostics
+        if self.verbose > 1 :
+            ray.get(self.live_points.plot.remote(os.path.join(self.output_folder,'logXlogL.png')))
+        return self.logZ, self.nested_samples
+
+    def checkpoint(self):
+        """
+        Checkpoint its internal state
+        """
+        self.logger.critical('Checkpointing nested sampling')
+        with open(self.resume_file,"wb") as f:
+            pickle.dump(self, f)
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
@@ -380,12 +494,12 @@ class NestedSampler(object):
         the nested sampling run (rolling=True) or for the whole run
         (rolling=False).
         """
-        if not self.insertion_indices:
+        if not ray.get(self.live_points.get_insertion_indices.remote()):
             return
         if rolling:
-            indices = self.insertion_indices[-self.Nlive:]
+            indices = ray.get(self.live_points.get_insertion_indices.remote())[-self.nlive:]
         else:
-            indices = self.insertion_indices
+            indices = ray.get(self.live_points.get_insertion_indices.remote())
 
         D, p = kstest(indices, 'uniform', args=(0, 1))
         if rolling:
@@ -397,138 +511,267 @@ class NestedSampler(object):
         if filename is not None:
             np.savetxt(os.path.join(
                 self.output_folder, filename),
-                self.insertion_indices,
+                ray.get(self.live_points.get_insertion_indices.remote()),
                 newline='\n',delimiter=' ')
 
-
-    def reset(self):
-        """
-        Initialise the pool of `cpnest.parameter.LivePoint` by
-        sampling them from the `cpnest.model.log_prior` distribution
-        """
-        # send all live points to the samplers for start
-        i = 0
-        nthreads=self.manager.nthreads
-        params = [None] * self.Nlive
-        with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
-            while i < self.Nlive:
-                for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
-                for j in range(nthreads):
-                    while i < self.Nlive:
-                        acceptance,sub_acceptance,self.jumps,params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
-                        self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
-                        if np.isnan(params[i].logL):
-                            self.logger.warn("Likelihood function returned NaN for params "+str(params))
-                            self.logger.warn("You may want to check your likelihood function")
-                        if params[i].logP!=-np.inf and params[i].logL!=-np.inf:
-                            i+=1
-                            pbar.update()
-                            break
-        self.params = OrderedLivePoints(params)
-        if self.verbose:
-            sys.stderr.write("\n")
-            sys.stderr.flush()
-        self.initialised=True
-
-    def nested_sampling_loop(self):
-        """
-        main nested sampling loop
-        """
-        if not self.initialised:
-            self.reset()
-        if self.prior_sampling:
-            self.nested_samples = self.params
-            self.write_chain_to_file()
-            self.write_evidence_to_file()
-            self.logLmin.value = np.inf
-            self.logLmin.value = np.inf
-            for c in self.manager.consumer_pipes:
-                c.send(None)
-            self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
-            return 0
-
-        try:
-            while self.condition > self.tolerance:
-                self.consume_sample()
-                if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
-                    self.checkpoint()
-                    self.last_checkpoint_time = time.time()
-
-                if (self.iteration % self.Nlive) < self.manager.nthreads:
-                    self.check_insertion_indices()
-
-        except CheckPoint:
-            self.checkpoint()
-            # Run each pipe to get it to checkpoint
-            for c in self.manager.consumer_pipes:
-                c.send("checkpoint")
-            sys.exit(130)
-
-        # Signal worker threads to exit
-        self.logLmin.value = np.inf
-        for c in self.manager.consumer_pipes:
-            c.send(None)
-
-        # final adjustments
-        self.params.sort(key=attrgetter('logL'))
-        for i,p in enumerate(self.params):
-            self.state.increment(p.logL,nlive=self.Nlive-i)
-            self.nested_samples.append(p)
-
-        # Refine evidence estimate
-        self.state.finalise()
-        self.logZ = self.state.logZ
-        # output the chain and evidence
-        self.write_chain_to_file()
-        self.write_evidence_to_file()
-        self.logger.critical('Final evidence: {0:0.2f}'.format(self.state.logZ))
-        self.logger.critical('Information: {0:.2f}'.format(self.state.info))
-
-        # Some diagnostics
-        if self.verbose>1 :
-          self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
-        return self.state.logZ, self.nested_samples
-
-    def checkpoint(self):
-        """
-        Checkpoint its internal state
-        """
-        self.logger.critical('Checkpointing nested sampling')
-        with open(self.resume_file,"wb") as f:
-            pickle.dump(self, f)
-
     @classmethod
-    def resume(cls, filename, manager, usermodel):
+    def resume(cls, filename, usermodel, pool):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
         with open(filename,"rb") as f:
             obj = pickle.load(f)
-        obj.manager = manager
-        obj.logLmin = obj.manager.logLmin
-        obj.logLmin.value = obj.llmin
-        obj.logLmax = obj.manager.logLmax
-        obj.logLmax.value = obj.llmax
         obj.model = usermodel
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
-        del obj.__dict__['llmin']
-        del obj.__dict__['llmax']
+        obj.live_points = LivePoints.remote(obj.live)
+        ray.get(obj.live_points._set_internal_state.remote(obj.integral_state))
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(obj.live_points), range(obj.nthreads)):
+            pass
         return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state['llmin'] = self.logLmin.value
-        state['llmax'] = self.logLmax.value
+        state['live'] = [ray.get(self.live_points.get.remote(i)) for i in range(self.nlive)]
+        state['integral_state'] = ray.get(self.live_points._get_integral_state.remote())
         # Remove the unpicklable entries.
-        del state['logLmin']
-        del state['logLmax']
-        del state['manager']
+        del state['live_points']
         del state['model']
         del state['logger']
         return state
 
     def __setstate__(self, state):
         self.__dict__ = state
+
+@ray.remote
+class LivePoints:
+    """
+    ray remote actor class holding the live points pool
+    
+    parameters
+    ==========
+    
+    l: list
+        list of live points generated from the `cpnest.model` new_point method
+    
+    n_replace: int
+        number of live points to be replaced at each step. must coincide with the number of
+        sampling threads
+    
+    verbose: int
+        level of verbosity
+    """
+    def __init__(self, l, n_replace = 1, verbose = 2):
+        self.n_replace            = n_replace
+        self._list                = l
+        self.n                    = len(l)
+        self.dim                  = self._list[0].dimension
+        self.mean                 = None
+        self.covariance           = None
+        self.eigen_values         = None
+        self.eigen_vectors        = None
+        self.likelihood_gradient  = None
+        self.worst                = None
+        self.logLmax              = -np.inf
+        self.logLmin              = -np.inf
+        self.state                = _NSintegralState(self.n)
+        self.logger               = logging.getLogger('CPNest')
+        self.nested_samples       = []
+        self.insertion_indices    = []
+        self.update_mean_covariance()
+    
+    def set_ordered_list(self):
+        """
+        initialise the list of live points as a ordered list
+        """
+        self._list = OrderedLivePoints(self._list)
+    
+    def get(self, i):
+        """
+        return the i-th element
+        """
+        return self._list[i]
+
+    def get_mean_covariance(self):
+        """
+        return the live points sample mean and covariance
+        """
+        return self.get_mean(), self.get_covariance()
+
+    def get_covariance(self):
+        """
+        return the live points sample covariance
+        """
+        return self.covariance
+
+    def get_mean(self):
+        """
+        return the live points sample mean
+        """
+        return self.mean
+
+    def get_eigen_quantities(self):
+        """
+        return the live points sample covariance eigen values and eigen vectors
+        """
+        return self.eigen_values, self.eigen_vectors
+
+    def get_length(self):
+        """
+        return the number of live points
+        """
+        return self.n
+
+    def get_dimension(self):
+        """
+        return the dimension of each live point
+        """
+        return self.dim
+
+    def set(self,i, val):
+        """
+        set the i-th live point to val
+        """
+        self._list[i] = val
+        
+    def insert(self, i, val):
+        """
+        insert val in the ordered list
+        """
+        index = self._list.insert_live_point(val)
+        self.insertion_indices.append((index - self.n_replace) / (self.n - i - 1))
+
+    def to_list(self):
+        """
+        return the list of live points
+        """
+        return self._list
+
+    def update_mean_covariance(self):
+        """
+        Recompute mean and covariance matrix
+        of the ensemble of Live points
+        """
+        cov_array = np.zeros((self.dim,self.n))
+        if self.dim == 1:
+            name=self._list[0].names[0]
+            self.covariance = np.atleast_2d(np.var([self._list[j][name] for j in range(self.n)]))
+            self.mean       = np.atleast_1d(np.mean([self._list[j][name] for j in range(self.n)]))
+        else:
+            for i,name in enumerate(self._list[0].names):
+                for j in range(self.n): cov_array[i,j] = self._list[j][name]
+            self.covariance = np.cov(cov_array)
+            self.mean       = np.mean(cov_array,axis=1)
+        self.eigen_values, self.eigen_vectors = np.linalg.eigh(self.covariance)
+
+    def get_as_array(self):
+        """
+        return the live points as a stacked (n,d) numpy array
+        """
+        n = self.n+len(self.nested_samples)
+        as_array = np.zeros((self.dim,n))
+        for i,name in enumerate(self._list[0].names):
+            for j in range(self.n): as_array[i,j] = self._list[j][name]
+            for j in range(len(self.nested_samples)): as_array[i,j+self.n] = self.nested_samples[j][name]
+
+        return as_array.T # as an array (N,D)
+    
+    def sample(self, n):
+        """
+        randomly sample n live points
+        """
+        if self.worst == None:
+            return random.sample(self._list, n)
+        else:
+            k = len(self.worst)
+            return random.sample(self._list[k:], n)
+
+    def get_logLmax(self):
+        """
+        return the maximum likelihood value
+        """
+        return self.logLmax
+
+    def get_logLmin(self):
+        """
+        return the minimum likelihood value
+        """
+        return self.logLmin
+
+    def get_worst(self, n):
+        """
+        selects the lowest likelihood N live points
+        and updates the integral state
+        """
+        self.logLmin = np.float128(self._list[n-1].logL)
+        self.logLmax = np.float128(self._list[-1].logL)
+        self.worst = self._list[:n]
+        self.nested_samples.extend(self.worst)
+        self.state.increment(self.worst[n-1].logL, nreplace=self.n_replace)
+        return self.worst
+
+    def remove_n_worst_points(self,n):
+        """
+        remove the set of worst n live points
+        """
+        self._list.remove_n_worst_points(n)
+    
+    def get_insertion_indices(self):
+        """
+        return the insertion indeces
+        """
+        return self.insertion_indices
+    
+    def get_info(self):
+        """
+        return the information
+        """
+        return self.state.info
+
+    def get_logZ(self):
+        """
+        return the log evidence
+        """
+        return self.state.logZ
+
+    def get_logLs_logZ_info(self):
+        return self.get_logLmin(), self.get_logLmax(), self.get_logZ(), self.get_info()
+
+    def get_worst_logLs(self):
+        return np.array([w.logL for w in self.worst])
+
+    def finalise(self):
+        # final adjustments
+        self._list.sort(key=attrgetter('logL'))
+        for i,p in enumerate(self._list):
+            self.state.increment(p.logL, nlive=self.n-i, nreplace = 1)
+            self.nested_samples.append(p)
+
+        # Refine evidence estimate
+        self.logZ = self.state.finalise()
+        return self.state.logZ, self.nested_samples
+
+    def plot(self,filename):
+        self.state.plot(filename)
+        return 0
+
+    def _get_integral_state(self):
+        return self.state
+
+    def _set_internal_state(self, state):
+        self.state = state
+
+    def get_likelihood_gradient(self):
+        tracers_array = np.empty((self.n//10,self.dim))
+        V_vals        = np.empty(self.n//10)
+        idx = np.random.choice(self.n, size=self.n//10, replace=False)
+        for i,k in enumerate(idx):
+            tracers_array[i,:] = self._list[k].values
+            V_vals[i] = self._list[k].logL
+        mask   = np.isfinite(V_vals)
+        self.likelihood_gradient = KPLS(print_global=False)
+        self.likelihood_gradient.set_training_values(tracers_array[mask,:], V_vals[mask])
+        self.likelihood_gradient.train()
+        return self.likelihood_gradient

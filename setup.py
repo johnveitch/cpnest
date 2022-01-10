@@ -24,7 +24,7 @@ if have_cython:  # convert the pyx file to a .c file if cython is available
                              sources=[os.path.join("cpnest", "parameter.pyx")],
                              include_dirs=['cpnest', numpy.get_include()],
                              libraries=libraries,
-                             extra_compile_args=["-O3","-ffast-math"])]
+                             extra_compile_args=["-O3","-ffast-math","-mavx2","-ftree-vectorize"])]
     ext_modules = cythonize(ext_modules)
 else:
     # just compile the included parameter.c (already converted from
@@ -33,7 +33,7 @@ else:
                              sources=[os.path.join("cpnest", "parameter.c")],
                              include_dirs=['cpnest', numpy.get_include()],
                              libraries=libraries,
-                             extra_compile_args=["-O3","-ffast-math"])]
+                             extra_compile_args=["-O3","-ffast-math","-mavx2","-ftree-vectorize"])]
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -54,15 +54,11 @@ setup(
         author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
         url='https://github.com/johnveitch/cpnest',
         license='MIT',
-        python_requires='>=3',
+        python_requires='>=3.6',
         classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: MIT License',
             'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.2',
-            'Programming Language :: Python :: 3.3',
-            'Programming Language :: Python :: 3.4',
-            'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8'],

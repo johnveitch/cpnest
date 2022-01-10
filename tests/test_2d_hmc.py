@@ -21,18 +21,21 @@ class GaussianModel(cpnest.model.Model):
     def force(self, p):
         f = np.zeros(1, dtype = {'names':p.names, 'formats':['f8' for _ in p.names]})
         return f
+    
+    def analytical_gradient(self, p):
+        return p.values
 
 class GaussianTestCase(unittest.TestCase):
     """
     Test the gaussian model
     """
     def setUp(self):
-        self.work=cpnest.CPNest(GaussianModel(),verbose=1,nthreads=1,nlive=1000,maxmcmc=5000,poolsize=1000,nhamiltonian=1)
+        self.work=cpnest.CPNest(GaussianModel(),verbose=1,nensemble=0,nlive=1000,maxmcmc=100,nhamiltonian=1)
 
     def test_run(self):
         self.work.run()
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        tolerance = 2.0*np.sqrt(self.work.NS.info/self.work.NS.nlive)
         self.assertTrue(np.abs(self.work.NS.logZ - GaussianModel.analytic_log_Z)<tolerance, 'Incorrect evidence for normalised distribution: {0} +/- {2} instead of {1}'.format(self.work.NS.logZ ,GaussianModel.analytic_log_Z, tolerance))
 
 def test_all():

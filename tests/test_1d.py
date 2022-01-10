@@ -31,12 +31,12 @@ class GaussianTestCase(unittest.TestCase):
     """
     def setUp(self):
         self.model=GaussianModel()
-        self.work=cpnest.CPNest(self.model,verbose=1,nlive=1000,nthreads=2,maxmcmc=200,poolsize=100)
+        self.work=cpnest.CPNest(self.model,verbose=1,nlive=1000,nensemble=2,maxmcmc=200)
         self.work.run()
 
     def test_evidence(self):
         # 2 sigma tolerance
-        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.Nlive)
+        tolerance = 2.0*np.sqrt(self.work.NS.state.info/self.work.NS.nlive)
         print('2-sigma statistic error in logZ: {0:0.3f}'.format(tolerance))
         print('Analytic logZ {0}'.format(self.model.analytic_log_Z))
         print('Estimated logZ {0}'.format(self.work.NS.logZ))

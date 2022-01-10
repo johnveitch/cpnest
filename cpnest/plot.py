@@ -42,7 +42,7 @@ def plot_chain(x, name=None, filename=None):
     if name is not None:
         ax.set_ylabel(name)
         if filename is None:
-            filename=name+'_chain.pdf'
+            filename=name+'_chain.png'
     if filename is not None:
         plt.savefig(filename, bbox_inches='tight')
     plt.close(fig)
@@ -66,7 +66,7 @@ def plot_hist(x, name=None, prior_samples=None, mcmc_samples=None, filename=None
     if name is not None:
         ax.set_xlabel(name)
         if filename is None:
-            filename=name+'_hist.pdf'
+            filename=name+'_hist.png'
     if filename is not None:
         plt.savefig(filename, bbox_inches='tight')
     plt.close()
