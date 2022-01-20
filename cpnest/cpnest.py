@@ -131,7 +131,7 @@ class CPNest(object):
                  nthreads=None
                  ):
 
-
+        self.verbose   = verbose
         self.logger    = logging.getLogger('cpnest.cpnest.CPNest')
         self.nsamplers = nensemble+nhamiltonian+nslice
         self.nnest     = nnest
@@ -156,9 +156,17 @@ class CPNest(object):
         self.ns_pool = []
         self.pool    = []
 
-        ray.init(num_cpus=self.nthreads,
-                 ignore_reinit_error=True,
-                 object_store_memory=object_store_memory)
+        if ray.is_initialized() == False:
+            self.existing_cluster = False
+            ray.init(num_cpus=self.nthreads,
+                     ignore_reinit_error=True,
+                     object_store_memory=object_store_memory)
+        else:
+            self.existing_cluster = True
+            ray.init(address='auto',
+                     num_cpus=self.nthreads,
+                     ignore_reinit_error=True,
+                     object_store_memory=object_store_memory)
 
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
@@ -173,7 +181,7 @@ class CPNest(object):
         # 'cpnest.log' but the file handler is safely closed once the run is
         # finished.
         self.log_file = LogFile(os.path.join(output, 'cpnest.log'),
-                                verbose=verbose)
+                                verbose=self.verbose)
         with self.log_file:
             if poolsize is not None:
                 self.logger.warning('poolsize is a deprecated option and will \
@@ -181,12 +189,13 @@ class CPNest(object):
             if nthreads is not None:
                 self.logger.warning('nthreads is a deprecated option and will\
                                     be removed in a future verison.')
-            self.logger.critical('Running with {0} parallel threads'.format(self.nthreads))
-            self.logger.critical('Nested samplers: {0}'.format(nnest))
-            self.logger.critical('Ensemble samplers: {0}'.format(nensemble))
-            self.logger.critical('Slice samplers: {0}'.format(nslice))
-            self.logger.critical('Hamiltonian samplers: {0}'.format(nhamiltonian))
-            self.logger.critical('ray object store size: {0} GB'.format(object_store_memory/1e9))
+            if self.verbose:
+                self.logger.info('Running with {0} parallel threads'.format(self.nthreads))
+                self.logger.info('Nested samplers: {0}'.format(nnest))
+                self.logger.info('Ensemble samplers: {0}'.format(nensemble))
+                self.logger.info('Slice samplers: {0}'.format(nslice))
+                self.logger.info('Hamiltonian samplers: {0}'.format(nhamiltonian))
+                self.logger.info('ray object store size: {0} GB'.format(object_store_memory/1e9))
 
             if n_periodic_checkpoint is not None:
                 self.logger.critical(
@@ -208,7 +217,6 @@ class CPNest(object):
                                  hmc=proposals[1],
                                  sli=proposals[2])
             self.nlive    = nlive
-            self.verbose  = verbose
             self.output   = output
             self.results  = {}
             self.prior_sampling = prior_sampling
@@ -225,12 +233,12 @@ class CPNest(object):
                 ray.get(pg.ready())
 
                 samplers = []
-
+#                rng = np.random.RandomState(seed=seed)
                 # instantiate the sampler class
                 for i in range(nensemble//self.nnest):
                     s = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
-                                          verbose     = verbose,
+                                          verbose     = self.verbose,
                                           proposal    = proposals['mhs']()
                                           )
                     samplers.append(s)
@@ -238,7 +246,7 @@ class CPNest(object):
                 for i in range(nhamiltonian//self.nnest):
                     s = HamiltonianMonteCarloSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
-                                          verbose     = verbose,
+                                          verbose     = self.verbose,
                                           proposal    = proposals['hmc'](model=self.user)
                                           )
                     samplers.append(s)
@@ -246,7 +254,7 @@ class CPNest(object):
                 for i in range(nslice//self.nnest):
                     s = SliceSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
-                                          verbose     = verbose,
+                                          verbose     = self.verbose,
                                           proposal    = proposals['sli']()
                                           )
                     samplers.append(s)
@@ -259,7 +267,7 @@ class CPNest(object):
                                 nthreads       = self.nsamplers,
                                 nlive          = nlive,
                                 output         = output,
-                                verbose        = verbose,
+                                verbose        = self.verbose,
                                 seed           = self.seed+j,
                                 prior_sampling = self.prior_sampling,
                                 periodic_checkpoint_interval = periodic_checkpoint_interval,
@@ -293,12 +301,18 @@ class CPNest(object):
                 self.checkpoint()
                 for p in self.NS+self.samplers:
                     p.shutdown()
-                ray.shutdown()
+                if self.existing_cluster is False:
+                    ray.shutdown()
                 assert ray.is_initialized() == False
                 self.logger.critical("ray correctly shut down. exiting")
                 sys.exit(130)
 
-            self.postprocess(filename='cpnest.h5')
+            if self.verbose > 0:
+                filename = 'cpnest.h5'
+            else:
+                filename = None
+            
+            self.postprocess(filename=filename)
 
             if self.verbose >= 2:
                 self.logger.critical("Checking insertion indeces")
@@ -315,15 +329,16 @@ class CPNest(object):
                     os.remove(f)
             except OSError:
                 pass
+            
+            if self.existing_cluster is False:
+                ray.shutdown()
+                assert ray.is_initialized() == False
+                self.logger.critical("ray correctly shut down. exiting")
 
-            ray.shutdown()
-            assert ray.is_initialized() == False
-            self.logger.critical("ray correctly shut down. exiting")
-
-    def postprocess(self, filename='cpnest.h5'):
+    def postprocess(self, filename=None):
         """
         post-processes the results of parallel runs
-        if filenmae is not None, then outputs the results in an
+        if filename is not None, then outputs the results in an
         hdf5 file
         """
         import numpy.lib.recfunctions as rfn

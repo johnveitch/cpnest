@@ -449,7 +449,7 @@ class NestedSampler(object):
             self.write_evidence_to_file()
             self.logLmin = np.inf
             self.logLmax = np.inf
-            self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
+            self.logger.info("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
 
         try:
@@ -473,8 +473,9 @@ class NestedSampler(object):
         # output the chain and evidence
         self.write_chain_to_file()
         self.write_evidence_to_file()
-        self.logger.critical('Final evidence: {0:0.2f}'.format(self.logZ))
-        self.logger.critical('Information: {0:.2f}'.format(self.info))
+        if self.verbose:
+            self.logger.critical('Final evidence: {0:0.2f}'.format(self.logZ))
+            self.logger.critical('Information: {0:.2f}'.format(self.info))
 
         # Some diagnostics
         if self.verbose > 1 :
@@ -503,10 +504,12 @@ class NestedSampler(object):
 
         D, p = kstest(indices, 'uniform', args=(0, 1))
         if rolling:
-            self.logger.warning('Rolling KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
+            if self.verbose:
+                self.logger.info('Rolling KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
             self.rolling_p.append(p)
         else:
-            self.logger.warning('Final KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
+            if self.verbose:
+                self.logger.info('Final KS test: D={0:.3}, p-value={1:.3}'.format(D, p))
 
         if filename is not None:
             np.savetxt(os.path.join(

@@ -47,7 +47,7 @@ class Sampler(object):
     def __init__(self,
                  model,
                  maxmcmc,
-                 verbose      = False,
+                 verbose      = 0,
                  proposal     = None):
 
         self.counter        = 0
