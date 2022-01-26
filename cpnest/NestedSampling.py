@@ -550,7 +550,7 @@ class NestedSampler(object):
             
         obj.model = usermodel
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
-        obj.live_points = LivePoints.remote(obj.live)
+        obj.live_points = LivePoints(obj.live)
         obj.live_points._set_internal_state(obj.integral_state)
         obj.logger.critical('Resuming NestedSampler from ' + filename)
         obj.last_checkpoint_time = time.time()
@@ -560,10 +560,9 @@ class NestedSampler(object):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state['live'] = [ray.get(self.live_points.get.remote(i)) for i in range(self.nlive)]
-        state['integral_state'] = ray.get(self.live_points._get_integral_state.remote())
+        state['live'] = self.live_points
+        state['integral_state'] = self.live_points._get_integral_state()
         # Remove the unpicklable entries.
-        del state['live_points']
         del state['model']
         del state['logger']
         return state
@@ -573,7 +572,7 @@ class NestedSampler(object):
 
 class LivePoints:
     """
-    ray remote actor class holding the live points pool
+    class holding the live points pool
     
     parameters
     ==========

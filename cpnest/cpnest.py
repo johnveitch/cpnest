@@ -15,7 +15,7 @@ from .utils import LEVELS, LogFile, auto_garbage_collect
 LOGGER = logging.getLogger('cpnest.cpnest')
 import ray
 from ray.util import ActorPool
-
+        
 class CheckPoint(Exception):
     pass
 
@@ -233,7 +233,7 @@ class CPNest(object):
                 ray.get(pg.ready())
 
                 samplers = []
-#                rng = np.random.RandomState(seed=seed)
+
                 # instantiate the sampler class
                 for i in range(nensemble//self.nnest):
                     s = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,

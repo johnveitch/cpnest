@@ -153,7 +153,7 @@ class Sampler(object):
 class MetropolisHastingsSampler(Sampler):
     """
     metropolis-hastings acceptance rule
-    for :obj:`cpnest.proposal.EnembleProposal`
+    for :obj:`cpnest.proposal.EnsembleProposal`
     """
     def return_sample(self, oldparam, logLmin):
 
@@ -238,8 +238,8 @@ class SliceSampler(Sampler):
     https://arxiv.org/pdf/2002.06212v1.pdf
     """
     mu             = 1.0
-    max_steps_out  = 100 # maximum stepping out steps allowed
-    max_slices     = 100 # maximum number of slices allowed
+    max_steps_out  = 1000 # maximum stepping out steps allowed
+    max_slices     = 1000 # maximum number of slices allowed
     
     def adapt_length_scale(self):
         """
@@ -379,10 +379,9 @@ class SamplersCycle(Sampler):
     Initialisation arguments:
 
     samplers : A list of samplers
-    weights   : Weights for each type of jump
 
     Optional arguments:
-    cyclelength : length of the proposal cycle. Default: 100
+    cyclelength : length of the sampler cycle. Default: 100
 
     """
     idx = 0 # index in the cycle
