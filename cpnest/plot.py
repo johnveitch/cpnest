@@ -49,7 +49,7 @@ def trace_plot(nested_samples, nlives, folder):
         fig, axs = plt.subplots(rows, 1, squeeze=False)
 
         for i,s in enumerate(nested_samples):
-            S = axs[i,0].scatter(1+np.arange(len(s[n])),s[n],c=s['logPrior'],cmap=cm.inferno)
+            S = axs[i,0].scatter(1+np.arange(len(s[n])),s[n],c=s['logPrior'],cmap=cm.inferno,s=2)
             try:
                 CB = plt.colorbar(S, ax=axs[i,0])
                 CB.set_label('logPrior')
@@ -57,7 +57,7 @@ def trace_plot(nested_samples, nlives, folder):
                 pass
             axs[i,0].set_xlabel('iteration number')
             axs[i,0].set_ylabel(n)
-        plt.savefig(os.path.join(folder,n+"_trace.pdf"), bbox_inches='tight')
+        plt.savefig(os.path.join(folder,n+"_trace.png"), bbox_inches='tight')
         plt.close(fig)
         
 def plot_chain(x, name=None, filename=None):
