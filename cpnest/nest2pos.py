@@ -193,7 +193,7 @@ def acl(x, tolerance=0.01):
     T=1
     i=0
     acf = autocorrelation(x)
-    while acf[i]>tolerance and i<len(acf):
+    while i<len(acf) and acf[i]>tolerance:
         T+=2*acf[i]
         i+=1
     return T
