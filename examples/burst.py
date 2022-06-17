@@ -41,7 +41,7 @@ if __name__ == "__main__":
     signal = sine_gaussian(truth,time)
     data = noise+signal
     model=BurstModel(time, data, sigma=sigma)
-    work=cpnest.CPNest(model, verbose=2, nnest=4, nensemble=8, nlive=1000, maxmcmc=2000, nslice=0, nhamiltonian=0, resume=0)
+    work=cpnest.CPNest(model, verbose=2, nnest=4, nensemble=8, nlive=1000, maxmcmc=2000, nslice=0, nhamiltonian=0, resume=1, periodic_checkpoint_interval=100, output='burst_test')
     work.run()
     import matplotlib.pyplot as plt
     fig = plt.figure()
@@ -55,4 +55,4 @@ if __name__ == "__main__":
     ax.plot(time,m,lw=0.75,color='turquoise')
     ax.set_xlabel('time [s]')
     ax.set_ylabel('strain')
-    plt.savefig('burst_waveform.pdf',bbox_inches='tight')
+    plt.savefig('burst_test/burst_waveform.pdf',bbox_inches='tight')
