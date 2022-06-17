@@ -6,7 +6,7 @@ import os
 import sys
 import signal
 import logging
-
+import dill
 import cProfile
 
 from .utils import LEVELS, LogFile, auto_garbage_collect
@@ -15,12 +15,12 @@ from .utils import LEVELS, LogFile, auto_garbage_collect
 LOGGER = logging.getLogger('cpnest.cpnest')
 import ray
 from ray.util import ActorPool
-        
+from ray.exceptions import RayTaskError
+
 class CheckPoint(Exception):
     pass
 
 def sighandler(signal, frame):
-    # print("Handling signal {}".format(signal))
     LOGGER.critical("Handling signal {}".format(signal))
     raise CheckPoint()
 
@@ -170,8 +170,10 @@ class CPNest(object):
 
         assert ray.is_initialized() == True
         output = os.path.join(output, '')
+        checkpoint_folder = os.path.join(output,'checkpoints')
         os.makedirs(output, exist_ok=True)
-
+        os.makedirs(checkpoint_folder, exist_ok=True)
+        
         # Import placement group APIs.
         from ray.util.placement_group import placement_group, placement_group_table, remove_placement_group
 
@@ -182,6 +184,7 @@ class CPNest(object):
         # finished.
         self.log_file = LogFile(os.path.join(output, 'cpnest.log'),
                                 verbose=self.verbose)
+
         with self.log_file:
             if poolsize is not None:
                 self.logger.warning('poolsize is a deprecated option and will \
@@ -203,7 +206,9 @@ class CPNest(object):
                     "use periodic_checkpoint_interval instead."
                 )
             if periodic_checkpoint_interval is None:
-                periodic_checkpoint_interval = np.inf
+                self.periodic_checkpoint_interval = np.inf
+            else:
+                self.periodic_checkpoint_interval = periodic_checkpoint_interval
 
             from .sampler import HamiltonianMonteCarloSampler, MetropolisHastingsSampler, SliceSampler, SamplersCycle
             from .NestedSampling import NestedSampler
@@ -226,7 +231,7 @@ class CPNest(object):
             if seed is None: self.seed=1234
             else:
                 self.seed=seed
-
+            
             for j in range(self.nnest):
 
                 pg = placement_group([{"CPU": 1+self.nsamplers//self.nnest}],strategy="STRICT_PACK")
@@ -261,9 +266,11 @@ class CPNest(object):
 
                 self.pool.append(ActorPool(samplers))
 
-                self.resume_file.append(os.path.join(output, "nested_sampler_resume_{}.pkl".format(j)))
+                self.resume_file.append(os.path.join(checkpoint_folder, "nested_sampler_resume_{}.pkl".format(j)))
+
                 if not os.path.exists(self.resume_file[j]) or resume == False:
-                    self.ns_pool.append(ray.remote(NestedSampler).options(placement_group=pg).remote(self.user,
+                    self.ns_pool.append(ray.remote(NestedSampler).options(placement_group=pg).remote(
+                                self.user,
                                 nthreads       = self.nsamplers,
                                 nlive          = nlive,
                                 output         = output,
@@ -271,14 +278,28 @@ class CPNest(object):
                                 seed           = self.seed+j,
                                 prior_sampling = self.prior_sampling,
                                 periodic_checkpoint_interval = periodic_checkpoint_interval,
+                                resume_file    = self.resume_file[j],
                                 position = j))
                 else:
-                    self.ns_pool.append(ray.remote(NestedSampler).resume(self.resume_file[j], self.user, self.pool[i]))
+                    state = self.load_nested_sampler_state(self.resume_file[j])
+                    ns = ray.remote(NestedSampler).options(placement_group=pg).remote(
+                                self.user,
+                                nthreads       = self.nsamplers,
+                                nlive          = nlive,
+                                output         = output,
+                                verbose        = self.verbose,
+                                seed           = self.seed+j,
+                                prior_sampling = self.prior_sampling,
+                                periodic_checkpoint_interval = periodic_checkpoint_interval,
+                                resume_file    = self.resume_file[j],
+                                position = j,
+                                state    = state)
+
+                    self.ns_pool.append(ns)
 
                 self.results['run_{}'.format(j)] = {}
 
             self.results['combined'] = {}
-            self.NS = ActorPool(self.ns_pool)
 
     def run(self):
         """
@@ -292,15 +313,17 @@ class CPNest(object):
                 signal.signal(signal.SIGINT, sighandler)
                 signal.signal(signal.SIGUSR1, sighandler)
                 signal.signal(signal.SIGUSR2, sighandler)
-
+            
             try:
-                for s in self.NS.map_unordered(lambda a, v: a.nested_sampling_loop.remote(self.pool[v]), range(self.nnest)):
-                    pass
+                unfinished = [self.ns_pool[v].nested_sampling_loop.remote(self.pool[v]) for v in  range(self.nnest)]
+                while len(unfinished) > 0:
+                    finished, unfinished = ray.wait(unfinished)
+                    ray.get(finished)
 
             except CheckPoint:
                 self.checkpoint()
-                for p in self.NS+self.samplers:
-                    p.shutdown()
+                for p in self.ns_pool:
+                    ray.kill(p)
                 if self.existing_cluster is False:
                     ray.shutdown()
                 assert ray.is_initialized() == False
@@ -316,16 +339,17 @@ class CPNest(object):
 
             if self.verbose >= 2:
                 self.logger.critical("Checking insertion indeces")
-                for s in self.NS.map_unordered(lambda a, v: a.check_insertion_indices.remote(rolling=False,
-                                                     filename='insertion_indices_{}.dat'.format(v)), range(self.nnest)):
-                    pass
-
+                ray.get([self.ns_pool[v].check_insertion_indices.remote(
+                                    rolling=False,
+                                    filename='insertion_indices_{}.dat'.format(v))
+                                    for v in range(self.nnest)])
+ 
                 self.logger.critical("Saving plots in {0}".format(self.output))
                 self.plot(corner = False)
 
-            #TODO: Clean up the resume pickles
             try:
                 for f in self.resume_file:
+                    self.logger.info("Removing checkpoint file {}".format(f))
                     os.remove(f)
             except OSError:
                 pass
@@ -344,9 +368,9 @@ class CPNest(object):
         import numpy.lib.recfunctions as rfn
         from .nest2pos import draw_posterior_many
 
-        ns = list(self.NS.map_unordered(lambda a, v: a.get_nested_samples.remote(), range(self.nnest)))
-        ps = list(self.NS.map_unordered(lambda a, v: a.get_prior_samples.remote(), range(self.nnest)))
-        info = list(self.NS.map_unordered(lambda a, v: a.get_information.remote(), range(self.nnest)))
+        ns = ray.get([self.ns_pool[v].get_nested_samples.remote() for v in range(self.nnest)])
+        ps = ray.get([self.ns_pool[v].get_prior_samples.remote() for v in range(self.nnest)])
+        info = ray.get([self.ns_pool[v].get_information.remote() for v in range(self.nnest)])
 
         for i,l in enumerate(ps):
 
@@ -461,13 +485,24 @@ class CPNest(object):
                              labels=self.prior_samples.dtype.names,
                              filename=os.path.join(self.output,'corner.pdf'))
 
-        lps = list(self.NS.map(lambda a, v: a.get_live_points.remote(), range(self.nnest)))
+        lps = ray.get([self.ns_pool[v].get_live_points.remote() for v in range(self.nnest)])
+
         for i,lp in enumerate(lps):
             plot.plot_indices(lp.get_insertion_indices(), filename=os.path.join(self.output, 'insertion_indices_{}.pdf'.format(i)))
 
     def checkpoint(self):
         """
-        send the checkpoint message to the nested samplers
+        checkpoint the nested samplers
         """
-        for s in self.NS.map_unordered(lambda a, v: a.checkpoint.remote(), range(self.nnest)):
-            pass
+        for i,s in enumerate(self.ns_pool):
+            self.logger.critical('Checkpointing nested sampling {}'.format(s))
+        ray.get([s.save.remote() for s in self.ns_pool])
+
+    def load_nested_sampler_state(self, resume_file):
+        """
+        load the nested samplers dictionary state
+        """
+        self.logger.critical('Loading nested sampling state from {}'.format(resume_file))
+        with open(resume_file,"rb") as f:
+            obj = dill.load(f)
+        return obj

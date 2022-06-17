@@ -1,7 +1,7 @@
 from __future__ import division, print_function
 import sys
 import os
-import pickle
+import dill
 import time
 import logging
 import bisect
@@ -19,12 +19,6 @@ from .utils import auto_garbage_collect
 import ray
 import random
 from tqdm import tqdm
-try:
-    from smt.surrogate_models import *
-    no_smt = False
-except:
-    no_smt = True
-
 logger = logging.getLogger('cpnest.NestedSampling')
 
 class KeyOrderedList(list):
@@ -224,7 +218,14 @@ class NestedSampler(object):
         This parameter should not be used, it should be set by the manager instead.
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
+    
+    resume_file: string
+        file where the checkpoints will be stored
+        Default: None
 
+    state: dict
+        dictionary holding the checkpointed state
+        Default: None
     """
 
     def __init__(self,
@@ -238,49 +239,61 @@ class NestedSampler(object):
                  prior_sampling = False,
                  stopping       = 0.1,
                  n_periodic_checkpoint = None,
-                 position       = 0
+                 position       = 0,
+                 resume_file    = None,
+                 state          = None
                  ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
         """
-        self.position       = position
         loggername          = 'cpnest.NestedSampling.NestedSampler'
         self.logger         = logging.getLogger(loggername)
         self.logger.addHandler(logging.StreamHandler())
-        self.periodic_checkpoint_interval = periodic_checkpoint_interval
         self.model          = model
-        self.nthreads       = nthreads
-        self.prior_sampling = prior_sampling
-        self.setup_random_seed(seed)
-        self.verbose        = verbose
-        self.acceptance     = 1.0
-        self.accepted       = 0
-        self.rejected       = 1
-        self.queue_counter  = 0
-        self.nlive          = nlive
-        self.live_points    = None
-        self.last_checkpoint_time = time.time()
-        self.tolerance      = stopping
-        self.condition      = np.inf
-        self.worst          = 0
-        self.logLmin        = -np.inf
-        self.logLmax        = -np.inf
-        self.iteration      = 0
-        self.prior_samples  = []
-        self.nested_samples = []
-        self.rolling_p      = []
-        self.logZ           = None
-        sys.stdout.flush()
-        self.output_folder  = output
-        self.output_file,self.evidence_file,self.resume_file = self.setup_output(output)
-        header              = open(os.path.join(output,'header.txt'),'w')
-        header.write('\t'.join(self.model.names))
-        header.write('\tlogL\n')
-        header.close()
-        self.initialise_live_points()
-        self.initialised    = False
-    
+        
+        if state is None:
+            self.position       = position
+            self.periodic_checkpoint_interval = periodic_checkpoint_interval
+            self.nthreads       = nthreads
+            self.prior_sampling = prior_sampling
+            self.setup_random_seed(seed)
+            self.verbose        = verbose
+            self.acceptance     = 1.0
+            self.accepted       = 0
+            self.rejected       = 1
+            self.queue_counter  = 0
+            self.nlive          = nlive
+            self.live_points    = None
+            self.last_checkpoint_time = time.time()
+            self.tolerance      = stopping
+            self.condition      = np.inf
+            self.worst          = 0
+            self.logLmin        = -np.inf
+            self.logLmax        = -np.inf
+            self.iteration      = 0
+            self.prior_samples  = []
+            self.nested_samples = []
+            self.rolling_p      = []
+            self.logZ           = None
+            self.resume_file    = resume_file
+            sys.stdout.flush()
+            self.output_folder  = output
+            self.output_file,self.evidence_file = self.setup_output(output)
+            header              = open(os.path.join(output,'header.txt'),'w')
+            header.write('\t'.join(self.model.names))
+            header.write('\tlogL\n')
+            header.close()
+            self.initialise_live_points()
+            self.initialised    = False
+        else:
+            for k,v in state.items():
+                setattr(self,k,v)
+            # silly workaround for extra live points if caught in the middle of
+            # updating them
+            if self.nlive != len(self.live_points._list):
+                self.live_points._list.pop(-1)
+
     def initialise_live_points(self):
 
         l = []
@@ -314,9 +327,8 @@ class NestedSampler(object):
         chain_filename = "chain_"+str(self.nlive)+"_"+str(self.position)+".txt"
         output_file   = os.path.join(output,chain_filename)
         evidence_file = os.path.join(output,chain_filename+"_evidence_"+str(self.position)+".txt")
-        resume_file  = os.path.join(output,"nested_sampler_resume_"+str(self.position)+".pkl")
 
-        return output_file, evidence_file, resume_file
+        return output_file, evidence_file
 
 
     def write_chain_to_file(self):
@@ -442,6 +454,10 @@ class NestedSampler(object):
         """
         if not self.initialised:
             self.reset(pool)
+        else:
+            self.logger.info("Nested Sampling process {0!s}, restoring samplers".format(os.getpid()))
+            for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+                pass
 
         if self.prior_sampling:
             self.logZ, self.nested_samples = self.live_points.finalise()
@@ -456,7 +472,7 @@ class NestedSampler(object):
             while self.condition > self.tolerance:
                 self.consume_sample(pool)
                 if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
-                    self.checkpoint()
+                    self.save()
                     self.last_checkpoint_time = time.time()
                     
                 if (self.iteration % self.nlive) < self.nthreads:
@@ -480,14 +496,8 @@ class NestedSampler(object):
         # Some diagnostics
         if self.verbose > 1 :
             self.live_points.plot(os.path.join(self.output_folder,'logXlogL.png'))
-
-    def checkpoint(self):
-        """
-        Checkpoint its internal state
-        """
-        self.logger.critical('Checkpointing nested sampling')
-        with open(self.resume_file,"wb") as f:
-            pickle.dump(self, f)
+        
+        return 0
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
@@ -537,39 +547,16 @@ class NestedSampler(object):
     
     def get_information(self):
         return self.info
-    
-    @classmethod
-    def resume(cls, filename, usermodel, pool):
-        """
-        Resumes the interrupted state from a
-        checkpoint pickle file.
-        """
 
-        with open(filename,"rb") as f:
-            obj = pickle.load(f)
-            
-        obj.model = usermodel
-        obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
-        obj.live_points = LivePoints(obj.live)
-        obj.live_points._set_internal_state(obj.integral_state)
-        obj.logger.critical('Resuming NestedSampler from ' + filename)
-        obj.last_checkpoint_time = time.time()
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(obj.live_points), range(obj.nthreads)):
-            pass
-        return obj
-
-    def __getstate__(self):
+    def save(self):
         state = self.__dict__.copy()
-        state['live'] = self.live_points
-        state['integral_state'] = self.live_points._get_integral_state()
-        # Remove the unpicklable entries.
+        self.logger.critical('Saving Nested Sampling state in ' + str(self.resume_file))
         del state['model']
         del state['logger']
-        return state
 
-    def __setstate__(self, state):
-        self.__dict__ = state
-
+        with open(self.resume_file,'wb') as f:
+            dill.dump(state,f)
+        
 class LivePoints:
     """
     class holding the live points pool
