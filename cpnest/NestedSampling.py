@@ -58,7 +58,7 @@ class KeyOrderedList(list):
 
 class OrderedLivePoints(KeyOrderedList):
     """
-    Object tha contains live points ordered by increasing log-likelihood. Requires
+    Object that contains live points ordered by increasing log-likelihood. Requires
     the log-likelihood to be pre-computed.
 
     Assumes the log-likelihood is accesible as an attribute of each live point.
@@ -79,7 +79,7 @@ class OrderedLivePoints(KeyOrderedList):
 
     def remove_n_worst_points(self, n):
         """
-        Remvoe the n worst live points
+        Remove the n worst live points
         """
         del self[:n]
         del self._keys[:n]
