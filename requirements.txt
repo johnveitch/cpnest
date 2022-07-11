@@ -6,4 +6,4 @@ cython
 matplotlib
 ray
 h5py
-
+dill
