@@ -183,10 +183,10 @@ class NestedSampler(object):
 
     periodic_checkpoint_interval: float
         time interval in seconds between periodic checkpoints
-    
+
     nthreads: int
         number of parallel sampling threads
-        
+
     nlive: int
         number of live points to be used for the integration
         Default: 1024
@@ -218,7 +218,7 @@ class NestedSampler(object):
         This parameter should not be used, it should be set by the manager instead.
         checkpoint the sampler every n_periodic_checkpoint iterations
         Default: None (disabled)
-    
+
     resume_file: string
         file where the checkpoints will be stored
         Default: None
@@ -251,7 +251,7 @@ class NestedSampler(object):
         self.logger         = logging.getLogger(loggername)
         self.logger.addHandler(logging.StreamHandler())
         self.model          = model
-        
+
         if state is None:
             self.position       = position
             self.periodic_checkpoint_interval = periodic_checkpoint_interval
@@ -300,7 +300,7 @@ class NestedSampler(object):
 
         with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=self.position) as pbar:
             for i in range(self.nlive):
-                
+
                 p = self.model.new_point()
                 p.logP = self.model.log_prior(p)
                 p.logL = self.model.log_likelihood(p)
@@ -368,7 +368,7 @@ class NestedSampler(object):
         self.worst   = self.live_points.get_worst(self.nthreads)
         # get the necessary statistics from the LivePoint actor
         self.logLmin, self.logLmax, logZ, info = self.live_points.get_logLs_logZ_info()
-        
+
         if self.verbose:
             logLtmp = self.live_points.get_worst_logLs()
 
@@ -399,7 +399,7 @@ class NestedSampler(object):
                     self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:02d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                         .format(self.iteration, self.jumps, self.acceptance, i%self.nthreads, acceptance, sub_acceptance, info,\
                         logLtmp[i%self.nthreads], proposed.logL, self.condition, logZ, self.logLmax))
-            
+
                 i += 1
 
             else:
@@ -407,7 +407,7 @@ class NestedSampler(object):
                 p = pool.submit(lambda a, v: a.produce_sample.remote(v, self.logLmin), starting_points[i%self.nthreads])
 
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
-        
+
         self.live_points.remove_n_worst_points(self.nthreads)
         self.live_points.update_mean_covariance()
 
@@ -442,7 +442,7 @@ class NestedSampler(object):
 
         self.live_points.update_mean_covariance()
         self.live_points.set_ordered_list()
-        
+
         if self.verbose:
             sys.stderr.write("\n")
             sys.stderr.flush()
@@ -474,11 +474,11 @@ class NestedSampler(object):
                 if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
                     self.save()
                     self.last_checkpoint_time = time.time()
-                    
+
                 if (self.iteration % self.nlive) < self.nthreads:
                     self.check_insertion_indices()
                 auto_garbage_collect()
-                
+
         except CheckPoint:
             self.checkpoint()
             sys.exit(130)
@@ -496,7 +496,7 @@ class NestedSampler(object):
         # Some diagnostics
         if self.verbose > 1 :
             self.live_points.plot(os.path.join(self.output_folder,'logXlogL.png'))
-        
+
         return 0
 
     def check_insertion_indices(self, rolling=True, filename=None):
@@ -526,10 +526,10 @@ class NestedSampler(object):
                 self.output_folder, filename),
                 self.live_points.get_insertion_indices(),
                 newline='\n',delimiter=' ')
-    
+
     def get_output_folder(self):
         return self.output_folder
-    
+
     def get_nested_samples(self):
         return self.nested_samples
 
@@ -538,13 +538,13 @@ class NestedSampler(object):
 
     def get_live_points(self):
         return self.live_points
-    
+
     def get_logZ(self):
         return self.logZ
-    
+
     def get_nlive(self):
         return self.nlive
-    
+
     def get_information(self):
         return self.info
 
@@ -556,21 +556,21 @@ class NestedSampler(object):
 
         with open(self.resume_file,'wb') as f:
             dill.dump(state,f)
-        
+
 class LivePoints:
     """
     class holding the live points pool
-    
+
     parameters
     ==========
-    
+
     l: list
         list of live points generated from the `cpnest.model` new_point method
-    
+
     n_replace: int
         number of live points to be replaced at each step. must coincide with the number of
         sampling threads
-    
+
     verbose: int
         level of verbosity
     """
@@ -592,13 +592,13 @@ class LivePoints:
         self.nested_samples       = []
         self.insertion_indices    = []
         self.update_mean_covariance()
-    
+
     def set_ordered_list(self):
         """
         initialise the list of live points as a ordered list
         """
         self._list = OrderedLivePoints(self._list)
-    
+
     def get(self, i):
         """
         return the i-th element
@@ -646,7 +646,7 @@ class LivePoints:
         set the i-th live point to val
         """
         self._list[i] = val
-        
+
     def insert(self, i, val):
         """
         insert val in the ordered list
@@ -688,7 +688,7 @@ class LivePoints:
             for j in range(len(self.nested_samples)): as_array[i,j+self.n] = self.nested_samples[j][name]
 
         return as_array.T # as an array (N,D)
-    
+
     def sample(self, n):
         """
         randomly sample n live points
@@ -725,8 +725,8 @@ class LivePoints:
         selects the lowest likelihood N live points
         and updates the integral state
         """
-        self.logLmin = np.float128(self._list[n-1].logL)
-        self.logLmax = np.float128(self._list[-1].logL)
+        self.logLmin = self._list[n-1].logL
+        self.logLmax = self._list[-1].logL
         self.worst = self._list[:n]
         self.nested_samples.extend(self.worst)
         self.state.increment(self.worst[n-1].logL, nreplace=self.n_replace)
@@ -737,13 +737,13 @@ class LivePoints:
         remove the set of worst n live points
         """
         self._list.remove_n_worst_points(n)
-    
+
     def get_insertion_indices(self):
         """
         return the insertion indeces
         """
         return self.insertion_indices
-    
+
     def get_info(self):
         """
         return the information
