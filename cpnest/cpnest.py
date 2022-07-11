@@ -277,7 +277,7 @@ class CPNest(object):
                                 verbose        = self.verbose,
                                 seed           = self.seed+j,
                                 prior_sampling = self.prior_sampling,
-                                periodic_checkpoint_interval = periodic_checkpoint_interval,
+                                periodic_checkpoint_interval = self.periodic_checkpoint_interval,
                                 resume_file    = self.resume_file[j],
                                 position = j))
                 else:
@@ -290,7 +290,7 @@ class CPNest(object):
                                 verbose        = self.verbose,
                                 seed           = self.seed+j,
                                 prior_sampling = self.prior_sampling,
-                                periodic_checkpoint_interval = periodic_checkpoint_interval,
+                                periodic_checkpoint_interval = self.periodic_checkpoint_interval,
                                 resume_file    = self.resume_file[j],
                                 position = j,
                                 state    = state)
