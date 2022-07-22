@@ -1,4 +1,3 @@
-#! /usr/bin/env python
 # coding: utf-8
 
 import numpy as np
@@ -7,15 +6,13 @@ import sys
 import signal
 import logging
 import dill
-import cProfile
 
-from .utils import LEVELS, LogFile, auto_garbage_collect
+from .utils import LogFile
 
 # module logger takes name according to its path
 LOGGER = logging.getLogger('cpnest.cpnest')
 import ray
 from ray.util import ActorPool
-from ray.exceptions import RayTaskError
 
 class CheckPoint(Exception):
     pass
@@ -149,7 +146,7 @@ class CPNest(object):
         self.ns_pool = []
         self.pool    = []
 
-        if ray.is_initialized() == False:
+        if not ray.is_initialized():
             self.existing_cluster = False
             ray.init(num_cpus=self.nthreads,
                      ignore_reinit_error=True,
