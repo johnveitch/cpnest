@@ -55,21 +55,14 @@ class CPNest(object):
     maxmcmc: `int`
         maximum MCMC points for MHS sampling chains (5000)
 
-    maxslice: `int`
-        maximum number of slices points for Slice sampling chains (100)
-
-    maxleaps: `int`
-        maximum number of leaps points for HMC sampling chains (1000)
-
     nnest: `int`
         number of parallel nested samplers.
+        Specifying nnest > 1 will run multiple parallel nested samplers, and combine the
+        results at the end to produce a single evidence and set of posterior samples.
         Default: 1
 
     nensemble: `int`
         number of sampler threads using an ensemble samplers. Default: 1
-
-    nthreads: `int` or `None`
-        number of parallel samplers. Default (None) uses psutil.cpu_count() to autodetermine
 
     nhamiltonian: `int`
         number of sampler threads using an hamiltonian samplers. Default: 0
@@ -80,15 +73,20 @@ class CPNest(object):
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
 
-    proposal: `dict`
+    proposals: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
         'hmc' for the Hamiltonian Monte-Carlo sampler,
         'sli' for the slice sampler.
-        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+        Default: None
+        By default, the sampler will use the  :obj:`cpnest.proposal.DefaultProposalCycle`
+        for the mhs sampler; :obj:`cpnest.proposal.HamiltonianProposalCycle` for hmc and
+        :obj:`cpnest.proposal.EnsembleSliceProposalCycle` for the sli sampler.
 
     prior_sampling: `boolean`
-        generates samples from the prior
+        Default: False
+        If true, generates samples from the prior then terminates. Adjust `nlive` to control the number
+        of samples requested.
 
     n_periodic_checkpoint: `int`
         **deprecated**
@@ -99,13 +97,9 @@ class CPNest(object):
         checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
 
-    prior_sampling: boolean
-        produce nlive samples from the prior.
-        Default: False
-
     object_store_memory: `int`
-        amount of memory reserved for ray object store
-        Default: 2GB
+        amount of memory in bytes reserved for ray object store
+        Default: 1e9 (1GB)
 
     """
     def __init__(self,
@@ -115,8 +109,6 @@ class CPNest(object):
                  verbose      = 0,
                  seed         = None,
                  maxmcmc      = 5000,
-                 maxslice     = 100,
-                 maxleaps     = 1000,
                  nnest        = 1,
                  nensemble    = 1,
                  nhamiltonian = 0,
@@ -126,7 +118,7 @@ class CPNest(object):
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
                  prior_sampling = False,
-                 object_store_memory=2*10**9,
+                 object_store_memory=10**9,
                  poolsize=None,
                  nthreads=None
                  ):
@@ -138,6 +130,7 @@ class CPNest(object):
         if nthreads is not None and self.nsamplers == 0:
             nensemble = nthreads
             self.nsamplers = nensemble
+            self.logger.warning(f'DEPRECATION WARNING: nthreads is deprecated. Defaulting to use nensemble={nthreads}')
         assert self.nsamplers > 0, "no sampler processes requested!"
         import psutil
         self.max_threads = psutil.cpu_count()
