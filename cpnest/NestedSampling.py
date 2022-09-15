@@ -15,6 +15,7 @@ from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint
 from .utils import auto_garbage_collect
+import copy
 
 import ray
 import random
@@ -373,12 +374,14 @@ class NestedSampler(object):
             logLtmp = self.live_points.get_worst_logLs()
 
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
-
+        
         # set up the ensemble statistics
-        if (self.iteration % self.nlive) < self.nthreads:
-            for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+        if (self.iteration % self.nlive//10) < self.nthreads:
+            lpp = LivePoints(self.live_points._list, self.nthreads)
+            lp = ray.put(lpp)
+            for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote([lp]), range(self.nthreads)):
                 pass
-
+            
         starting_points = self.live_points.sample(self.nthreads)
 
         for v in starting_points:
@@ -417,9 +420,12 @@ class NestedSampler(object):
         sampling them from the `cpnest.model.log_prior` distribution
         """
         # set up  the ensemble statistics
-        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+        lpp = LivePoints(self.live_points._list, self.nthreads)
+        lp = ray.put(lpp)
+        
+        for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote([lp]), range(self.nthreads)):
             pass
-
+        
         # send all live points to the samplers for start
         for i in range(self.nlive):
             pool.submit(lambda a, v: a.produce_sample.remote(v, -np.inf), self.live_points.get(i))
@@ -456,7 +462,8 @@ class NestedSampler(object):
             self.reset(pool)
         else:
             self.logger.info("Nested Sampling process {0!s}, restoring samplers".format(os.getpid()))
-            for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote(self.live_points), range(self.nthreads)):
+            lp_ref = ray.put(self.live_points)
+            for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote([lp_ref]), range(self.nthreads)):
                 pass
 
         if self.prior_sampling:
@@ -782,16 +789,3 @@ class LivePoints:
 
     def _set_internal_state(self, state):
         self.state = state
-
-    def get_likelihood_gradient(self):
-        tracers_array = np.empty((self.n//10,self.dim))
-        V_vals        = np.empty(self.n//10)
-        idx = np.random.choice(self.n, size=self.n//10, replace=False)
-        for i,k in enumerate(idx):
-            tracers_array[i,:] = self._list[k].values
-            V_vals[i] = self._list[k].logL
-        mask   = np.isfinite(V_vals)
-        self.likelihood_gradient = KPLS(print_global=False)
-        self.likelihood_gradient.set_training_values(tracers_array[mask,:], V_vals[mask])
-        self.likelihood_gradient.train()
-        return self.likelihood_gradient

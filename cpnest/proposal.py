@@ -44,7 +44,7 @@ class EnsembleProposal(Proposal):
         Set the ensemble of points to use
         """
         self.ensemble = ensemble
-
+        
 class ProposalCycle(EnsembleProposal):
     """
     A proposal that cycles through a list of
@@ -102,10 +102,10 @@ class ProposalCycle(EnsembleProposal):
         Updates the ensemble statistics
         by calling it on each :obj:`EnsembleProposal`
         """
-        self.ensemble = ensemble
         for p in self.proposals:
             if isinstance(p,EnsembleProposal):
-                p.set_ensemble(self.ensemble)
+                p.set_ensemble(ensemble)
+        del ensemble
 
     def add_proposal(self, proposal, weight):
         self.proposals = self.proposals + [proposal]
@@ -284,15 +284,14 @@ class EnsembleEigenVector(EnsembleProposal):
         Over-ride default set_ensemble so that the
         eigenvectors are recomputed when it is updated
         """
-        self.ensemble = ensemble
-        self.update_eigenvectors()
+        self.update_eigenvectors(ensemble)
 
-    def update_eigenvectors(self):
+    def update_eigenvectors(self, ensemble):
         """
         Recompute the eigenvectors and eigevalues
         of the covariance matrix of the ensemble
         """
-        self.eigen_values, self.eigen_vectors = self.ensemble.get_eigen_quantities()
+        self.eigen_values, self.eigen_vectors = ensemble.get_eigen_quantities()
 
     def get_sample(self,old):
         """

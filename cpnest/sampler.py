@@ -14,6 +14,7 @@ import numpy.lib.recfunctions as rfn
 import array
 from .nest2pos import acl, autocorrelation
 import ray
+import gc
 
 import pickle
 __checkpoint_flag = False
@@ -135,18 +136,18 @@ class Sampler(object):
         self.counter += 1
         if self.counter%10 == 0:
             self.estimate_acl()
-
+        
         return self.acceptance, self.sub_acceptance, Nmcmc, outParam
 
-    def set_ensemble(self, ensemble):
+    def set_ensemble(self, ensemble_ref):
         if self.verbose > 3:
             self.logger.info("Sampler {0} -- setting ensemble".format(os.getpid()))
-
-        self.ensemble = ensemble
         
+        ensemble = ray.get(ensemble_ref)[0]
         for p in self.proposal.proposals:
             if isinstance(p, EnsembleProposal):
                 p.set_ensemble(ensemble)
+        
         return 0
 
 @ray.remote
@@ -402,8 +403,8 @@ class SamplersCycle(Sampler):
         Updates the ensemble statistics
         by calling it on each :obj:`EnsembleProposal`
         """
-        self.ensemble = ensemble
         for s in self.samplers:
             for p in s.proposal.proposals:
                 if isinstance(p, EnsembleProposal):
-                    p.set_ensemble(self.ensemble)
+                    p.set_ensemble(ensemble)
+        del ensemble; gc.collect()
