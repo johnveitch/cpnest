@@ -171,7 +171,7 @@ class MetropolisHastingsSampler(Sampler):
             newparam = self.proposal.get_sample(oldparam.copy())
             newparam.logP = self.model.log_prior(newparam)
 
-            if newparam.logP-logp_old + self.proposal.log_J > np.log(self.rng.uniform(0,1)):
+            if newparam.logP-logp_old + self.proposal.log_J > np.log(self.rng.random()):
 
                 newparam.logL = self.model.log_likelihood(newparam)
 
@@ -210,7 +210,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             sub_counter += 1
             newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
 
-            if self.proposal.log_J > np.log(self.rng.uniform(0,1)):
+            if self.proposal.log_J > np.log(self.rng.random()):
 
                 if newparam.logL > logLmin:
                     oldparam        = newparam.copy()
@@ -260,7 +260,7 @@ class SliceSampler(Sampler):
         resets the boundaries and counts
         for the slicing
         """
-        self.L  = - self.rng.uniform(0.0,1.0)
+        self.L  = - self.rng.random()
         self.R  = self.L + 1.0
         self.Ne = 0.0
         self.Nc = 0.0
@@ -297,7 +297,7 @@ class SliceSampler(Sampler):
 
             Y = logLmin
             Yp = oldparam.logP-self.rng.exponential()
-            J = np.floor(self.max_steps_out*self.rng.uniform(0,1))
+            J = np.floor(self.max_steps_out*self.rng.random())
             K = (self.max_steps_out-1)-J
             # keep on expanding until we get outside the logL boundary from the left
             # or the prior bound, whichever comes first
