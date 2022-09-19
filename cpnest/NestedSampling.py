@@ -255,7 +255,6 @@ class NestedSampler(object):
         if state is None:
             self.seed           = seed
             self.rng            = np.random.default_rng(seed = self.seed)
-            print(os.getpid(),'NS seed =', self.rng.bit_generator._seed_seq)
             self.position       = position
             self.periodic_checkpoint_interval = periodic_checkpoint_interval
             self.nthreads       = nthreads
@@ -264,7 +263,6 @@ class NestedSampler(object):
             self.acceptance     = 1.0
             self.accepted       = 0
             self.rejected       = 1
-            self.queue_counter  = 0
             self.nlive          = nlive
             self.live_points    = None
             self.last_checkpoint_time = time.time()

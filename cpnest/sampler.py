@@ -64,7 +64,6 @@ class Sampler(object):
         else:
             self.proposal = proposal(self.rng, model = self.model)
         
-        print(os.getpid(),'sampler seed =', self.rng.bit_generator._seed_seq)
         self.Nmcmc              = self.initial_mcmc
         self.Nmcmc_exact        = float(self.initial_mcmc)
 
