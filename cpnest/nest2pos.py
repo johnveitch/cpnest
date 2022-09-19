@@ -69,22 +69,32 @@ def compute_weights(data, Nlive):
 
     return log_ev, log_wts
 
-def draw_posterior(data, log_wts, verbose=False):
+def draw_posterior(data, log_wts, verbose=False, rng=None):
     """Draw points from the given data (of shape (Nsamples, Ndim))
     with associated log(weight) (of shape (Nsamples,)). Draws uniquely so
     there are no repeated samples"""
+    if rng is None:
+        rng = uniform
+
     maxWt=max(log_wts)
     normalised_wts=log_wts-maxWt
-    selection=[n > np.log(uniform()) for n in normalised_wts]
+    selection=[n > np.log(rng()) for n in normalised_wts]
     idx=list(filter(lambda i: selection[i], range(len(selection))))
     return data[idx]
 
-def draw_posterior_many(datas, Nlives, verbose=False):
+def draw_posterior_many(datas, Nlives, verbose=False, rng=None):
     """Draw samples from the posteriors represented by the
     (Nruns, Nsamples, Nparams)-shaped array datas, each sampled with
     the corresponding Nlive number of live points. Will draw without repetition,
     and weight according to the evidence in each input run"""
+    
+    if rng is None:
+        generator = uniform
+    else:
+        generator = rng.random
+    
     # list of log_evidences, log_weights
+    
     log_evs,log_wts=zip(*[compute_weights(data['logL'],Nlive) for data,Nlive in zip(datas, Nlives)])
     if verbose:
         LOGGER.critical('Computed log_evidences: {0!s}'.format((str(log_evs))))
@@ -101,13 +111,13 @@ def draw_posterior_many(datas, Nlives, verbose=False):
     if verbose:
         LOGGER.critical('Relative weights of input files taking into account their length: {0!s}'.format((str(fracs))))
 
-    posts=[draw_posterior(data,logwt) for (data,logwt,logZ) in zip(datas,log_wts,log_evs)]
+    posts=[draw_posterior(data,logwt, rng = generator) for (data,logwt,logZ) in zip(datas,log_wts,log_evs)]
     if verbose:
         LOGGER.critical('Number of input samples: {0!s}'.format((str([len(x) for x in log_wts]))))
         LOGGER.critical('Expected number of samples from each input file {0!s}'.format((str([int(f*len(p)) for f,p in zip(fracs,posts)]))))
     bigpos=[]
     for post,frac in zip(posts,fracs):
-      mask = uniform(size=len(post))<frac
+      mask = generator(size=len(post))<frac
       bigpos.append(post[mask])
     result = np.concatenate([bigpos[i] for i in range(len(bigpos))], axis=None)
     if verbose:

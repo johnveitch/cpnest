@@ -217,55 +217,29 @@ class CPNest(object):
             self.prior_sampling = prior_sampling
             self.user     = usermodel
             self.resume = resume
-
-            if seed is None: self.seed=1234
+            
+            if seed is None:
+                self.seed = iter([np.random.SeedSequence(i) for i in range(self.nthreads)])
             else:
-                self.seed=seed
+                seed = [seed+i for i in range(self.nthreads)]
+                self.seed = iter([s for s in seed])
             
             for j in range(self.nnest):
-
+            
                 pg = placement_group([{"CPU": 1+self.nsamplers//self.nnest}],strategy="STRICT_PACK")
                 ray.get(pg.ready())
-
-                samplers = []
-
-                # instantiate the sampler class
-                for i in range(nensemble//self.nnest):
-                    s = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
-                                          maxmcmc,
-                                          verbose     = self.verbose,
-                                          proposal    = proposals['mhs']()
-                                          )
-                    samplers.append(s)
-
-                for i in range(nhamiltonian//self.nnest):
-                    s = HamiltonianMonteCarloSampler.options(placement_group=pg).remote(self.user,
-                                          maxmcmc,
-                                          verbose     = self.verbose,
-                                          proposal    = proposals['hmc'](model=self.user)
-                                          )
-                    samplers.append(s)
-
-                for i in range(nslice//self.nnest):
-                    s = SliceSampler.options(placement_group=pg).remote(self.user,
-                                          maxmcmc,
-                                          verbose     = self.verbose,
-                                          proposal    = proposals['sli']()
-                                          )
-                    samplers.append(s)
-
-                self.pool.append(ActorPool(samplers))
-
+                
                 self.resume_file.append(os.path.join(checkpoint_folder, "nested_sampler_resume_{}.pkl".format(j)))
-
+                
                 if not os.path.exists(self.resume_file[j]) or resume == False:
+                    s0 = next(self.seed)
                     self.ns_pool.append(ray.remote(NestedSampler).options(placement_group=pg).remote(
                                 self.user,
                                 nthreads       = self.nsamplers,
                                 nlive          = nlive,
                                 output         = output,
                                 verbose        = self.verbose,
-                                seed           = self.seed+j,
+                                seed           = s0,
                                 prior_sampling = self.prior_sampling,
                                 periodic_checkpoint_interval = self.periodic_checkpoint_interval,
                                 resume_file    = self.resume_file[j],
@@ -278,7 +252,6 @@ class CPNest(object):
                                 nlive          = nlive,
                                 output         = output,
                                 verbose        = self.verbose,
-                                seed           = self.seed+j,
                                 prior_sampling = self.prior_sampling,
                                 periodic_checkpoint_interval = self.periodic_checkpoint_interval,
                                 resume_file    = self.resume_file[j],
@@ -286,8 +259,43 @@ class CPNest(object):
                                 state    = state)
 
                     self.ns_pool.append(ns)
+                
+                samplers = []
 
+                # instantiate the sampler class
+                for i in range(nensemble//self.nnest):
+                    
+                    S = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
+                                          maxmcmc,
+                                          seed        = next(self.seed),
+                                          verbose     = self.verbose,
+                                          proposal    = proposals['mhs']
+                                          )
+                    samplers.append(S)
+                
+                for i in range(nhamiltonian//self.nnest):
+
+                    S = HamiltonianMonteCarloSampler.options(placement_group=pg).remote(self.user,
+                                          maxmcmc,
+                                          seed        = next(self.seed),
+                                          verbose     = self.verbose,
+                                          proposal    = proposals['hmc']
+                                          )
+                    samplers.append(S)
+                    
+                for i in range(nslice//self.nnest):
+                    
+                    S = SliceSampler.options(placement_group=pg).remote(self.user,
+                                          maxmcmc,
+                                          seed        = next(self.seed),
+                                          verbose     = self.verbose,
+                                          proposal    = proposals['sli']
+                                          )
+                    samplers.append(S)
+                
+                self.pool.append(ActorPool(samplers))
                 self.results['run_{}'.format(j)] = {}
+                self.results['run_{}'.format(j)]['seed'] = s0.entropy
 
             self.results['combined'] = {}
 
@@ -380,7 +388,7 @@ class CPNest(object):
             self.results['run_{}'.format(i)]['information'] = info[i]
             self.results['run_{}'.format(i)]['logZ_error'] = np.sqrt(info[i]/self.nlive)
 
-        p, logZ  = draw_posterior_many([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],[self.nlive]*self.nnest,verbose=self.verbose)
+        p, logZ  = draw_posterior_many([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],[self.nlive]*self.nnest,verbose=self.verbose,rng=np.random.default_rng(666))
 
         self.results['combined']['prior_samples'] = rfn.stack_arrays([self.results['run_{}'.format(i)]['prior_samples'] for i in range(self.nnest)],usemask=False)
         self.results['combined']['nested_samples'] = rfn.stack_arrays([self.results['run_{}'.format(i)]['nested_samples'] for i in range(self.nnest)],usemask=False)

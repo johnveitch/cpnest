@@ -2,7 +2,6 @@ from abc import ABCMeta,abstractmethod,abstractproperty
 from numpy import inf
 import numpy as np
 from .parameter import LivePoint
-from numpy.random import uniform
 
 import logging
 LOGGER = logging.getLogger('cpnest.model')  # <--- for module-level logging
@@ -32,7 +31,7 @@ class Model(object):
         """
         return all(self.bounds[i][0] < param.values[i] < self.bounds[i][1] for i in range(param.dimension))
 
-    def new_point(self):
+    def new_point(self, rng = None):
         """
         Create a new LivePoint, drawn from within bounds
 
@@ -40,11 +39,17 @@ class Model(object):
         Return:
             p: :obj:`cpnest.parameter.LivePoint`
         """
+        
+        if rng is None:
+            generator = np.random.uniform
+        else:
+            generator = rng.uniform
         logP = -inf
+        
         while(logP==-inf):
             p = LivePoint(self.names,
-                          d=np.array([uniform(self.bounds[i][0],
-                                              self.bounds[i][1])
+                          d=np.array([generator(self.bounds[i][0],
+                                                self.bounds[i][1])
                                        for i, _ in enumerate(self.names) ]
                                     )
                          )

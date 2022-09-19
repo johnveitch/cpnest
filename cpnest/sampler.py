@@ -5,7 +5,6 @@ import logging
 import numpy as np
 from math import log
 from collections import deque
-from random import random,randrange
 
 from . import parameter
 from .proposal import DefaultProposalCycle, EnsembleProposal
@@ -48,21 +47,24 @@ class Sampler(object):
     def __init__(self,
                  model,
                  maxmcmc,
+                 seed         = 0,
                  verbose      = 0,
                  proposal     = None):
 
         self.counter        = 0
         self.model          = model
+        self.rng            = np.random.default_rng(seed = seed)
         self.initial_mcmc   = maxmcmc//10
         self.maxmcmc        = maxmcmc
         self.tau            = None
         self.logger         = logging.getLogger('CPNest')
 
         if proposal is None:
-            self.proposal = DefaultProposalCycle()
+            self.proposal = DefaultProposalCycle(self.rng)
         else:
-            self.proposal = proposal
-
+            self.proposal = proposal(self.rng, model = self.model)
+        
+        print(os.getpid(),'sampler seed =', self.rng.bit_generator._seed_seq)
         self.Nmcmc              = self.initial_mcmc
         self.Nmcmc_exact        = float(self.initial_mcmc)
 
@@ -147,6 +149,7 @@ class Sampler(object):
         for p in self.proposal.proposals:
             if isinstance(p, EnsembleProposal):
                 p.set_ensemble(ensemble)
+        del ensemble
         
         return 0
 
@@ -168,7 +171,7 @@ class MetropolisHastingsSampler(Sampler):
             newparam = self.proposal.get_sample(oldparam.copy())
             newparam.logP = self.model.log_prior(newparam)
 
-            if newparam.logP-logp_old + self.proposal.log_J > log(random()):
+            if newparam.logP-logp_old + self.proposal.log_J > np.log(self.rng.uniform(0,1)):
 
                 newparam.logL = self.model.log_likelihood(newparam)
 
@@ -207,7 +210,7 @@ class HamiltonianMonteCarloSampler(Sampler):
             sub_counter += 1
             newparam     = self.proposal.get_sample(oldparam.copy(), logLmin = logLmin)
 
-            if self.proposal.log_J > np.log(random()):
+            if self.proposal.log_J > np.log(self.rng.uniform(0,1)):
 
                 if newparam.logL > logLmin:
                     oldparam        = newparam.copy()
@@ -257,7 +260,7 @@ class SliceSampler(Sampler):
         resets the boundaries and counts
         for the slicing
         """
-        self.L  = - np.random.uniform(0.0,1.0)
+        self.L  = - self.rng.uniform(0.0,1.0)
         self.R  = self.L + 1.0
         self.Ne = 0.0
         self.Nc = 0.0
@@ -293,8 +296,8 @@ class SliceSampler(Sampler):
                 direction_vector = parameter.LivePoint(oldparam.names,d=direction_vector)
 
             Y = logLmin
-            Yp = oldparam.logP-np.random.exponential()
-            J = np.floor(self.max_steps_out*np.random.uniform(0,1))
+            Yp = oldparam.logP-self.rng.exponential()
+            J = np.floor(self.max_steps_out*self.rng.uniform(0,1))
             K = (self.max_steps_out-1)-J
             # keep on expanding until we get outside the logL boundary from the left
             # or the prior bound, whichever comes first
@@ -333,7 +336,7 @@ class SliceSampler(Sampler):
             slice = 0
             while slice < self.max_slices:
                 # generate a new point between the boundaries we identified
-                Xprime        = np.random.uniform(self.L,self.R)
+                Xprime        = self.rng.uniform(self.L,self.R)
                 newparam      = direction_vector * Xprime + oldparam
                 newparam.logP = self.model.log_prior(newparam)
 
@@ -407,4 +410,3 @@ class SamplersCycle(Sampler):
             for p in s.proposal.proposals:
                 if isinstance(p, EnsembleProposal):
                     p.set_ensemble(ensemble)
-        del ensemble; gc.collect()

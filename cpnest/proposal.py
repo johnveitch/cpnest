@@ -3,8 +3,6 @@ from functools import reduce
 import numpy as np
 from math import log,sqrt,fabs,exp
 from abc import ABCMeta,abstractmethod
-import random
-from random import sample,gauss,randrange,uniform
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
 from .nest2pos import acl
@@ -18,6 +16,11 @@ class Proposal(object):
     """
     __metaclass__ = ABCMeta
     log_J = 0.0 # Jacobian of this jump proposal
+    rng   = None # numpy Generator object
+    
+    def __init__(self, rng, *args, **kwargs):
+        self.rng = rng
+    
     @abstractmethod
     def get_sample(self,old):
         """
@@ -39,6 +42,7 @@ class EnsembleProposal(Proposal):
     Base class for ensemble proposals
     """
     ensemble=None
+    
     def set_ensemble(self,ensemble):
         """
         Set the ensemble of points to use
@@ -61,18 +65,19 @@ class ProposalCycle(EnsembleProposal):
     """
     idx=0 # index in the cycle
     N=0   # number of proposals in the cycle
-    def __init__(self,proposals,weights,cyclelength=100,*args,**kwargs):
-        super(ProposalCycle,self).__init__()
+    def __init__(self,proposals,weights,rng,cyclelength=100,*args,**kwargs):
+        super(ProposalCycle,self).__init__(rng)
         assert(len(weights)==len(proposals))
+        self.rng         = rng
         self.cyclelength = cyclelength
-        self.weights = weights
-        self.proposals = proposals
+        self.weights     = weights
+        self.proposals   = proposals
         self.set_cycle()
 
     def set_cycle(self):
         # The cycle is a list of indices for self.proposals
-        self.cycle = np.random.choice(self.proposals, size=self.cyclelength,
-                                      p=self.weights, replace=True)
+        self.cycle = self.rng.choice(self.proposals, size=self.cyclelength,
+                                     p=self.weights, replace=True)
         self.N=len(self.cycle)
 
     @property
@@ -152,7 +157,7 @@ class EnsembleSliceCorrelatedGaussian(EnsembleSlice):
         """
         Draws a random gaussian direction
         """
-        direction = mu * np.random.multivariate_normal(self.mean, self.covariance)
+        direction = mu * self.rng.multivariate_normal(self.mean, self.covariance)
         return direction
 
 class EnsembleSliceGaussian(EnsembleSlice):
@@ -165,19 +170,19 @@ class EnsembleSliceGaussian(EnsembleSlice):
         """
         Draw a random gaussian direction
         """
-        direction  = np.random.normal(0.0,1.0,size=len(self.mean))
+        direction  = self.rng.normal(0.0,1.0,size=len(self.mean))
         direction /= np.linalg.norm(direction)
         return direction * mu
 
 class EnsembleSliceProposalCycle(ProposalCycle):
-    def __init__(self, model=None):
+    def __init__(self, rng, model=None):
         """
         A proposal cycle that uses the slice sampler :obj:`EnsembleSlice`
         proposal.
         """
         weights = [1,1,1]
-        proposals = [EnsembleSliceDifferential(),EnsembleSliceGaussian(),EnsembleSliceCorrelatedGaussian()]
-        super(EnsembleSliceProposalCycle,self).__init__(proposals, weights)
+        proposals = [EnsembleSliceDifferential(rng),EnsembleSliceGaussian(rng),EnsembleSliceCorrelatedGaussian(rng)]
+        super(EnsembleSliceProposalCycle,self).__init__(proposals, weights, rng)
 
     def get_direction(self, mu = 1.0, **kwargs):
         """
@@ -214,7 +219,7 @@ class EnsembleWalk(EnsembleProposal):
         center_of_mass = reduce(type(old).__add__,subset)/float(self.Npoints)
         out = old
         for x in subset:
-            out += (x - center_of_mass)*gauss(0,1)
+            out += (x - center_of_mass)*self.rng.standard_normal()
         return out
 
 class EnsembleStretch(EnsembleProposal):
@@ -236,7 +241,7 @@ class EnsembleStretch(EnsembleProposal):
         # Pick a random point to move toward
         a = self.ensemble.sample(1)[0]
         # Pick the scale factor
-        x = uniform(-1,1)*log(scale)
+        x = self.rng.uniform(-1,1)*np.log(scale)
         Z = exp(x)
         out = a + (old - a)*Z
         # Jacobian
@@ -266,7 +271,7 @@ class DifferentialEvolution(EnsembleProposal):
         """
         a, b = self.ensemble.sample(2)
         sigma = 1e-4 # scatter around difference vector by this factor
-        out = old + (b-a)*gauss(1.0,sigma)
+        out = old + (b-a)*self.rng.normal(1.0,sigma)
         return out
 
 class EnsembleEigenVector(EnsembleProposal):
@@ -306,8 +311,11 @@ class EnsembleEigenVector(EnsembleProposal):
         """
         out = old.copy()
         # pick a random eigenvector
-        i = randrange(old.dimension)
-        jumpsize = sqrt(fabs(self.eigen_values[i]))*gauss(0,1)
+#        i = randrange(old.dimension)
+#        print(i)
+#        jumpsize = sqrt(fabs(self.eigen_values[i]))*gauss(0,1)
+        i = self.rng.integers(low=0, high=old.dimension)
+        jumpsize = sqrt(fabs(self.eigen_values[i]))*self.rng.standard_normal()
         out.values += jumpsize*self.eigen_vectors[:,i]
         return out
 
@@ -319,21 +327,21 @@ class DefaultProposalCycle(ProposalCycle):
     :obj:`cpnest.proposal.DifferentialEvolution`, :obj:`cpnest.proposal.EnsembleEigenVector`
     ensemble proposals.
     """
-    def __init__(self):
+    def __init__(self, rng, *args, **kwargs):
 
-        proposals = [EnsembleWalk(),
-                     EnsembleStretch(),
-                     DifferentialEvolution(),
-                     EnsembleEigenVector()]
+        proposals = [EnsembleWalk(rng),
+                     EnsembleStretch(rng),
+                     DifferentialEvolution(rng),
+                     EnsembleEigenVector(rng)]
         weights = [5,
                    1,
                    5,
                    10]
                    
-        super(DefaultProposalCycle,self).__init__(proposals, weights)
+        super(DefaultProposalCycle,self).__init__(proposals, weights, rng)
 
 class HamiltonianProposalCycle(ProposalCycle):
-    def __init__(self, model=None):
+    def __init__(self, rng, model=None):
         """
         A proposal cycle that uses the hamiltonian :obj:`ConstrainedLeapFrog`
         proposal.
@@ -342,8 +350,8 @@ class HamiltonianProposalCycle(ProposalCycle):
         :obj:`cpnest.Model.log_likelihood` to define the reflective
         """
         weights = [1]
-        proposals = [ConstrainedLeapFrog(model=model)]
-        super(HamiltonianProposalCycle,self).__init__(proposals, weights)
+        proposals = [ConstrainedLeapFrog(rng,model=model)]
+        super(HamiltonianProposalCycle,self).__init__(proposals, weights, rng)
 
 class HamiltonianProposal(EnsembleProposal):
     """
@@ -806,7 +814,7 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         logw = np.array([-self.hamiltonian(p,q) for q,p,_ in trajectory[1:-1]])
         norm = logsumexp(logw)
-        idx  = np.random.choice(range(1,len(trajectory)-1), p = np.exp(logw  - norm))
+        idx  = self.rng.choice(range(1,len(trajectory)-1), p = np.exp(logw  - norm))
         return trajectory[idx]
 
     def save_trajectory(self, trajectory, logLmin, filename = None):

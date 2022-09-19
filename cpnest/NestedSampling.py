@@ -18,7 +18,6 @@ from .utils import auto_garbage_collect
 import copy
 
 import ray
-import random
 from tqdm import tqdm
 logger = logging.getLogger('cpnest.NestedSampling')
 
@@ -236,7 +235,7 @@ class NestedSampler(object):
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
-                 seed           = 1,
+                 seed           = None,
                  prior_sampling = False,
                  stopping       = 0.1,
                  n_periodic_checkpoint = None,
@@ -254,11 +253,13 @@ class NestedSampler(object):
         self.model          = model
 
         if state is None:
+            self.seed           = seed
+            self.rng            = np.random.default_rng(seed = self.seed)
+            print(os.getpid(),'NS seed =', self.rng.bit_generator._seed_seq)
             self.position       = position
             self.periodic_checkpoint_interval = periodic_checkpoint_interval
             self.nthreads       = nthreads
             self.prior_sampling = prior_sampling
-            self.setup_random_seed(seed)
             self.verbose        = verbose
             self.acceptance     = 1.0
             self.accepted       = 0
@@ -302,13 +303,13 @@ class NestedSampler(object):
         with tqdm(total=self.nlive, disable = not self.verbose, desc='CPNEST: populate samplers', position=self.position) as pbar:
             for i in range(self.nlive):
 
-                p = self.model.new_point()
+                p = self.model.new_point(rng = self.rng)
                 p.logP = self.model.log_prior(p)
                 p.logL = self.model.log_likelihood(p)
                 l.append(p)
                 pbar.update()
-
-        self.live_points = LivePoints(l, self.nthreads)
+        
+        self.live_points = LivePoints(l, self.rng,  n_replace = self.nthreads)
 
     def setup_output(self, output):
         """
@@ -353,13 +354,6 @@ class NestedSampler(object):
                                                        self.live_points.get_logLmax(),
                                                        self.live_points.get_info()))
 
-    def setup_random_seed(self,seed):
-        """
-        initialise the random seed
-        """
-        self.seed = seed
-        np.random.seed(seed=self.seed)
-
     def consume_sample(self, pool):
         """
         requests the workers to update the live points
@@ -377,7 +371,7 @@ class NestedSampler(object):
         
         # set up the ensemble statistics
         if (self.iteration % self.nlive//10) < self.nthreads:
-            lpp = LivePoints(self.live_points._list, self.nthreads)
+            lpp = LivePoints(self.live_points._list, self.rng,  n_replace = self.nthreads)
             lp = ray.put(lpp)
             for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote([lp]), range(self.nthreads)):
                 pass
@@ -420,7 +414,7 @@ class NestedSampler(object):
         sampling them from the `cpnest.model.log_prior` distribution
         """
         # set up  the ensemble statistics
-        lpp = LivePoints(self.live_points._list, self.nthreads)
+        lpp = LivePoints(self.live_points._list, self.rng,  n_replace = self.nthreads)
         lp = ray.put(lpp)
         
         for s in pool.map_unordered(lambda a, v: a.set_ensemble.remote([lp]), range(self.nthreads)):
@@ -581,7 +575,8 @@ class LivePoints:
     verbose: int
         level of verbosity
     """
-    def __init__(self, l, n_replace = 1, verbose = 2):
+    def __init__(self, l, rng, n_replace = 1, verbose = 2):
+        self.rng                  = rng
         self.n_replace            = n_replace
         self._list                = l
         self.n                    = len(l)
@@ -701,10 +696,9 @@ class LivePoints:
         randomly sample n live points
         """
         if self.worst == None:
-            return random.sample(self._list, n)
+            return [self._list[i] for i in self.rng.choice(self.n, n, replace=False)]
         else:
-            k = len(self.worst)
-            return random.sample(self._list[k:], n)
+            return [self._list[i] for i in self.rng.choice(self.n-n, n, replace=False)]
 
     def sample_around(self, q, n):
         """
