@@ -218,28 +218,34 @@ class CPNest(object):
             self.user     = usermodel
             self.resume = resume
             
-            if seed is None:
-                self.seed = iter([np.random.SeedSequence(i) for i in range(self.nthreads)])
+            if seed is not None:
+                self.seed = iter([np.random.SeedSequence(seed+i) for i in range(self.nthreads)])
             else:
-                seed = [seed+i for i in range(self.nthreads)]
-                self.seed = iter([s for s in seed])
+                self.logger.warning('seed = None was passed. The results will not be reproducible. \
+                                     Set seed = int to have a reproducible sequence.')
+                self.seed = seed
             
+            rng = None
             for j in range(self.nnest):
-            
+                
+                if self.seed is not None:
+                    s0 = next(self.seed)
+                    rng = np.random.default_rng(s0)
+
                 pg = placement_group([{"CPU": 1+self.nsamplers//self.nnest}],strategy="STRICT_PACK")
                 ray.get(pg.ready())
                 
                 self.resume_file.append(os.path.join(checkpoint_folder, "nested_sampler_resume_{}.pkl".format(j)))
                 
                 if not os.path.exists(self.resume_file[j]) or resume == False:
-                    s0 = next(self.seed)
+                    
                     self.ns_pool.append(ray.remote(NestedSampler).options(placement_group=pg).remote(
                                 self.user,
                                 nthreads       = self.nsamplers,
                                 nlive          = nlive,
                                 output         = output,
                                 verbose        = self.verbose,
-                                seed           = s0,
+                                rng            = rng,
                                 prior_sampling = self.prior_sampling,
                                 periodic_checkpoint_interval = self.periodic_checkpoint_interval,
                                 resume_file    = self.resume_file[j],
@@ -265,16 +271,22 @@ class CPNest(object):
                 # instantiate the sampler class
                 for i in range(nensemble//self.nnest):
                     
+                    if self.seed is not None:
+                        rng = np.random.default_rng(next(self.seed))
+                    
                     S = MetropolisHastingsSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
-                                          seed        = next(self.seed),
+                                          rng         = rng,
                                           verbose     = self.verbose,
                                           proposal    = proposals['mhs']
                                           )
                     samplers.append(S)
                 
                 for i in range(nhamiltonian//self.nnest):
-
+                    
+                    if self.seed is not None:
+                        rng = np.random.default_rng(next(self.seed))
+                        
                     S = HamiltonianMonteCarloSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
                                           seed        = next(self.seed),
@@ -284,7 +296,10 @@ class CPNest(object):
                     samplers.append(S)
                     
                 for i in range(nslice//self.nnest):
-                    
+
+                    if self.seed is not None:
+                        rng = np.random.default_rng(next(self.seed))
+                        
                     S = SliceSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
                                           seed        = next(self.seed),
@@ -295,7 +310,8 @@ class CPNest(object):
                 
                 self.pool.append(ActorPool(samplers))
                 self.results['run_{}'.format(j)] = {}
-                self.results['run_{}'.format(j)]['seed'] = s0.entropy
+                if self.seed is not None:
+                    self.results['run_{}'.format(j)]['seed'] = s0.entropy
 
             self.results['combined'] = {}
 

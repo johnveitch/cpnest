@@ -47,13 +47,16 @@ class Sampler(object):
     def __init__(self,
                  model,
                  maxmcmc,
-                 seed         = 0,
+                 rng          = None,
                  verbose      = 0,
                  proposal     = None):
 
         self.counter        = 0
         self.model          = model
-        self.rng            = np.random.default_rng(seed = seed)
+        if rng == None:
+            self.rng            = np.random.default_rng()
+        else:
+            self.rng            = rng
         self.initial_mcmc   = maxmcmc//10
         self.maxmcmc        = maxmcmc
         self.tau            = None

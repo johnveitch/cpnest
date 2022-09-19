@@ -235,7 +235,7 @@ class NestedSampler(object):
                  nlive          = 1024,
                  output         = None,
                  verbose        = 1,
-                 seed           = None,
+                 rng            = None,
                  prior_sampling = False,
                  stopping       = 0.1,
                  n_periodic_checkpoint = None,
@@ -253,8 +253,10 @@ class NestedSampler(object):
         self.model          = model
 
         if state is None:
-            self.seed           = seed
-            self.rng            = np.random.default_rng(seed = self.seed)
+            if rng == None:
+                self.rng = np.random.default_rng()
+            else:
+                self.rng            = rng
             self.position       = position
             self.periodic_checkpoint_interval = periodic_checkpoint_interval
             self.nthreads       = nthreads
