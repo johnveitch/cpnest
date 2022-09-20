@@ -310,8 +310,10 @@ class CPNest(object):
                 
                 self.pool.append(ActorPool(samplers))
                 self.results['run_{}'.format(j)] = {}
-                if self.seed is not None:
-                    self.results['run_{}'.format(j)]['seed'] = s0.entropy
+                
+                    
+            if self.seed is not None:
+                self.results['seed'] = self.seed
 
             self.results['combined'] = {}
 
