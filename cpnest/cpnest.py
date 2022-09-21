@@ -426,9 +426,10 @@ class CPNest(object):
             self.logger.critical("Saving output in {0}".format(self.output))
             h = h5py.File(os.path.join(self.output,filename),'w')
             for k in self.results.keys():
-                grp = h.create_group(k)
-                for d in self.results[k].keys():
-                    grp.create_dataset(d, data = self.results[k][d], dtype=self.results[k][d].dtype)
+                if k != 'seed':
+                    grp = h.create_group(k)
+                    for d in self.results[k].keys():
+                        grp.create_dataset(d, data = self.results[k][d], dtype=self.results[k][d].dtype)
             h.close()
 
     @property
