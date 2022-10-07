@@ -370,7 +370,7 @@ class NestedSampler(object):
         self.condition = logaddexp(logZ,self.logLmax - self.iteration/(float(self.nlive))) - logZ
         
         # set up the ensemble statistics
-        if (self.iteration % self.nlive//10) < self.nthreads:
+        if (self.iteration % (self.nlive//10)) < self.nthreads:
             lpp = LivePoints(self.live_points._list, self.rng,  n_replace = self.nthreads)
             lp = ray.put(lpp)
             for s in pool.map(lambda a, v: a.set_ensemble.remote([lp]), range(self.nthreads)):
