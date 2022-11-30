@@ -33,8 +33,11 @@ class KeyOrderedList(list):
         Key to use to sort the list, by defaul it is sorted by its
         values.
     """
-    def __init__(self, iterable, key=lambda x: x):
-        iterable = sorted(iterable, key=key)
+    def __init__(self, iterable, key=None):
+        if key is None:
+            iterable = sorted(iterable, key=lambda x:x)
+        else:
+            iterable = sorted(iterable, key=key)
         super(KeyOrderedList, self).__init__(iterable)
 
         self._key = key
@@ -55,6 +58,12 @@ class KeyOrderedList(list):
         self._keys.insert(index, self._key(item))
         return index
 
+def _get_logL(x):
+    """
+    Helper function for OrderedLivePoints to ensure pickleability.
+    Returns x.logL
+    """
+    return x.logL
 
 class OrderedLivePoints(KeyOrderedList):
     """
@@ -69,7 +78,7 @@ class OrderedLivePoints(KeyOrderedList):
         Initial live points
     """
     def __init__(self, live_points):
-        super(OrderedLivePoints, self).__init__(live_points, key=lambda x: x.logL)
+        super(OrderedLivePoints, self).__init__(live_points, key=_get_logL)
 
     def insert_live_point(self, live_point):
         """
