@@ -10,12 +10,13 @@ from numpy import logaddexp
 from numpy import inf
 from scipy.stats import kstest
 from math import isnan
+from operator import attrgetter
+from tqdm import tqdm
+
 from . import nest2pos
 from .nest2pos import logsubexp
 from operator import attrgetter
 from .cpnest import CheckPoint
-
-from tqdm import tqdm
 
 
 logger = logging.getLogger('cpnest.NestedSampling')
@@ -55,13 +56,6 @@ class KeyOrderedList(list):
         self._keys.insert(index, self._key(item))
         return index
 
-def _get_logL(x):
-    """
-    Helper function for OrderedLivePoints to ensure pickleability.
-    Returns x.logL
-    """
-    return x.logL
-
 class OrderedLivePoints(KeyOrderedList):
     """
     Object that contains live points ordered by increasing log-likelihood. Requires
@@ -75,7 +69,7 @@ class OrderedLivePoints(KeyOrderedList):
         Initial live points
     """
     def __init__(self, live_points):
-        super(OrderedLivePoints, self).__init__(live_points, key=_get_logL)
+        super(OrderedLivePoints, self).__init__(live_points, key=attrgetter('logL'))
 
     def insert_live_point(self, live_point):
         """
