@@ -33,11 +33,8 @@ class KeyOrderedList(list):
         Key to use to sort the list, by defaul it is sorted by its
         values.
     """
-    def __init__(self, iterable, key=None):
-        if key is None:
-            iterable = sorted(iterable, key=lambda x:x)
-        else:
-            iterable = sorted(iterable, key=key)
+    def __init__(self, iterable, key=lambda x: x):
+        iterable = sorted(iterable, key=key)
         super(KeyOrderedList, self).__init__(iterable)
 
         self._key = key
