@@ -371,8 +371,8 @@ class NestedSampler(object):
         for evolution
         """
         self.worst = np.arange(n)
-        self.logLmin.value = np.float128(self.params[n-1].logL)
-        return np.float128(self.logLmin.value)
+        self.logLmin.value = np.float(self.params[n-1].logL)
+        return self.logLmin.value
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
