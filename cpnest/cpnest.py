@@ -107,7 +107,7 @@ class CPNest(object):
                  seed         = None,
                  maxmcmc      = 5000,
                  nnest        = 1,
-                 nensemble    = 1,
+                 nensemble    = 0,
                  nhamiltonian = 0,
                  nslice       = 0,
                  resume       = False,
@@ -289,7 +289,7 @@ class CPNest(object):
                         
                     S = HamiltonianMonteCarloSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
-                                          seed        = next(self.seed),
+                                          rng         = rng,
                                           verbose     = self.verbose,
                                           proposal    = proposals['hmc']
                                           )
@@ -302,7 +302,7 @@ class CPNest(object):
                         
                     S = SliceSampler.options(placement_group=pg).remote(self.user,
                                           maxmcmc,
-                                          seed        = next(self.seed),
+                                          rng         = rng,
                                           verbose     = self.verbose,
                                           proposal    = proposals['sli']
                                           )
