@@ -46,6 +46,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.18.0
       - uses: actions/upload-artifact@v4
         with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
   build_sdist:
@@ -66,6 +67,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: dist/*.tar.gz
 
   upload_pypi:
