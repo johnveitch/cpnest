@@ -2,3 +2,5 @@
 requires = ["setuptools_scm", "numpy", "cython"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools_scm]
+
