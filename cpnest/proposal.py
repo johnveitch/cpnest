@@ -498,7 +498,7 @@ class HamiltonianProposal(EnsembleEigenVector):
         dV: :obj:`numpy.ndarray` gradient evaluated at q
         """
         dV = self.dV(q)
-        return dV.view(np.float64)
+        return dV.view(float)
 
     def update_momenta_distribution(self):
         """
