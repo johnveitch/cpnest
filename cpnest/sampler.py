@@ -181,8 +181,7 @@ class Sampler(object):
         """
         # first of all, build a numpy array out of
         # the stored samples
-        ACL = []
-        samples = np.array([x.values for x in self.samples[-5*self.maxmcmc:]])
+        samples = np.array([x.values for x in list(self.samples[-5*self.maxmcmc:])])
         # compute the ACL on 5 times the maxmcmc set of samples
         ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
 
