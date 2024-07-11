@@ -69,10 +69,10 @@ jobs:
     environment:
       name: testpypi
       url: https://test.pypi.org/p/cpnest
-      # upload to PyPI on every tag starting with 'v'
-      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
-      # alternatively, to publish when a GitHub Release is created, use the following rule:
-      #if: github.event_name == 'release' && github.event.action == 'published'
+    # upload to PyPI on every tag starting with 'v'
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
+    # alternatively, to publish when a GitHub Release is created, use the following rule:
+    #if: github.event_name == 'release' && github.event.action == 'published'
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
