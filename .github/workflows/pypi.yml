@@ -21,18 +21,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       CIBW_ARCHS_MACOS: "x86_64 arm64"
-      CIBW_ARCHS_LINUX: "x86_64 aarch64"
+      CIBW_ARCHS_LINUX: "auto64 aarch64"
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        cibw_archs: ["auto"]
 
     steps:
       - name: Set up QEMU
-        if: matrix.cibw_archs == 'aarch64'
-        uses: docker/setup-qemu-action@v1
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64
+          platforms: all
 
       - uses: actions/checkout@v4
 
