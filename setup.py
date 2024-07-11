@@ -63,7 +63,7 @@ setup(
             'Programming Language :: Python :: 3.11',
             'Programming Language :: Python :: 3.10',
             'Programming Language :: Python :: 3.9'
-            ]
+            ],
         keywords='nested sampling bayesian inference',
         packages=['cpnest'],
         install_requires=requirements,
