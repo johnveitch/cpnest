@@ -46,6 +46,7 @@ setup(
         name='cpnest',
         use_scm_version=True,
         description='CPNest: Parallel nested sampling',
+        long_description=long_description,
         classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: MIT License',
