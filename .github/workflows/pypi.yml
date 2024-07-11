@@ -66,6 +66,8 @@ jobs:
   upload_pypi_test:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     environment:
       name: testpypi
       url: https://test.pypi.org/p/cpnest
