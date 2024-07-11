@@ -88,7 +88,7 @@ jobs:
         with:
           repository_url: https://test.pypi.org/legacy/
           user: __token__
-          password: ${{ secrets.pypitoken }}
+          password: ${{ secrets.testpypitoken }}
 
   upload_pypi:
     needs: [build_wheels, build_sdist]
