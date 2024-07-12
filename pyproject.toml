@@ -12,7 +12,7 @@ license={text='MIT'}
 Repository='https://github.com/johnveitch/cpnest'
 Documentation='https://johnveitch.github.io/cpnest'
 [build-system]
-requires = ["setuptools_scm", "numpy", "cython"]
+requires = ["setuptools_scm", "numpy>=2.0", "cython"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
