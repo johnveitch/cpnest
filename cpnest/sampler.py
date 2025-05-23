@@ -103,7 +103,7 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.sample_prior       = sample_prior
-        self.samples            = deque(maxlen = None if self.verbose >=3 else 5*self.maxmcmc) # the list of samples from the mcmc chain
+        self.samples            = deque(maxlen = None if self.verbose >=3 else 10*self.maxmcmc) # the list of samples from the mcmc chain
         self.producer_pipe, self.thread_id = self.manager.connect_producer()
         self.last_checkpoint_time = time.time()
 
@@ -127,7 +127,7 @@ class Sampler(object):
 
         self.proposal.set_ensemble(self.evolution_points)
         # initialise the structure to store the mcmc chain
-        self.samples = []
+        self.samples.clear()
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -182,7 +182,7 @@ class Sampler(object):
         # first of all, build a numpy array out of
         # the stored samples
         ACL = []
-        samples = np.array([x.values for x in self.samples[-5*self.maxmcmc:]])
+        samples = np.array([x.values for x in list(self.samples)[-5*self.maxmcmc:]])
         # compute the ACL on 5 times the maxmcmc set of samples
         ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
 
@@ -266,6 +266,10 @@ class Sampler(object):
                        newline='\n',delimiter=' ')
             self.logger.critical("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         self.logger.critical("Sampler process {0!s} - mean acceptance {1:.3f}: exiting".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
+        if os.path.exists(self.resume_file):
+            self.logger.warn("Sampler process {0!s} - cleaning up resume file {1}".format(os.getpid(), self.resume_file))
+            os.remove(self.resume_file)
+
         return 0
 
     def checkpoint(self):

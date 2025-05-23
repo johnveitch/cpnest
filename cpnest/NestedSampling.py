@@ -487,6 +487,9 @@ class NestedSampler(object):
         # Some diagnostics
         if self.verbose>1 :
           self.state.plot(os.path.join(self.output_folder,'logXlogL.png'))
+        # clean up checkpoint file
+        if os.path.exists(self.resume_file):
+            os.remove(self.resume_file)
         return self.state.logZ, self.nested_samples
 
     def checkpoint(self):
