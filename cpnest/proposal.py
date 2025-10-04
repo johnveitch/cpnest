@@ -362,7 +362,7 @@ class DefaultProposalCycle(ProposalCycle):
         super(DefaultProposalCycle,self).__init__(proposals, weights)
 
 class HamiltonianProposalCycle(ProposalCycle):
-    def __init__(self, model=None):
+    def __init__(self, model=None, id=None):
         """
         A proposal cycle that uses the hamiltonian :obj:`ConstrainedLeapFrog`
         proposal.
@@ -371,7 +371,7 @@ class HamiltonianProposalCycle(ProposalCycle):
         :obj:`cpnest.Model.log_likelihood` to define the reflective
         """
         weights = [1]
-        proposals = [ConstrainedLeapFrog(model=model)]
+        proposals = [ConstrainedLeapFrog(model=model, id=id)]
         super(HamiltonianProposalCycle,self).__init__(proposals, weights)
 
 class HamiltonianProposal(EnsembleEigenVector):
@@ -382,7 +382,7 @@ class HamiltonianProposal(EnsembleEigenVector):
     inverse_mass_matrix = None
     momenta_distribution = None
 
-    def __init__(self, model=None, **kwargs):
+    def __init__(self, model=None, id=None, **kwargs):
         """
         Initialises the class with the kinetic
         energy and the :obj:`cpnest.Model.potential`.
@@ -399,7 +399,8 @@ class HamiltonianProposal(EnsembleEigenVector):
         self.TARGET         = 0.500
         self.ADAPTATIONSIZE = 0.001
         self._initialised   = False
-        self.c              = self.counter()
+        self.id             = id
+        self.c              = 0
         self.DEBUG          = 0
 
     def set_ensemble(self, ensemble):
@@ -705,12 +706,6 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         return super(ConstrainedLeapFrog,self).get_sample(q0, logLmin)
 
-    def counter(self):
-        n = 0
-        while True:
-            yield n
-            n += 1
-
     def evolve_trajectory_one_step_position(self, p, q):
         """
         One leap frog step in position
@@ -847,8 +842,11 @@ class ConstrainedLeapFrog(LeapFrog):
         """
         save trajectory for diagnostic purposes
         """
+        if self.id is None or self.c > 5:
+            return
         if filename is None:
-            filename = 'trajectory_'+str(next(self.c))+'.txt'
+            filename = 'trajectory_'+str(self.id)+'_'+str(self.c)+'.txt'
+            self.c += 1
         f = open(filename,'w')
         names = trajectory[0][0].names
 
@@ -863,4 +861,3 @@ class ConstrainedLeapFrog(LeapFrog):
                 f.write(repr(q[n])+'\t'+repr(p[j])+'\t')
             f.write(repr(q.logP)+'\t'+repr(q.logL)+'\t'+repr(logLmin)+'\n')
         f.close()
-        if self.c == 3: exit()

@@ -1,6 +1,7 @@
 from __future__ import division
 import sys
 import os
+import signal
 import logging
 import time
 import numpy as np
@@ -11,7 +12,7 @@ from random import random,randrange
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
-from .cpnest import CheckPoint, RunManager
+from .cpnest import CheckPoint, RunManager, sighandler
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
@@ -104,8 +105,10 @@ class Sampler(object):
         self.output             = output
         self.sample_prior       = sample_prior
         self.samples            = deque(maxlen = None if self.verbose >=3 else 10*self.maxmcmc) # the list of samples from the mcmc chain
-        self.producer_pipe, self.thread_id = self.manager.connect_producer()
+        self.producer_pipe, self.thread_id = None, None
         self.last_checkpoint_time = time.time()
+        self.checkpoint_interval = None
+        self.checkpoint_flag = None
 
     def reset(self):
         """
@@ -197,7 +200,22 @@ class Sampler(object):
             self.Nmcmc = safety
         return self.Nmcmc
 
-    def produce_sample(self):
+    def produce_sample(self, connection, thread_id, resume, logLmin, logLmax, checkpoint_flag, checkpoint_interval):
+        self.producer_pipe = connection
+        self.thread_id = thread_id
+        self.logLmin = logLmin
+        self.logLmax = logLmax
+        self.checkpoint_flag = checkpoint_flag
+        self.checkpoint_interval = checkpoint_interval
+
+        if resume:
+            signal.signal(signal.SIGTERM, sighandler)
+            signal.signal(signal.SIGALRM, sighandler)
+            signal.signal(signal.SIGQUIT, sighandler)
+            signal.signal(signal.SIGINT, sighandler)
+            signal.signal(signal.SIGUSR1, sighandler)
+            signal.signal(signal.SIGUSR2, sighandler)
+
         try:
             self._produce_sample()
         except CheckPoint:
@@ -217,14 +235,14 @@ class Sampler(object):
         __checkpoint_flag=False
         while True:
 
-            if self.manager.checkpoint_flag.value:
+            if self.checkpoint_flag.value:
                 self.checkpoint()
                 sys.exit(130)
 
             if self.logLmin.value==np.inf:
                 break
 
-            if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
+            if time.time() - self.last_checkpoint_time > self.checkpoint_interval:
                 self.checkpoint()
                 self.last_checkpoint_time = time.time()
 
@@ -293,21 +311,25 @@ class Sampler(object):
         obj.logLmin = obj.manager.logLmin
         obj.logLmax = obj.manager.logLmax
         obj.logger = logging.getLogger("cpnest.sample.Sampler")
-        obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
+        obj.producer_pipe , obj.thread_id = None, None
         obj.last_checkpoint_time = time.time()
+        obj.checkpoint_interval = None
+        obj.checkpoint_flag = None
         return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
         # Remove the unpicklable entries.
-        del state['model']
+        # del state['model']
         del state['logLmin']
         del state['logLmax']
         del state['manager']
+        del state['checkpoint_flag']
+        del state['checkpoint_interval']
         del state['producer_pipe']
         del state['thread_id']
-        del state['logger']
+        # del state['logger']
         return state
 
     def __setstate__(self, state):

@@ -195,8 +195,9 @@ class CPNest(object):
             nmhs = self.nthreads-nhamiltonian-nslice
             # instantiate the sampler class
             for i in range(nmhs):
-                resume_file = os.path.join(output,
-                                           "sampler_{0:d}.pkl".format(i))
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                connection, thread_id = self.manager.connect_producer()
+
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = MetropolisHastingsSampler(self.user,
                                     maxmcmc,
@@ -214,12 +215,20 @@ class CPNest(object):
                                                             self.manager,
                                                             self.user)
 
-                p = mp.Process(target=sampler.produce_sample)
+                args = (connection,
+                        thread_id,
+                        resume,
+                        self.manager.logLmin,
+                        self.manager.logLmax,
+                        self.manager.checkpoint_flag,
+                        self.manager.periodic_checkpoint_interval)
+                p = mp.Process(target=sampler.produce_sample, args=args)
                 self.process_pool.append(p)
 
             for i in range(nhamiltonian):
-                resume_file = os.path.join(output,
-                                           "sampler_{0:d}.pkl".format(i))
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                connection, thread_id = self.manager.connect_producer()
+
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = HamiltonianMonteCarloSampler(
                         self.user,
@@ -228,7 +237,7 @@ class CPNest(object):
                         output      = output,
                         poolsize    = poolsize,
                         seed        = self.seed+nmhs+i,
-                        proposal    = proposals['hmc'](model=self.user),
+                        proposal    = proposals['hmc'](model=self.user, id=thread_id),
                         resume_file = resume_file,
                         sample_prior = prior_sampling,
                         manager     = self.manager
@@ -237,11 +246,21 @@ class CPNest(object):
                     sampler = HamiltonianMonteCarloSampler.resume(resume_file,
                                                                 self.manager,
                                                                 self.user)
-                p = mp.Process(target=sampler.produce_sample)
+
+                args = (connection,
+                        thread_id,
+                        resume,
+                        self.manager.logLmin,
+                        self.manager.logLmax,
+                        self.manager.checkpoint_flag,
+                        self.manager.periodic_checkpoint_interval)
+                p = mp.Process(target=sampler.produce_sample, args=args)
                 self.process_pool.append(p)
 
             for i in range(nslice):
                 resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                connection, thread_id = self.manager.connect_producer()
+
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = SliceSampler(self.user,
                                     maxmcmc,
@@ -257,7 +276,15 @@ class CPNest(object):
                     sampler = SliceSampler.resume(resume_file,
                                                   self.manager,
                                                   self.user)
-                p = mp.Process(target=sampler.produce_sample)
+
+                args = (connection,
+                        thread_id,
+                        resume,
+                        self.manager.logLmin,
+                        self.manager.logLmax,
+                        self.manager.checkpoint_flag,
+                        self.manager.periodic_checkpoint_interval)
+                p = mp.Process(target=sampler.produce_sample, args=args)
                 self.process_pool.append(p)
 
     def run(self):
