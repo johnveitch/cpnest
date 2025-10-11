@@ -189,8 +189,7 @@ class CPNest(object):
                             prior_sampling = self.prior_sampling,
                             manager        = self.manager)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.manager,
-                                               self.user)
+                self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
 
             nmhs = self.nthreads-nhamiltonian-nslice
             # instantiate the sampler class
@@ -208,12 +207,9 @@ class CPNest(object):
                                     proposal    = proposals['mhs'](),
                                     resume_file = resume_file,
                                     sample_prior = prior_sampling,
-                                    manager     = self.manager
                                     )
                 else:
-                    sampler = MetropolisHastingsSampler.resume(resume_file,
-                                                            self.manager,
-                                                            self.user)
+                    sampler = MetropolisHastingsSampler.resume(resume_file, self.user)
 
                 args = (connection,
                         thread_id,
@@ -240,12 +236,9 @@ class CPNest(object):
                         proposal    = proposals['hmc'](model=self.user, id=thread_id),
                         resume_file = resume_file,
                         sample_prior = prior_sampling,
-                        manager     = self.manager
                     )
                 else:
-                    sampler = HamiltonianMonteCarloSampler.resume(resume_file,
-                                                                self.manager,
-                                                                self.user)
+                    sampler = HamiltonianMonteCarloSampler.resume(resume_file, self.user)
 
                 args = (connection,
                         thread_id,
@@ -270,12 +263,9 @@ class CPNest(object):
                                     seed        = self.seed+nmhs+nhamiltonian+i,
                                     proposal    = proposals['sli'](),
                                     resume_file = resume_file,
-                                    manager     = self.manager
                                     )
                 else:
-                    sampler = SliceSampler.resume(resume_file,
-                                                  self.manager,
-                                                  self.user)
+                    sampler = SliceSampler.resume(resume_file, self.user)
 
                 args = (connection,
                         thread_id,

@@ -118,7 +118,10 @@ class _NSintegralState(object):
         if nlive is None:
             nlive = self.nlive
         oldZ = self.logZ
-        logt=-nreplace/nlive
+        if nlive==0:
+            logt=-inf
+        else:
+            logt=-nreplace/nlive
         Wt = self.logw + logL + logsubexp(0,logt)
         self.logZ = logaddexp(self.logZ,Wt)
         # Update information estimate

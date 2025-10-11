@@ -12,7 +12,7 @@ from random import random,randrange
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
-from .cpnest import CheckPoint, RunManager, sighandler
+from .cpnest import CheckPoint, sighandler
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
@@ -59,9 +59,6 @@ class Sampler(object):
         File for checkpointing
         Default: None
 
-    manager:
-        :obj:`multiprocessing.Manager` hosting all communication objects
-        Default: None
     """
 
     def __init__(self,
@@ -73,17 +70,13 @@ class Sampler(object):
                  sample_prior = False,
                  poolsize     = 1000,
                  proposal     = None,
-                 resume_file  = None,
-                 manager      = None):
+                 resume_file  = None):
 
         self.seed = seed
         self.model = model
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
         self.resume_file = resume_file
-        self.manager = manager
-        self.logLmin = self.manager.logLmin
-        self.logLmax = self.manager.logLmax
         self.logger = logging.getLogger('cpnest.sampler.Sampler')
 
         if proposal is None:
@@ -109,6 +102,8 @@ class Sampler(object):
         self.last_checkpoint_time = time.time()
         self.checkpoint_interval = None
         self.checkpoint_flag = None
+        self.logLmin = None
+        self.logLmax = None
 
     def reset(self):
         """
@@ -203,10 +198,10 @@ class Sampler(object):
     def produce_sample(self, connection, thread_id, resume, logLmin, logLmax, checkpoint_flag, checkpoint_interval):
         self.producer_pipe = connection
         self.thread_id = thread_id
-        self.logLmin = logLmin
-        self.logLmax = logLmax
         self.checkpoint_flag = checkpoint_flag
         self.checkpoint_interval = checkpoint_interval
+        self.logLmin = logLmin
+        self.logLmax = logLmax
 
         if resume:
             signal.signal(signal.SIGTERM, sighandler)
@@ -299,7 +294,7 @@ class Sampler(object):
             pickle.dump(self, f)
 
     @classmethod
-    def resume(cls, resume_file, manager, model):
+    def resume(cls, resume_file, model):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
@@ -307,9 +302,6 @@ class Sampler(object):
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         obj.model   = model
-        obj.manager = manager
-        obj.logLmin = obj.manager.logLmin
-        obj.logLmax = obj.manager.logLmax
         obj.logger = logging.getLogger("cpnest.sample.Sampler")
         obj.logger.info('Resuming Sampler from ' + resume_file)
         obj.producer_pipe , obj.thread_id = None, None
@@ -320,21 +312,17 @@ class Sampler(object):
 
     def __getstate__(self):
         state = self.__dict__.copy()
+        state['logLmin']=None # remove the connection objects
+        state['logLmax']=None
         # Remove the unpicklable entries.
-        # del state['model']
-        del state['logLmin']
-        del state['logLmax']
-        del state['manager']
         del state['checkpoint_flag']
         del state['checkpoint_interval']
         del state['producer_pipe']
         del state['thread_id']
-        # del state['logger']
         return state
 
     def __setstate__(self, state):
         self.__dict__ = state
-        self.manager = None
 
 class MetropolisHastingsSampler(Sampler):
     """
