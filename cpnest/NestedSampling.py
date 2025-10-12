@@ -119,7 +119,7 @@ class _NSintegralState(object):
             nlive = self.nlive
         oldZ = self.logZ
         if nlive==0:
-            logt=-inf
+            raise ValueError("Cannot increment evidence with nlive=0")
         else:
             logt=-nreplace/nlive
         Wt = self.logw + logL + logsubexp(0,logt)
@@ -183,10 +183,6 @@ class NestedSampler(object):
 
     model: :obj:`cpnest.Model` user defined model
 
-    manager: `multiprocessing` manager instance which controls
-        the shared objects.
-        Default: None
-
     Nlive: int
         number of live points to be used for the integration
         Default: 1024
@@ -212,26 +208,26 @@ class NestedSampler(object):
     stopping: float
         Stop when remaining samples wouldn't change logZ estimate by this much.
         Deafult: 0.1
-
-    n_periodic_checkpoint: int
-        **deprecated**
-        This parameter should not be used, it should be set by the manager instead.
-        checkpoint the sampler every n_periodic_checkpoint iterations
+    
+    periodic_checkpoint_interval: float
+        checkpoint the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
 
     """
 
     def __init__(self,
-                 model,
-                 manager        = None,
-                 nlive          = 1024,
-                 output         = None,
-                 verbose        = 1,
-                 seed           = 1,
-                 prior_sampling = False,
-                 stopping       = 0.1,
-                 n_periodic_checkpoint = None,
-                 ):
+                model,
+                logLmin        = None,
+                logLmax        = None,
+                input_pipes   = None,
+                nlive          = 1024,
+                output         = None,
+                verbose        = 1,
+                seed           = 1,
+                prior_sampling = False,
+                stopping       = 0.1,
+                periodic_checkpoint_interval = None,
+                ):
         """
         Initialise all necessary arguments and
         variables for the algorithm
@@ -239,7 +235,6 @@ class NestedSampler(object):
         loggername = 'cpnest.NestedSampling.NestedSampler'
         self.logger         = logging.getLogger(loggername)
         self.model          = model
-        self.manager        = manager
         self.prior_sampling = prior_sampling
         self.setup_random_seed(seed)
         self.verbose        = verbose
@@ -247,14 +242,15 @@ class NestedSampler(object):
         self.accepted       = 0
         self.rejected       = 1
         self.queue_counter  = 0
-        self.Nlive          = nlive
-        self.params         = [None] * self.Nlive
+        self.params         = [None] * nlive
         self.last_checkpoint_time = time.time()
         self.tolerance      = stopping
         self.condition      = np.inf
         self.worst          = 0
-        self.logLmin        = self.manager.logLmin
-        self.logLmax        = self.manager.logLmax
+        self.logLmin        = logLmin
+        self.logLmax        = logLmax
+        self.consumer_pipes   = input_pipes
+        self.periodic_checkpoint_interval = periodic_checkpoint_interval
         self.iteration      = 0
         self.nested_samples = []
         self.insertion_indices = []
@@ -269,6 +265,10 @@ class NestedSampler(object):
         header.write('\tlogL\n')
         header.close()
         self.initialised    = False
+
+    @property
+    def Nlive(self):
+        return len(self.params)
 
     def setup_output(self,output):
         """
@@ -324,14 +324,14 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        nreplace = len(self.manager.consumer_pipes)
+        nreplace = 1 # len(self.consumer_pipes)
         logLmin = self.get_worst_n_live_points(nreplace)
         self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
         self.nested_samples.extend(self.params[:nreplace])
         logLtmp=[p.logL for p in self.params[:nreplace]]
 
         # Make sure we are mixing the chains
-        for i in np.random.permutation(range(nreplace)): self.manager.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
+        for i in np.random.permutation(range(nreplace)): self.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
 
         # Replace the points we just consumed with the next acceptable ones
@@ -342,7 +342,7 @@ class NestedSampler(object):
             loops           = 0
             while(True):
                 loops += 1
-                acceptance, sub_acceptance, self.jumps, proposed = self.manager.consumer_pipes[self.queue_counter].recv()
+                acceptance, sub_acceptance, self.jumps, proposed = self.consumer_pipes[self.queue_counter].recv()
                 if proposed.logL > self.logLmin.value:
                     # Insert the new live point into the ordered list and
                     # return the index at which is was inserted, this will
@@ -351,12 +351,12 @@ class NestedSampler(object):
                     # the index is then coverted to a value between [0, 1]
                     # accounting for the variable number of live points
                     self.insertion_indices.append((index - nreplace) / (self.Nlive - k - 1))
-                    self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                    self.queue_counter = (self.queue_counter + 1) % len(self.consumer_pipes)
                     self.accepted += 1
                     break
                 else:
                     # resend it to the producer
-                    self.manager.consumer_pipes[self.queue_counter].send(self.params[k])
+                    self.consumer_pipes[self.queue_counter].send(self.params[k])
                     self.rejected += 1
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
@@ -411,15 +411,15 @@ class NestedSampler(object):
         """
         # send all live points to the samplers for start
         i = 0
-        nthreads=self.manager.nthreads
+        nthreads=len(self.consumer_pipes)
         params = [None] * self.Nlive
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
             while i < self.Nlive:
-                for j in range(nthreads): self.manager.consumer_pipes[j].send(self.model.new_point())
+                for j in range(nthreads): self.consumer_pipes[j].send(self.model.new_point())
                 for j in range(nthreads):
                     while i < self.Nlive:
-                        acceptance,sub_acceptance,self.jumps,params[i] = self.manager.consumer_pipes[self.queue_counter].recv()
-                        self.queue_counter = (self.queue_counter + 1) % len(self.manager.consumer_pipes)
+                        acceptance,sub_acceptance,self.jumps,params[i] = self.consumer_pipes[self.queue_counter].recv()
+                        self.queue_counter = (self.queue_counter + 1) % len(self.consumer_pipes)
                         if np.isnan(params[i].logL):
                             self.logger.warn("Likelihood function returned NaN for params "+str(params))
                             self.logger.warn("You may want to check your likelihood function")
@@ -445,7 +445,7 @@ class NestedSampler(object):
             self.write_evidence_to_file()
             self.logLmin.value = np.inf
             self.logLmin.value = np.inf
-            for c in self.manager.consumer_pipes:
+            for c in self.consumer_pipes:
                 c.send(None)
             self.logger.warning("Nested Sampling process {0!s}, exiting".format(os.getpid()))
             return 0
@@ -453,23 +453,23 @@ class NestedSampler(object):
         try:
             while self.condition > self.tolerance:
                 self.consume_sample()
-                if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
+                if time.time() - self.last_checkpoint_time > self.periodic_checkpoint_interval:
                     self.checkpoint()
                     self.last_checkpoint_time = time.time()
 
-                if (self.iteration % self.Nlive) < self.manager.nthreads:
+                if (self.iteration % self.Nlive) < len(self.consumer_pipes) and self.iteration>0:
                     self.check_insertion_indices()
 
         except CheckPoint:
             self.checkpoint()
             # Run each pipe to get it to checkpoint
-            for c in self.manager.consumer_pipes:
+            for c in self.consumer_pipes:
                 c.send("checkpoint")
             sys.exit(130)
 
         # Signal worker threads to exit
         self.logLmin.value = np.inf
-        for c in self.manager.consumer_pipes:
+        for c in self.consumer_pipes:
             c.send(None)
 
         # final adjustments
@@ -504,19 +504,19 @@ class NestedSampler(object):
             pickle.dump(self, f)
 
     @classmethod
-    def resume(cls, filename, manager, usermodel):
+    def resume(cls, filename, logLmin, logLmax, consumer_pipes, usermodel):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
         """
         with open(filename,"rb") as f:
             obj = pickle.load(f)
-        obj.manager = manager
-        obj.logLmin = obj.manager.logLmin
+        obj.logLmin = logLmin
         obj.logLmin.value = obj.llmin
-        obj.logLmax = obj.manager.logLmax
+        obj.logLmax = logLmax
         obj.logLmax.value = obj.llmax
         obj.model = usermodel
+        obj.consumer_pipes = consumer_pipes
         obj.logger = logging.getLogger("cpnest.NestedSampling.NestedSampler")
         del obj.__dict__['llmin']
         del obj.__dict__['llmax']
@@ -531,7 +531,7 @@ class NestedSampler(object):
         # Remove the unpicklable entries.
         del state['logLmin']
         del state['logLmax']
-        del state['manager']
+        del state['consumer_pipes']
         del state['model']
         del state['logger']
         return state

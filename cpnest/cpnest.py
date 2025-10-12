@@ -87,11 +87,6 @@ class CPNest(object):
     prior_sampling: `boolean`
         generates samples from the prior
 
-    n_periodic_checkpoint: `int`
-        **deprecated**
-        checkpoint the sampler every n_periodic_checkpoint iterations
-        Default: None (disabled)
-
     periodic_checkpoint_interval: `float`
         checkpoing the sampler every periodic_checkpoint_interval seconds
         Default: None (disabled)
@@ -129,7 +124,6 @@ class CPNest(object):
         self.verbose  = verbose
         self.output   = output
         self.logger = logging.getLogger('cpnest.cpnest.CPNest')
-
         # The LogFile context manager ensures everything within is logged to
         # 'cpnest.log' but the file handler is safely closed once the run is
         # finished.
@@ -188,9 +182,13 @@ class CPNest(object):
                             verbose        = verbose,
                             seed           = self.seed,
                             prior_sampling = self.prior_sampling,
-                            manager        = self.manager)
+                            logLmin=self.manager.logLmin,
+                            logLmax=self.manager.logLmax,
+                            input_pipes=self.manager.consumer_pipes,
+                            periodic_checkpoint_interval=periodic_checkpoint_interval,)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.manager, self.user)
+                self.NS = NestedSampler.resume(resume_file, self.manager.logLmin, self.manager.logLmax,
+                                               self.manager.consumer_pipes, self.user)
 
             nmhs = self.nthreads-nhamiltonian-nslice
             # instantiate the sampler class
