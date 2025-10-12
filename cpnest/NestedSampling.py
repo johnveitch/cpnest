@@ -335,9 +335,11 @@ class NestedSampler(object):
             self.iteration += 1
             loops           = 0
             logLmin = self.logLmin.value
+            jumps = 0
             while(True):
                 loops += 1
-                acceptance, sub_acceptance, self.jumps, proposed = self.consumer_pipes[self.queue_counter].recv()
+                acceptance, sub_acceptance, j, proposed = self.consumer_pipes[self.queue_counter].recv()
+                jumps += j
                 if proposed.logL > logLmin:
                     # Insert the new live point into the ordered list and
                     # return the index at which is was inserted, this will
@@ -362,13 +364,11 @@ class NestedSampler(object):
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
                 self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
-                .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
+                .format(self.iteration, jumps, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
                   removed_point.logL, proposed.logL, self.condition, self.state.logZ, self.logLmax.value))
 
         # update the stopping condition
         self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
-
-
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
@@ -411,11 +411,11 @@ class NestedSampler(object):
                 for j in range(nthreads): self.consumer_pipes[j].send(self.model.new_point())
                 for j in range(nthreads):
                     while i < self.Nlive:
-                        acceptance,sub_acceptance,self.jumps,params[i] = self.consumer_pipes[self.queue_counter].recv()
+                        acceptance,sub_acceptance,jumps,params[i] = self.consumer_pipes[self.queue_counter].recv()
                         self.queue_counter = (self.queue_counter + 1) % len(self.consumer_pipes)
                         if np.isnan(params[i].logL):
-                            self.logger.warn("Likelihood function returned NaN for params "+str(params))
-                            self.logger.warn("You may want to check your likelihood function")
+                            self.logger.warning("Likelihood function returned NaN for params "+str(params))
+                            self.logger.warning("You may want to check your likelihood function")
                         if params[i].logP!=-np.inf and params[i].logL!=-np.inf:
                             i+=1
                             pbar.update()

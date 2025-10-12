@@ -291,7 +291,7 @@ class Sampler(object):
             self.logger.critical("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         self.logger.critical("Sampler process {0!s} - mean acceptance {1:.3f}: exiting".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
         if os.path.exists(self.resume_file):
-            self.logger.warn("Sampler process {0!s} - cleaning up resume file {1}".format(os.getpid(), self.resume_file))
+            self.logger.warning("Sampler process {0!s} - cleaning up resume file {1}".format(os.getpid(), self.resume_file))
             os.remove(self.resume_file)
 
         return 0
