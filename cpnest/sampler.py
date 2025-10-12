@@ -39,6 +39,10 @@ class Sampler(object):
     ----------
     kwargs:
 
+    output:
+        :str: output directory to store samples and plots
+        Default: None
+
     verbose:
         :int: display debug information on screen
         Default: 0
@@ -58,6 +62,10 @@ class Sampler(object):
     resume_file:
         File for checkpointing
         Default: None
+
+    sample_prior:
+        :bool: if True, will sample from the prior and save samples in output directory
+        Default: False
 
     """
 
@@ -196,6 +204,9 @@ class Sampler(object):
         return self.Nmcmc
 
     def produce_sample(self, connection, thread_id, resume, logLmin, logLmax, checkpoint_flag, checkpoint_interval):
+        """
+        Main loop that produces samples for the :obj:`cpnest.NestedSampler`
+        """
         self.producer_pipe = connection
         self.thread_id = thread_id
         self.checkpoint_flag = checkpoint_flag
@@ -287,7 +298,7 @@ class Sampler(object):
 
     def checkpoint(self):
         """
-        Checkpoint its internal state
+        Checkpoint the sampler's internal state
         """
         self.logger.info('Checkpointing Sampler')
         with open(self.resume_file, "wb") as f:

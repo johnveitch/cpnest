@@ -15,7 +15,7 @@ from multiprocessing.managers import SyncManager
 
 import cProfile
 
-from .utils import LEVELS, LogFile
+from .utils import LogFile
 
 # module logger takes name according to its path
 LOGGER = logging.getLogger('cpnest.cpnest')
@@ -76,12 +76,13 @@ class CPNest(object):
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
 
-    proposal: `dict`
+    proposals: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
         'hmc' for the Hamiltonian Monte-Carlo sampler,
         'sli' for the slice sampler.
-        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+        'hmc' for the Hamiltonian Monte-Carlo sampler.
+        Default: None, uses the default proposals.
 
     prior_sampling: `boolean`
         generates samples from the prior
@@ -279,7 +280,9 @@ class CPNest(object):
 
     def run(self):
         """
-        Run the sampler
+        Run the sampler. Once finished, nested samples and posterior
+        samples are available with get_nested_samples() and get_posterior_samples()
+        methods.
         """
 
         with self.log_file:
@@ -329,8 +332,6 @@ class CPNest(object):
                 self.mcmc_samples = self.get_mcmc_samples(filename=None)
             if self.verbose>=2:
                 self.plot(corner = False)
-
-            #TODO: Clean up the resume pickles
 
     def get_nested_samples(self, filename='nested_samples.dat'):
         """
@@ -568,6 +569,10 @@ class CPNest(object):
 
 
 class RunManager(SyncManager):
+    """
+    A multiprocessing manager to handle communication between the nested
+    sampling process and the sampler processes.
+    """
     def __init__(self, nthreads=None, **kwargs):
         self.periodic_checkpoint_interval = kwargs.pop(
             "periodic_checkpoint_interval", np.inf
