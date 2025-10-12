@@ -324,33 +324,27 @@ class NestedSampler(object):
         and updates the evidence logZ
         """
         # Increment the state of the evidence integration
-        nreplace = 1 # len(self.consumer_pipes)
-        logLmin = self.get_worst_n_live_points(nreplace)
-        self.state.increment(self.params[nreplace-1].logL, nreplace=nreplace)
-        self.nested_samples.extend(self.params[:nreplace])
-        logLtmp=[p.logL for p in self.params[:nreplace]]
+        nreplace = len(self.consumer_pipes)
+        worst = np.arange(nreplace)
 
         # Make sure we are mixing the chains
-        for i in np.random.permutation(range(nreplace)): self.consumer_pipes[self.worst[i]].send(self.params[self.worst[i]])
-        self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
+        for i in np.random.permutation(worst): self.consumer_pipes[worst[i]].send(self.params[worst[i]])
 
-        # Replace the points we just consumed with the next acceptable ones
-        # Reversed since the for the first point the current number of
-        # live points is N - n_worst  -1 (minus 1 because of counting from zero)
-        for k in reversed(self.worst):
+        for k in worst:
+            # receive a new sample from the consumer pipes and update the evidence
             self.iteration += 1
             loops           = 0
+            logLmin = self.logLmin.value
             while(True):
                 loops += 1
                 acceptance, sub_acceptance, self.jumps, proposed = self.consumer_pipes[self.queue_counter].recv()
-                if proposed.logL > self.logLmin.value:
+                if proposed.logL > logLmin:
                     # Insert the new live point into the ordered list and
                     # return the index at which is was inserted, this will
-                    # include the n worst points, so this subtracted next
                     index = self.params.insert_live_point(proposed)
                     # the index is then coverted to a value between [0, 1]
-                    # accounting for the variable number of live points
-                    self.insertion_indices.append((index - nreplace) / (self.Nlive - k - 1))
+                    # accounting for the variable number of live points (self.Nlive is inferred from self.params)
+                    self.insertion_indices.append((index - nreplace) / (self.Nlive - 1 ))
                     self.queue_counter = (self.queue_counter + 1) % len(self.consumer_pipes)
                     self.accepted += 1
                     break
@@ -358,24 +352,23 @@ class NestedSampler(object):
                     # resend it to the producer
                     self.consumer_pipes[self.queue_counter].send(self.params[k])
                     self.rejected += 1
+
+            removed_point = self.params[0]
+            self.logLmin.value = float(removed_point.logL)
+            self.state.increment(removed_point.logL, nlive=self.Nlive, nreplace=1)
+            self.nested_samples.append(removed_point)
+            self.params.remove_n_worst_points(1)
+
             self.acceptance = float(self.accepted)/float(self.accepted + self.rejected)
             if self.verbose:
                 self.logger.info("{0:d}: n:{1:4d} NS_acc:{2:.3f} S{3:d}_acc:{4:.3f} sub_acc:{5:.3f} H: {6:.2f} logL {7:.5f} --> {8:.5f} dZ: {9:.3f} logZ: {10:.3f} logLmax: {11:.2f}"\
                 .format(self.iteration, self.jumps*loops, self.acceptance, k, acceptance, sub_acceptance, self.state.info,\
-                  logLtmp[k], proposed.logL, self.condition, self.state.logZ, self.logLmax.value))
+                  removed_point.logL, proposed.logL, self.condition, self.state.logZ, self.logLmax.value))
 
-        # points not removed earlier because they are used to resend to
-        # samplers if rejected
-        self.params.remove_n_worst_points(nreplace)
+        # update the stopping condition
+        self.condition = logaddexp(self.state.logZ,self.logLmax.value - self.iteration/(float(self.Nlive))) - self.state.logZ
 
-    def get_worst_n_live_points(self, n):
-        """
-        selects the lowest likelihood N live points
-        for evolution
-        """
-        self.worst = np.arange(n)
-        self.logLmin.value = float(self.params[n-1].logL)
-        return self.logLmin.value
+
 
     def check_insertion_indices(self, rolling=True, filename=None):
         """
