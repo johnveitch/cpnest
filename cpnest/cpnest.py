@@ -95,6 +95,10 @@ class CPNest(object):
         produce nlive samples from the prior.
         Default: False
 
+    dlogZ: float
+        stopping criterion for the evidence change.
+        Default: 0.1
+
     """
     def __init__(self,
                  usermodel,
@@ -111,7 +115,8 @@ class CPNest(object):
                  proposals     = None,
                  n_periodic_checkpoint = None,
                  periodic_checkpoint_interval=None,
-                 prior_sampling = False
+                 prior_sampling = False,
+                 dlogZ         = 0.1
                  ):
         if nthreads is None:
             self.nthreads = mp.cpu_count()
@@ -182,6 +187,7 @@ class CPNest(object):
                             verbose        = verbose,
                             seed           = self.seed,
                             prior_sampling = self.prior_sampling,
+                            stopping       = dlogZ,
                             logLmin=self.manager.logLmin,
                             logLmax=self.manager.logLmax,
                             input_pipes=self.manager.consumer_pipes,
