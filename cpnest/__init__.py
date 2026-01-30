@@ -16,10 +16,10 @@ logger.addHandler(console_handler)
 from .cpnest import CPNest
 
 # Get the version number from git tag
-from pkg_resources import get_distribution, DistributionNotFound
+from importlib.metadata import version as distribution_version
 try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
+    __version__ = distribution_version(__name__)
+except ModuleNotFoundError:
     # package is not installed
     __version__ = "dev"
 

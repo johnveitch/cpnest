@@ -1,0 +1,19 @@
+[project]
+requires-python = ">=3.9"
+name='cpnest'
+description='CPNest: Parallel nested sampling'
+dynamic=['version', 'classifiers', 'readme']
+dependencies=['numpy','scipy','matplotlib','corner','tqdm']
+authors=[{name='Walter Del Pozzo', email='walter.delpozzo@ligo.org'},
+        {name='John Veitch', email='john.veitch@ligo.org'}]
+license={text='MIT'}
+
+[project.urls]
+Repository='https://github.com/johnveitch/cpnest'
+Documentation='https://johnveitch.github.io/cpnest'
+[build-system]
+requires = ["setuptools_scm", "numpy", "cython"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+

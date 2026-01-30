@@ -53,7 +53,7 @@ def compute_weights(data, Nlive):
 
     log_vols_start=np.cumsum(np.ones(len(start_data)+1)*np.log1p(-1./Nlive))-np.log1p(-1./Nlive)
     log_vols_end=np.zeros(len(end_data))
-    log_vols_end[-1]=np.NINF
+    log_vols_end[-1]=-np.inf
     log_vols_end[0]=log_vols_start[-1]+np.log1p(-1.0/Nlive)
     for i in range(len(end_data)-1):
         log_vols_end[i+1]=log_vols_end[i]+np.log1p(-1.0/(Nlive-i))
@@ -193,7 +193,7 @@ def acl(x, tolerance=0.01):
     T=1
     i=0
     acf = autocorrelation(x)
-    while acf[i]>tolerance and i<len(acf):
+    while i < len(acf) and acf[i] > tolerance:
         T+=2*acf[i]
         i+=1
     return T

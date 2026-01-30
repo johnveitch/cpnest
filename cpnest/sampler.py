@@ -1,6 +1,7 @@
 from __future__ import division
 import sys
 import os
+import signal
 import logging
 import time
 import numpy as np
@@ -11,7 +12,7 @@ from random import random,randrange
 from . import parameter
 from .proposal import DefaultProposalCycle
 from . import proposal
-from .cpnest import CheckPoint, RunManager
+from .cpnest import CheckPoint, sighandler
 from tqdm import tqdm
 from operator import attrgetter
 import numpy.lib.recfunctions as rfn
@@ -38,6 +39,10 @@ class Sampler(object):
     ----------
     kwargs:
 
+    output:
+        :str: output directory to store samples and plots
+        Default: None
+
     verbose:
         :int: display debug information on screen
         Default: 0
@@ -58,9 +63,10 @@ class Sampler(object):
         File for checkpointing
         Default: None
 
-    manager:
-        :obj:`multiprocessing.Manager` hosting all communication objects
-        Default: None
+    sample_prior:
+        :bool: if True, will sample from the prior and save samples in output directory
+        Default: False
+
     """
 
     def __init__(self,
@@ -72,17 +78,13 @@ class Sampler(object):
                  sample_prior = False,
                  poolsize     = 1000,
                  proposal     = None,
-                 resume_file  = None,
-                 manager      = None):
+                 resume_file  = None):
 
         self.seed = seed
         self.model = model
         self.initial_mcmc = maxmcmc//10
         self.maxmcmc = maxmcmc
         self.resume_file = resume_file
-        self.manager = manager
-        self.logLmin = self.manager.logLmin
-        self.logLmax = self.manager.logLmax
         self.logger = logging.getLogger('cpnest.sampler.Sampler')
 
         if proposal is None:
@@ -103,9 +105,13 @@ class Sampler(object):
         self.initialised        = False
         self.output             = output
         self.sample_prior       = sample_prior
-        self.samples            = deque(maxlen = None if self.verbose >=3 else 5*self.maxmcmc) # the list of samples from the mcmc chain
-        self.producer_pipe, self.thread_id = self.manager.connect_producer()
+        self.samples            = deque(maxlen = None if self.verbose >=3 else 10*self.maxmcmc) # the list of samples from the mcmc chain
+        self.producer_pipe, self.thread_id = None, None
         self.last_checkpoint_time = time.time()
+        self.checkpoint_interval = None
+        self.checkpoint_flag = None
+        self.logLmin = None
+        self.logLmax = None
 
     def reset(self):
         """
@@ -127,7 +133,7 @@ class Sampler(object):
 
         self.proposal.set_ensemble(self.evolution_points)
         # initialise the structure to store the mcmc chain
-        self.samples = []
+        self.samples.clear()
         # Now, run evolution so samples are drawn from actual prior
         for k in tqdm(range(self.poolsize), desc='SMPLR {} init evolve'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
@@ -182,7 +188,7 @@ class Sampler(object):
         # first of all, build a numpy array out of
         # the stored samples
         ACL = []
-        samples = np.array([x.values for x in self.samples[-5*self.maxmcmc:]])
+        samples = np.array([x.values for x in list(self.samples)[-5*self.maxmcmc:]])
         # compute the ACL on 5 times the maxmcmc set of samples
         ACL = [acl(samples[:,i]) for i in range(samples.shape[1])]
 
@@ -197,7 +203,25 @@ class Sampler(object):
             self.Nmcmc = safety
         return self.Nmcmc
 
-    def produce_sample(self):
+    def produce_sample(self, connection, thread_id, resume, logLmin, logLmax, checkpoint_flag, checkpoint_interval):
+        """
+        Main loop that produces samples for the :obj:`cpnest.NestedSampler`
+        """
+        self.producer_pipe = connection
+        self.thread_id = thread_id
+        self.checkpoint_flag = checkpoint_flag
+        self.checkpoint_interval = checkpoint_interval
+        self.logLmin = logLmin
+        self.logLmax = logLmax
+
+        if resume:
+            signal.signal(signal.SIGTERM, sighandler)
+            signal.signal(signal.SIGALRM, sighandler)
+            signal.signal(signal.SIGQUIT, sighandler)
+            signal.signal(signal.SIGINT, sighandler)
+            signal.signal(signal.SIGUSR1, sighandler)
+            signal.signal(signal.SIGUSR2, sighandler)
+
         try:
             self._produce_sample()
         except CheckPoint:
@@ -217,14 +241,14 @@ class Sampler(object):
         __checkpoint_flag=False
         while True:
 
-            if self.manager.checkpoint_flag.value:
+            if self.checkpoint_flag.value:
                 self.checkpoint()
                 sys.exit(130)
 
             if self.logLmin.value==np.inf:
                 break
 
-            if time.time() - self.last_checkpoint_time > self.manager.periodic_checkpoint_interval:
+            if time.time() - self.last_checkpoint_time > self.checkpoint_interval:
                 self.checkpoint()
                 self.last_checkpoint_time = time.time()
 
@@ -266,18 +290,22 @@ class Sampler(object):
                        newline='\n',delimiter=' ')
             self.logger.critical("Sampler process {0!s}: saved {1:d} mcmc samples in {2!s}".format(os.getpid(),len(self.samples),'mcmc_chain_%s.dat'%os.getpid()))
         self.logger.critical("Sampler process {0!s} - mean acceptance {1:.3f}: exiting".format(os.getpid(), float(self.mcmc_accepted)/float(self.mcmc_counter)))
+        if os.path.exists(self.resume_file):
+            self.logger.warning("Sampler process {0!s} - cleaning up resume file {1}".format(os.getpid(), self.resume_file))
+            os.remove(self.resume_file)
+
         return 0
 
     def checkpoint(self):
         """
-        Checkpoint its internal state
+        Checkpoint the sampler's internal state
         """
         self.logger.info('Checkpointing Sampler')
         with open(self.resume_file, "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
-    def resume(cls, resume_file, manager, model):
+    def resume(cls, resume_file, model):
         """
         Resumes the interrupted state from a
         checkpoint pickle file.
@@ -285,30 +313,27 @@ class Sampler(object):
         with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         obj.model   = model
-        obj.manager = manager
-        obj.logLmin = obj.manager.logLmin
-        obj.logLmax = obj.manager.logLmax
         obj.logger = logging.getLogger("cpnest.sample.Sampler")
-        obj.producer_pipe , obj.thread_id = obj.manager.connect_producer()
         obj.logger.info('Resuming Sampler from ' + resume_file)
+        obj.producer_pipe , obj.thread_id = None, None
         obj.last_checkpoint_time = time.time()
+        obj.checkpoint_interval = None
+        obj.checkpoint_flag = None
         return obj
 
     def __getstate__(self):
         state = self.__dict__.copy()
+        state['logLmin']=None # remove the connection objects
+        state['logLmax']=None
         # Remove the unpicklable entries.
-        del state['model']
-        del state['logLmin']
-        del state['logLmax']
-        del state['manager']
+        del state['checkpoint_flag']
+        del state['checkpoint_interval']
         del state['producer_pipe']
         del state['thread_id']
-        del state['logger']
         return state
 
     def __setstate__(self, state):
         self.__dict__ = state
-        self.manager = None
 
 class MetropolisHastingsSampler(Sampler):
     """

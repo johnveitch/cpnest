@@ -24,22 +24,22 @@ class GaussianModel(cpnest.model.Model):
 
 class GaussianTestCase(unittest.TestCase):
     """
-    Test the gaussian model
+    Test the gaussian model with different verbose levels
     """
     def setUp(self):
         self.model = GaussianModel()
-        self.work=cpnest.CPNest(self.model,verbose=0,nthreads=8,nlive=100,maxmcmc=100)
+        self.runs=[]
+        for v in range(4):
+            self.runs.append(cpnest.CPNest(self.model,verbose=v,nthreads=8,nlive=100,maxmcmc=100))
 
     def test_run(self):
-        self.work.run()
-        print('Analytic evidence: {0}'.format(self.model.analyticZ))
-
-
+        for r in self.runs:
+            r.run()
+            print('Analytic evidence: {0}'.format(self.model.analyticZ))
 
 def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    freeze_support()
     unittest.main(verbosity=2)
 

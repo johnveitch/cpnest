@@ -15,7 +15,7 @@ from multiprocessing.managers import SyncManager
 
 import cProfile
 
-from .utils import LEVELS, LogFile
+from .utils import LogFile
 
 # module logger takes name according to its path
 LOGGER = logging.getLogger('cpnest.cpnest')
@@ -76,20 +76,16 @@ class CPNest(object):
     resume: `boolean`
         determines whether cpnest will resume a run or run from scratch. Default: False.
 
-    proposal: `dict`
+    proposals: `dict`
         dictionary of lists with custom jump proposals.
         key 'mhs' for the Metropolis-Hastings sampler,
         'hmc' for the Hamiltonian Monte-Carlo sampler,
         'sli' for the slice sampler.
-        'hmc' for the Hamiltonian Monte-Carlo sampler. Default: None
+        'hmc' for the Hamiltonian Monte-Carlo sampler.
+        Default: None, uses the default proposals.
 
     prior_sampling: `boolean`
         generates samples from the prior
-
-    n_periodic_checkpoint: `int`
-        **deprecated**
-        checkpoint the sampler every n_periodic_checkpoint iterations
-        Default: None (disabled)
 
     periodic_checkpoint_interval: `float`
         checkpoing the sampler every periodic_checkpoint_interval seconds
@@ -128,7 +124,6 @@ class CPNest(object):
         self.verbose  = verbose
         self.output   = output
         self.logger = logging.getLogger('cpnest.cpnest.CPNest')
-
         # The LogFile context manager ensures everything within is logged to
         # 'cpnest.log' but the file handler is safely closed once the run is
         # finished.
@@ -187,16 +182,20 @@ class CPNest(object):
                             verbose        = verbose,
                             seed           = self.seed,
                             prior_sampling = self.prior_sampling,
-                            manager        = self.manager)
+                            logLmin=self.manager.logLmin,
+                            logLmax=self.manager.logLmax,
+                            input_pipes=self.manager.consumer_pipes,
+                            periodic_checkpoint_interval=periodic_checkpoint_interval,)
             else:
-                self.NS = NestedSampler.resume(resume_file, self.manager,
-                                               self.user)
+                self.NS = NestedSampler.resume(resume_file, self.manager.logLmin, self.manager.logLmax,
+                                               self.manager.consumer_pipes, self.user)
 
             nmhs = self.nthreads-nhamiltonian-nslice
             # instantiate the sampler class
             for i in range(nmhs):
-                resume_file = os.path.join(output,
-                                           "sampler_{0:d}.pkl".format(i))
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                connection, thread_id = self.manager.connect_producer()
+
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = MetropolisHastingsSampler(self.user,
                                     maxmcmc,
@@ -207,19 +206,24 @@ class CPNest(object):
                                     proposal    = proposals['mhs'](),
                                     resume_file = resume_file,
                                     sample_prior = prior_sampling,
-                                    manager     = self.manager
                                     )
                 else:
-                    sampler = MetropolisHastingsSampler.resume(resume_file,
-                                                            self.manager,
-                                                            self.user)
+                    sampler = MetropolisHastingsSampler.resume(resume_file, self.user)
 
-                p = mp.Process(target=sampler.produce_sample)
+                args = (connection,
+                        thread_id,
+                        resume,
+                        self.manager.logLmin,
+                        self.manager.logLmax,
+                        self.manager.checkpoint_flag,
+                        self.manager.periodic_checkpoint_interval)
+                p = mp.Process(target=sampler.produce_sample, args=args)
                 self.process_pool.append(p)
 
             for i in range(nhamiltonian):
-                resume_file = os.path.join(output,
-                                           "sampler_{0:d}.pkl".format(i))
+                resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                connection, thread_id = self.manager.connect_producer()
+
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = HamiltonianMonteCarloSampler(
                         self.user,
@@ -228,20 +232,27 @@ class CPNest(object):
                         output      = output,
                         poolsize    = poolsize,
                         seed        = self.seed+nmhs+i,
-                        proposal    = proposals['hmc'](model=self.user),
+                        proposal    = proposals['hmc'](model=self.user, id=thread_id),
                         resume_file = resume_file,
                         sample_prior = prior_sampling,
-                        manager     = self.manager
                     )
                 else:
-                    sampler = HamiltonianMonteCarloSampler.resume(resume_file,
-                                                                self.manager,
-                                                                self.user)
-                p = mp.Process(target=sampler.produce_sample)
+                    sampler = HamiltonianMonteCarloSampler.resume(resume_file, self.user)
+
+                args = (connection,
+                        thread_id,
+                        resume,
+                        self.manager.logLmin,
+                        self.manager.logLmax,
+                        self.manager.checkpoint_flag,
+                        self.manager.periodic_checkpoint_interval)
+                p = mp.Process(target=sampler.produce_sample, args=args)
                 self.process_pool.append(p)
 
             for i in range(nslice):
                 resume_file = os.path.join(output, "sampler_{0:d}.pkl".format(i))
+                connection, thread_id = self.manager.connect_producer()
+
                 if not os.path.exists(resume_file) or resume == False:
                     sampler = SliceSampler(self.user,
                                     maxmcmc,
@@ -251,18 +262,25 @@ class CPNest(object):
                                     seed        = self.seed+nmhs+nhamiltonian+i,
                                     proposal    = proposals['sli'](),
                                     resume_file = resume_file,
-                                    manager     = self.manager
                                     )
                 else:
-                    sampler = SliceSampler.resume(resume_file,
-                                                  self.manager,
-                                                  self.user)
-                p = mp.Process(target=sampler.produce_sample)
+                    sampler = SliceSampler.resume(resume_file, self.user)
+
+                args = (connection,
+                        thread_id,
+                        resume,
+                        self.manager.logLmin,
+                        self.manager.logLmax,
+                        self.manager.checkpoint_flag,
+                        self.manager.periodic_checkpoint_interval)
+                p = mp.Process(target=sampler.produce_sample, args=args)
                 self.process_pool.append(p)
 
     def run(self):
         """
-        Run the sampler
+        Run the sampler. Once finished, nested samples and posterior
+        samples are available with get_nested_samples() and get_posterior_samples()
+        methods.
         """
 
         with self.log_file:
@@ -288,6 +306,8 @@ class CPNest(object):
                 sys.exit(130)
 
             if self.verbose >= 2:
+                self.NS.check_insertion_indices(rolling=False,
+                                                filename='insertion_indices.dat')
                 self.logger.critical(
                     "Saving nested samples in {0}".format(self.output)
                 )
@@ -297,18 +317,19 @@ class CPNest(object):
                 )
                 self.posterior_samples = self.get_posterior_samples()
             else:
+                self.NS.check_insertion_indices(rolling=False,
+                                                filename=None)
                 self.nested_samples = self.get_nested_samples(filename=None)
                 self.posterior_samples = self.get_posterior_samples(
                     filename=None
                 )
+
             if self.verbose>=3 or self.NS.prior_sampling:
                 self.prior_samples = self.get_prior_samples(filename=None)
             if self.verbose>=3 and not self.NS.prior_sampling:
                 self.mcmc_samples = self.get_mcmc_samples(filename=None)
             if self.verbose>=2:
                 self.plot(corner = False)
-
-            #TODO: Clean up the resume pickles
 
     def get_nested_samples(self, filename='nested_samples.dat'):
         """
@@ -523,6 +544,7 @@ class CPNest(object):
                                  ms=plotting_mcmc,
                                  labels=pos.dtype.names,
                                  filename=os.path.join(self.output,'corner.pdf'))
+            plot.plot_indices(self.NS.insertion_indices, filename=os.path.join(self.output, 'insertion_indices.pdf'))
 
     def worker_sampler(self, producer_pipe, logLmin):
         cProfile.runctx('self.sampler.produce_sample(producer_pipe, logLmin)', globals(), locals(), 'prof_sampler.prof')
@@ -545,6 +567,10 @@ class CPNest(object):
 
 
 class RunManager(SyncManager):
+    """
+    A multiprocessing manager to handle communication between the nested
+    sampling process and the sampler processes.
+    """
     def __init__(self, nthreads=None, **kwargs):
         self.periodic_checkpoint_interval = kwargs.pop(
             "periodic_checkpoint_interval", np.inf

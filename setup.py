@@ -42,33 +42,23 @@ with open(os.path.join(here, 'DESCRIPTION.rst'), encoding='utf-8') as f:
         long_description = f.read()
 
 
-with open("requirements.txt") as requires_file:
-    requirements = requires_file.read().split("\n")
-
 setup(
         name='cpnest',
         use_scm_version=True,
         description='CPNest: Parallel nested sampling',
         long_description=long_description,
-        author='Walter Del Pozzo, John Veitch',
-        author_email='walter.delpozzo@ligo.org, john.veitch@ligo.org',
-        url='https://github.com/johnveitch/cpnest',
-        license='MIT',
-        python_requires='>=3',
         classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: MIT License',
             'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.2',
-            'Programming Language :: Python :: 3.3',
-            'Programming Language :: Python :: 3.4',
-            'Programming Language :: Python :: 3.5',
-            'Programming Language :: Python :: 3.6',
-            'Programming Language :: Python :: 3.7',
-            'Programming Language :: Python :: 3.8'],
-        keywords='nested sampling bayesian inference',
+            'Programming Language :: Python :: 3.14',
+            'Programming Language :: Python :: 3.13',
+            'Programming Language :: Python :: 3.12',
+            'Programming Language :: Python :: 3.11',
+            'Programming Language :: Python :: 3.10',
+            'Programming Language :: Python :: 3.9'
+            ],
         packages=['cpnest'],
-        install_requires=requirements,
         include_dirs = [numpy.get_include()],
         setup_requires=['numpy', 'cython', 'setuptools_scm'],
         package_data={"": ['*.c', '*.pyx', '*.pxd']},
