@@ -2,6 +2,7 @@ from __future__ import division, print_function
 import sys
 import os
 import pickle
+import random
 import time
 import logging
 import bisect
@@ -317,6 +318,7 @@ class NestedSampler(object):
         """
         self.seed = seed
         np.random.seed(seed=self.seed)
+        random.seed(self.seed)
 
     def consume_sample(self):
         """
@@ -328,7 +330,9 @@ class NestedSampler(object):
         worst = np.arange(nreplace)
 
         # Make sure we are mixing the chains
-        for i in np.random.permutation(worst): self.consumer_pipes[worst[i]].send(self.params[worst[i]])
+        logLmin = self.logLmin.value
+        for i in np.random.permutation(worst):
+            self.consumer_pipes[worst[i]].send((self.params[worst[i]], logLmin))
 
         for k in worst:
             # receive a new sample from the consumer pipes and update the evidence
@@ -352,7 +356,7 @@ class NestedSampler(object):
                     break
                 else:
                     # resend it to the producer
-                    self.consumer_pipes[self.queue_counter].send(self.params[k])
+                    self.consumer_pipes[self.queue_counter].send((self.params[k], logLmin))
                     self.rejected += 1
 
             removed_point = self.params[0]
@@ -408,8 +412,10 @@ class NestedSampler(object):
         params = [None] * self.Nlive
         with tqdm(total=self.Nlive, disable= not self.verbose, desc='CPNEST: populate samplers', position=nthreads) as pbar:
             while i < self.Nlive:
-                for j in range(nthreads): self.consumer_pipes[j].send(self.model.new_point())
-                for j in range(nthreads):
+                batch_size = min(nthreads, self.Nlive - i)
+                for j in range(batch_size):
+                    self.consumer_pipes[j].send((self.model.new_point(), -np.inf))
+                for j in range(batch_size):
                     while i < self.Nlive:
                         acceptance,sub_acceptance,jumps,params[i] = self.consumer_pipes[self.queue_counter].recv()
                         self.queue_counter = (self.queue_counter + 1) % len(self.consumer_pipes)
