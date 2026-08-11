@@ -40,6 +40,5 @@ def test_all():
     unittest.main(verbosity=2)
 
 if __name__=='__main__':
-    freeze_support()
     unittest.main(verbosity=2)
 
