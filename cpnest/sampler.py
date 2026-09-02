@@ -272,18 +272,11 @@ class Sampler(object):
             (Nmcmc, outParam) = next(self.yield_sample(logLmin))
             acceptance = self.acceptance
             sub_acceptance = self.sub_acceptance
-            # Update the ensemble every now and again
-            if (self.counter%(self.poolsize//4))==0:
-                self.proposal.set_ensemble(self.evolution_points)
-                self.estimate_nmcmc()
-            self.counter += 1
+            self._finish_evolution_step()
 
             # Replace schedule-dependent idle sampling with one fixed step.
             _, _ = next(self.yield_sample(logLmin))
-            if (self.counter%(self.poolsize//4))==0:
-                self.proposal.set_ensemble(self.evolution_points)
-                self.estimate_nmcmc()
-            self.counter += 1
+            self._finish_evolution_step()
 
             # Send the sample to the Nested Sampler
             self.producer_pipe.send((acceptance,sub_acceptance,Nmcmc,outParam))
@@ -304,6 +297,13 @@ class Sampler(object):
             os.remove(self.resume_file)
 
         return 0
+
+    def _finish_evolution_step(self):
+        # Update the ensemble every now and again
+        if (self.counter%(self.poolsize//4))==0:
+            self.proposal.set_ensemble(self.evolution_points)
+            self.estimate_nmcmc()
+        self.counter += 1
 
     def checkpoint(self):
         """
