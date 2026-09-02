@@ -3,6 +3,7 @@ import sys
 import os
 import signal
 import logging
+import random as pyrandom
 import time
 import numpy as np
 from math import log
@@ -119,6 +120,9 @@ class Sampler(object):
         and distributing them according to :obj:`cpnest.model.Model.log_prior`
         """
         np.random.seed(seed=self.seed)
+        # Give Python's RNG an independent deterministic stream.
+        python_seed = np.random.SeedSequence(self.seed, spawn_key=(1,))
+        pyrandom.seed(int(python_seed.generate_state(1, dtype=np.uint64)[0]))
         for n in tqdm(range(self.poolsize), desc='SMPLR {} init draw'.format(self.thread_id),
                 disable= not self.verbose, position=self.thread_id, leave=False):
             while True: # Generate an in-bounds sample
@@ -252,32 +256,30 @@ class Sampler(object):
                 self.checkpoint()
                 self.last_checkpoint_time = time.time()
 
-            # if the nested sampler is requesting for an update
-            # produce a sample for it
-            if self.producer_pipe.poll():
+            if not self.producer_pipe.poll(0.1):
+                continue
 
-                p = self.producer_pipe.recv()
+            request = self.producer_pipe.recv()
 
-                if p is None:
-                    break
-                if p == "checkpoint":
-                    self.checkpoint()
-                    sys.exit(130)
+            if request is None:
+                break
+            if request == "checkpoint":
+                self.checkpoint()
+                sys.exit(130)
 
-                self.evolution_points.append(p)
-                (Nmcmc, outParam) = next(self.yield_sample(self.logLmin.value))
-                # Send the sample to the Nested Sampler
-                self.producer_pipe.send((self.acceptance,self.sub_acceptance,Nmcmc,outParam))
+            p, logLmin = request
+            self.evolution_points.append(p)
+            (Nmcmc, outParam) = next(self.yield_sample(logLmin))
+            acceptance = self.acceptance
+            sub_acceptance = self.sub_acceptance
+            self._finish_evolution_step()
 
-            # otherwise, keep on sampling from the previous boundary
-            else:
-                _, _ = next(self.yield_sample(self.logLmin.value))
-            # Update the ensemble every now and again
-            if (self.counter%(self.poolsize//4))==0:
-                self.proposal.set_ensemble(self.evolution_points)
-                self.estimate_nmcmc()
+            # Replace schedule-dependent idle sampling with one fixed step.
+            _, _ = next(self.yield_sample(logLmin))
+            self._finish_evolution_step()
 
-            self.counter += 1
+            # Send the sample to the Nested Sampler
+            self.producer_pipe.send((acceptance,sub_acceptance,Nmcmc,outParam))
 
         self.logger.critical("Sampler process {0!s}: MCMC samples accumulated = {1:d}".format(os.getpid(),len(self.samples)))
 #        self.samples.extend(self.evolution_points)
@@ -295,6 +297,13 @@ class Sampler(object):
             os.remove(self.resume_file)
 
         return 0
+
+    def _finish_evolution_step(self):
+        # Update the ensemble every now and again
+        if (self.counter%(self.poolsize//4))==0:
+            self.proposal.set_ensemble(self.evolution_points)
+            self.estimate_nmcmc()
+        self.counter += 1
 
     def checkpoint(self):
         """
@@ -358,7 +367,8 @@ class MetropolisHastingsSampler(Sampler):
                 if newparam.logP-logp_old + self.proposal.log_J > log(random()):
                     newparam.logL = self.model.log_likelihood(newparam)
                     if newparam.logL > logLmin:
-                        self.logLmax.value = max(self.logLmax.value, newparam.logL)
+                        with self.logLmax.get_lock():
+                            self.logLmax.value = max(self.logLmax.value, newparam.logL)
                         oldparam = newparam.copy()
                         logp_old = newparam.logP
                         sub_accepted+=1
@@ -413,7 +423,8 @@ class HamiltonianMonteCarloSampler(Sampler):
             self.mcmc_accepted += sub_accepted
             self.mcmc_counter  += sub_counter
             self.acceptance     = float(self.mcmc_accepted)/float(self.mcmc_counter)
-            self.logLmax.value = global_lmax
+            with self.logLmax.get_lock():
+                self.logLmax.value = max(self.logLmax.value, global_lmax)
 
             for p in self.proposal.proposals:
                 p.update_time_step(self.acceptance)
@@ -557,7 +568,8 @@ class SliceSampler(Sampler):
                         # compute the new value of logL
                         newparam.logL = self.model.log_likelihood(newparam)
                         if newparam.logL > Y:
-                            self.logLmax.value = max(self.logLmax.value, newparam.logL)
+                            with self.logLmax.get_lock():
+                                self.logLmax.value = max(self.logLmax.value, newparam.logL)
                             oldparam     = newparam.copy()
                             sub_accepted += 1
                             break
